@@ -53,7 +53,14 @@ DATABASE_URL=postgresql://...-pooler.../adaptive_world
 DATABASE_URL_DIRECT=postgresql://.../adaptive_world
 ```
 
-Run the repository's migration and seed commands after installation. Demo seeding must be idempotent and must never target a production database unless explicitly selected.
+Run the versioned migration and guarded, idempotent synthetic seed:
+
+```bash
+pnpm --filter @adaptive-world/db migrate
+CONFIRM_SYNTHETIC_DEMO_SEED=true pnpm --filter @adaptive-world/db seed:demo
+```
+
+The seed creates two Better Auth accounts, six synthetic Passports, two exact doctor relationships, one sample guidance record, and 12 source-backed product models. Verify the target database before setting the confirmation flag.
 
 ## WebMCP local testing
 

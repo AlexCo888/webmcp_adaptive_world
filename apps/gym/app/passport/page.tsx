@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { demoGymProfiles } from "@adaptive-world/demo-data";
 import { ContextPassport } from "@/components/context-passport";
 
 export const metadata: Metadata = {
@@ -8,6 +7,7 @@ export const metadata: Metadata = {
 };
 
 export default function PassportPage() {
+  const passportUrl = process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000";
   return (
     <div className="page-wrap">
       <header className="context-header">
@@ -18,7 +18,7 @@ export default function PassportPage() {
           before connecting it.
         </p>
       </header>
-      <ContextPassport profiles={demoGymProfiles} />
+      <ContextPassport passportUrl={passportUrl} />
     </div>
   );
 }

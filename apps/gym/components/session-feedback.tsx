@@ -27,15 +27,16 @@ export function SessionFeedback() {
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = window.sessionStorage.getItem("adaptive-gym-last-session");
-    if (!raw) return;
-    try {
-      const value = JSON.parse(raw) as GeneratedSession;
-      setSession(value);
-      setCompleted(value.exercises.map((exercise) => exercise.equipmentId));
-    } catch {
-      window.sessionStorage.removeItem("adaptive-gym-last-session");
+    async function load() {
+      const response = await fetch("/api/session", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = (await response.json()) as { session?: GeneratedSession | null };
+      if (data.session) {
+        setSession(data.session);
+        setCompleted(data.session.exercises.map((exercise) => exercise.equipmentId));
+      }
     }
+    void load();
   }, []);
 
   function toggle(id: string) {
@@ -74,7 +75,10 @@ export function SessionFeedback() {
       <div className="feedback-empty card">
         <MessageSquareText size={32} />
         <h2>No recent session found</h2>
-        <p>Generate a session first. Its exercise list will be available here for feedback.</p>
+        <p>
+          Connect context and choose a staff walkthrough first. Its persisted station list will
+          appear here.
+        </p>
         <Link href="/session" className="button button--dark">
           Build a session
         </Link>
@@ -91,8 +95,8 @@ export function SessionFeedback() {
         <h2>Feedback recorded.</h2>
         <p>{result}</p>
         <p className="fine-print">
-          No medical records were changed. This response remains scoped to the synthetic gym
-          session.
+          No medical records were changed. This feedback is persisted only against the anonymous
+          synthetic Gym session.
         </p>
         <div>
           <Link href="/session" className="button button--lime">

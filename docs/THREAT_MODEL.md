@@ -74,7 +74,7 @@ Prohibited logs: document bodies, lab values, free-text guidance, raw context co
 - Any real patient data or identifiers
 - Any route/tool that trusts a client-supplied role or owner ID
 - Any Gym response containing a denylisted field
-- Reusable, plaintext, logged, or URL-embedded context code
+- Reusable, persisted in plaintext, logged, query-string, or referrer-exposed context code; the one-use fragment handoff must be removed immediately after reading
 - Write tool without first-party confirmation and audit event
 - Medical tools exposed cross-origin
 - Missing synthetic-data and non-clinical disclaimers

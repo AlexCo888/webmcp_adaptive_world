@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { ArrowLeft, CheckCircle2, MapPin, Maximize2, PlugZap, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -32,14 +33,14 @@ export default async function EquipmentDetailPage({ params }: Props) {
       </Link>
       <div className="detail-hero">
         <div className="detail-visual">
+          <Image
+            src={item.imageUrl}
+            alt={item.imageAlt}
+            fill
+            priority
+            sizes="(max-width: 900px) 100vw, 50vw"
+          />
           <span className="tag tag--green">{item.category.replaceAll("-", " ")}</span>
-          <div className="detail-monogram" aria-hidden="true">
-            {item.name
-              .split(" ")
-              .slice(0, 2)
-              .map((word) => word[0])
-              .join("")}
-          </div>
           <div className="detail-visual__caption">
             <span>{item.manufacturer}</span>
             <strong>{item.model}</strong>
@@ -68,9 +69,19 @@ export default async function EquipmentDetailPage({ params }: Props) {
               <strong>{item.power}</strong>
             </div>
           </div>
-          <Link className="button button--dark" href={`/session?equipment=${item.id}`}>
-            Use in a session
-          </Link>
+          <div className="detail-actions">
+            <Link className="button button--dark" href="/session">
+              View staff walkthroughs
+            </Link>
+            <a
+              className="button button--light"
+              href={item.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Manufacturer source
+            </a>
+          </div>
         </div>
       </div>
       <div className="detail-grid">
@@ -115,9 +126,13 @@ export default async function EquipmentDetailPage({ params }: Props) {
         <section className="card detail-panel">
           <h2>Catalog integrity</h2>
           <p className="muted">
-            This synthetic record is part of the same 68-item inventory available through WebMCP.
-            Availability is checked before each generated session.
+            This is a real {item.manufacturer} product record checked on {item.sourceCheckedAt}.
+            Adaptive Gym&apos;s ownership, zone, and availability are explicitly synthetic for the
+            demo.
           </p>
+          <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
+            {item.sourceLabel}
+          </a>
           <span className={item.available ? "tag tag--green" : "tag tag--orange"}>
             {item.available ? "Available now" : "Temporarily unavailable"}
           </span>

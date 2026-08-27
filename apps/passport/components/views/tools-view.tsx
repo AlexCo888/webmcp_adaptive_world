@@ -5,7 +5,7 @@ import { PageHeading, PortalShell } from "@/components/shell";
 import { usePortal } from "@/lib/portal-context";
 
 export function ToolsView() {
-  const { role, toolCatalog, webmcp } = usePortal();
+  const { role, toolCatalog, webmcp, toolEvents } = usePortal();
   const active = webmcp.status === "active";
   const label = active
     ? "Active"
@@ -127,6 +127,28 @@ export function ToolsView() {
                 <strong>Explicit UI confirmation</strong>
               </div>
             </div>
+          </section>
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <h2>Actual handler executions</h2>
+                <p className="card-subtitle">This browser session only</p>
+              </div>
+            </div>
+            {toolEvents.length ? (
+              <div className="data-list">
+                {toolEvents.map((event) => (
+                  <div className="data-row" key={`${event.name}-${event.at}`}>
+                    <code>{event.name}</code>
+                    <strong>{new Date(event.at).toLocaleTimeString()}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="card-subtitle">
+                No WebMCP handler has executed. Defined or registered does not mean used.
+              </p>
+            )}
           </section>
           <section className="card">
             <div className="progressive-note" style={{ margin: 0 }}>

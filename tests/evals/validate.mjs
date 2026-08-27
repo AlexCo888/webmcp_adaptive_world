@@ -11,7 +11,7 @@ const fail = (message) => failures.push(message);
 if (data.syntheticOnly !== true) fail("Dataset must be syntheticOnly=true.");
 if (!/^\d+\.\d+\.\d+$/.test(data.datasetVersion ?? "")) fail("datasetVersion must be semver.");
 if (!Array.isArray(data.cases)) fail("cases must be an array.");
-if (data.cases?.length !== 16) fail(`Expected exactly 16 cases; found ${data.cases?.length ?? 0}.`);
+if (data.cases?.length !== 17) fail(`Expected exactly 17 cases; found ${data.cases?.length ?? 0}.`);
 
 const ids = new Set();
 const catalogSection = {

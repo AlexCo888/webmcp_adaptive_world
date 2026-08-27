@@ -42,16 +42,25 @@ export function SharingView() {
   const [recipient, setRecipient] = useState<"doctor" | "gym">("doctor");
   const [selectedScopes, setSelectedScopes] = useState<PassportScope[]>(["passport.summary.read"]);
   const [days, setDays] = useState(30);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const patientGrants = grants.filter((grant) => grant.passportId === patient.id);
 
   const toggleScope = (scope: PassportScope) =>
     setSelectedScopes((current) =>
       current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
     );
-  const submit = () => {
+  const submit = async () => {
     const scopes = recipient === "gym" ? ["gym.context.read" as const] : selectedScopes;
-    createGrant(recipient, scopes, days);
-    setShowCreate(false);
+    setPending(true);
+    setError(null);
+    try {
+      await createGrant(recipient, scopes, days);
+      if (recipient === "doctor") setShowCreate(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The permission could not be created.");
+      setPending(false);
+    }
   };
 
   return (
@@ -222,7 +231,10 @@ export function SharingView() {
               <div>
                 <p className="eyebrow">New permission</p>
                 <h2 id="share-title">Choose what to share</h2>
-                <p>This creates a synthetic demo grant. You can revoke it at any time.</p>
+                <p>
+                  The account session and permission are real. The people and health records are
+                  synthetic demo data.
+                </p>
               </div>
               <button
                 className="icon-button"
@@ -268,23 +280,31 @@ export function SharingView() {
                   <Icon name="shield" width="17" />
                   <span>
                     Adaptive Gym receives goals, movement considerations, safety signals, and
-                    accessibility needs—never labs, medications, identity, or source documents.
+                    accessibility needs—never labs, medications, identity, or source documents. The
+                    exchange code works once and expires in five minutes.
                   </span>
                 </div>
               )}
-              <div className="field">
-                <label htmlFor="duration">Duration</label>
-                <select
-                  id="duration"
-                  value={days}
-                  onChange={(event) => setDays(Number(event.target.value))}
-                >
-                  <option value="1">24 hours</option>
-                  <option value="7">7 days</option>
-                  <option value="30">30 days</option>
-                  <option value="90">90 days</option>
-                </select>
-              </div>
+              {recipient === "doctor" ? (
+                <div className="field">
+                  <label htmlFor="duration">Duration</label>
+                  <select
+                    id="duration"
+                    value={days}
+                    onChange={(event) => setDays(Number(event.target.value))}
+                  >
+                    <option value="1">24 hours</option>
+                    <option value="7">7 days</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                  </select>
+                </div>
+              ) : null}
+              {error ? (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              ) : null}
             </div>
             <div className="modal-actions">
               <button className="button" onClick={() => setShowCreate(false)}>
@@ -292,10 +312,15 @@ export function SharingView() {
               </button>
               <button
                 className="button primary"
-                disabled={recipient === "doctor" && selectedScopes.length === 0}
+                disabled={pending || (recipient === "doctor" && selectedScopes.length === 0)}
                 onClick={submit}
               >
-                <Icon name="shield" width="14" /> Approve permission
+                <Icon name="shield" width="14" />
+                {pending
+                  ? "Creating permission…"
+                  : recipient === "gym"
+                    ? "Approve & continue to Gym"
+                    : "Approve permission"}
               </button>
             </div>
           </section>

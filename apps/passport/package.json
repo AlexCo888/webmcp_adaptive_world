@@ -11,14 +11,21 @@
   },
   "dependencies": {
     "@adaptive-world/contracts": "workspace:*",
+    "@adaptive-world/db": "workspace:*",
     "@adaptive-world/demo-data": "workspace:*",
+    "@adaptive-world/security": "workspace:*",
     "@adaptive-world/webmcp": "workspace:*",
+    "better-auth": "1.7.2",
+    "drizzle-orm": "^0.45.2",
     "next": "16.3.3",
+    "pg": "^8.16.3",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.7.0"

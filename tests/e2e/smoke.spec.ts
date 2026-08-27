@@ -1,79 +1,77 @@
 import { expect, test } from "@playwright/test";
 
-const surfaces = [
-  {
-    name: "Passport",
-    url: process.env.PASSPORT_BASE_URL ?? "http://127.0.0.1:3000",
-  },
-  {
-    name: "Gym",
-    url: process.env.GYM_BASE_URL ?? "http://127.0.0.1:3001",
-  },
-];
+const passportBaseUrl = process.env.PASSPORT_BASE_URL ?? "http://127.0.0.1:3000";
+const gymBaseUrl = process.env.GYM_BASE_URL ?? "http://127.0.0.1:3001";
 
-for (const surface of surfaces) {
-  test(`${surface.name} renders a usable HTML surface`, async ({ page }) => {
-    const response = await page.goto(surface.url, { waitUntil: "domcontentloaded" });
+test("Passport starts at a real sign-in boundary", async ({ page }) => {
+  const response = await page.goto(passportBaseUrl, { waitUntil: "domcontentloaded" });
 
-    expect(response, `${surface.name} did not return a document response`).not.toBeNull();
-    expect(response!.status(), `${surface.name} returned a server error`).toBeLessThan(500);
-    await expect(page.locator("body")).toBeVisible();
-
-    const bodyText = (await page.locator("body").innerText()).trim();
-    expect(bodyText.length, `${surface.name} rendered an empty body`).toBeGreaterThan(40);
-    await expect(page.locator('main, [role="main"]')).toHaveCount(1);
-  });
-}
-
-test("Passport exposes an honest WebMCP registry inspector", async ({ page }) => {
-  const passportBaseUrl = process.env.PASSPORT_BASE_URL ?? "http://127.0.0.1:3000";
-  await page.goto(`${passportBaseUrl}/tools`);
-  await expect(page.getByRole("heading", { name: "WebMCP tool registry" })).toBeVisible();
-  await expect(page.getByText(/WebMCP API unavailable|WebMCP is active/)).toBeVisible();
-  await expect(page.getByText("get_my_passport_summary", { exact: true })).toBeVisible();
+  expect(response).not.toBeNull();
+  expect(response!.status()).toBeLessThan(500);
+  await expect(
+    page.getByRole("heading", { name: "A Passport belongs to a person—not to a clinic or a gym." }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveValue("mateo.demo@adaptiveworld.test");
+  await expect(page.getByRole("button", { name: "Sign in securely" })).toBeVisible();
+  await expect(page.getByText("Real authentication", { exact: true })).toBeVisible();
 });
 
-test("Gym redeems context once and creates a catalog-grounded session", async ({ request }) => {
-  const gymBaseUrl = process.env.GYM_BASE_URL ?? "http://127.0.0.1:3001";
+test("Gym looks and behaves like a public club site before context is connected", async ({
+  page,
+}) => {
+  const response = await page.goto(gymBaseUrl, { waitUntil: "domcontentloaded" });
+
+  expect(response).not.toBeNull();
+  expect(response!.status()).toBeLessThan(500);
+  await expect(page.getByRole("heading", { name: /Your first visit/ })).toBeVisible();
+  const hero = page.getByAltText(
+    "Bright modern Adaptive Gym training floor with cardio and strength zones",
+  );
+  await expect(hero).toBeVisible();
+  await expect
+    .poll(() => hero.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(900);
+  await expect(page.getByText("12", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Tour the equipment/ })).toBeVisible();
+});
+
+test("Gym exposes only verified products and refuses context-free walkthrough creation", async ({
+  request,
+}) => {
   const catalogResponse = await request.get(`${gymBaseUrl}/api/equipment`);
   expect(catalogResponse.ok()).toBeTruthy();
   const catalog = (await catalogResponse.json()) as {
     count: number;
-    equipment: Array<{ id: string }>;
+    equipment: Array<{
+      id: string;
+      verifiedProduct: boolean;
+      sourceUrl: string;
+      syntheticFacilityInventory: boolean;
+    }>;
   };
-  expect(catalog.count).toBe(68);
 
-  const firstRedemption = await request.post(`${gymBaseUrl}/api/context/redeem`, {
-    data: { code: "demo-michael" },
-  });
-  expect(firstRedemption.status()).toBe(200);
-  const redeemed = (await firstRedemption.json()) as {
-    projection: Record<string, unknown>;
-  };
-  expect(redeemed.projection).not.toHaveProperty("passportId");
-  expect(redeemed.projection).not.toHaveProperty("medications");
-  expect(redeemed.projection).not.toHaveProperty("notableResults");
-
-  const replay = await request.post(`${gymBaseUrl}/api/context/redeem`, {
-    data: { code: "demo-michael" },
-  });
-  expect(replay.status()).toBe(409);
+  expect(catalog.count).toBe(12);
+  expect(new Set(catalog.equipment.map(({ id }) => id)).size).toBe(12);
+  expect(catalog.equipment.every(({ verifiedProduct }) => verifiedProduct)).toBe(true);
+  expect(catalog.equipment.every(({ sourceUrl }) => sourceUrl.startsWith("https://"))).toBe(true);
+  expect(
+    catalog.equipment.every(({ syntheticFacilityInventory }) => syntheticFacilityInventory),
+  ).toBe(true);
 
   const sessionResponse = await request.post(`${gymBaseUrl}/api/session`, {
-    data: {
-      profile: redeemed.projection,
-      goal: "General strength and mobility",
-      durationMinutes: 45,
-      equipmentIds: [],
-    },
+    data: { templateId: "first_visit_foundations", createdVia: "site-ui" },
   });
-  expect(sessionResponse.status()).toBe(201);
-  const result = (await sessionResponse.json()) as {
-    session: { exercises: Array<{ equipmentId: string }> };
-  };
-  const catalogIds = new Set(catalog.equipment.map(({ id }) => id));
-  expect(result.session.exercises.length).toBeGreaterThan(0);
-  expect(result.session.exercises.every(({ equipmentId }) => catalogIds.has(equipmentId))).toBe(
-    true,
-  );
+  expect(sessionResponse.status()).toBe(401);
+  await expect(sessionResponse.json()).resolves.toEqual({
+    error: "Connect a one-use Passport context before choosing a walkthrough.",
+  });
+});
+
+test("Gym explains WebMCP provenance instead of claiming a fake AI routine", async ({ page }) => {
+  await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
+  await expect(
+    page.getByRole("heading", { name: "Build with what’s actually here." }),
+  ).toBeVisible();
+  await expect(page.getByText(/does not ask an AI to invent a routine/i)).toBeVisible();
+  await expect(page.getByText("Passport context required")).toBeVisible();
 });

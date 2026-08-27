@@ -37,12 +37,12 @@
             "recipient": { "const": "adaptive-gym" },
             "scopes": {
               "type": "array",
-              "items": { "enum": ["aw.gym.basic", "aw.gym.mobility_safety"] },
+              "items": { "const": "gym.context.read" },
               "minItems": 1,
-              "maxItems": 2,
+              "maxItems": 1,
               "uniqueItems": true
             },
-            "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 60, "default": 5 }
+            "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 15, "default": 5 }
           },
           "required": ["recipient", "scopes"]
         },
@@ -155,16 +155,15 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "goal": { "type": "string", "minLength": 1, "maxLength": 160 },
-            "durationMinutes": { "type": "integer", "minimum": 10, "maximum": 180 },
-            "equipmentIds": {
-              "type": "array",
-              "items": { "$ref": "#/$defs/id" },
-              "uniqueItems": true,
-              "maxItems": 20
+            "templateId": {
+              "enum": [
+                "first_visit_foundations",
+                "low_impact_orientation",
+                "accessible_equipment_tour"
+              ]
             }
           },
-          "required": ["goal"]
+          "required": ["templateId"]
         },
         "record_session_feedback": {
           "type": "object",

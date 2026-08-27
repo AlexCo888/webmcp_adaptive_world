@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   accessGrants,
   auditEvents,
+  clinicalGuidance,
   contextGrants,
   documents,
   equipment,
@@ -26,6 +27,7 @@ describe("database schema", () => {
         accessGrants,
         contextGrants,
         auditEvents,
+        clinicalGuidance,
         equipment,
         gymSessions,
         sessionFeedback,
@@ -39,6 +41,7 @@ describe("database schema", () => {
       "access_grants",
       "context_grants",
       "audit_events",
+      "clinical_guidance",
       "equipment",
       "gym_sessions",
       "session_feedback",

@@ -2,193 +2,209 @@
 
 import type { GymContextProjection } from "@adaptive-world/contracts";
 import {
+  ArrowRight,
   Check,
-  ChevronRight,
   Clock3,
   Fingerprint,
   KeyRound,
+  LoaderCircle,
   LockKeyhole,
   ShieldCheck,
-  UserRound,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
-type Props = { profiles: GymContextProjection[] };
+type State = "loading" | "disconnected" | "redeeming" | "active" | "error";
 
-export function ContextPassport({ profiles }: Props) {
-  const router = useRouter();
-  const [selectedId, setSelectedId] = useState(profiles[0]?.projectionId ?? "");
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [grantCode, setGrantCode] = useState("");
-  const [grantMessage, setGrantMessage] = useState<string | null>(null);
+export function ContextPassport({ passportUrl }: { passportUrl: string }) {
+  const [state, setState] = useState<State>("loading");
+  const [projection, setProjection] = useState<GymContextProjection | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState("");
 
-  useEffect(() => {
-    setActiveId(window.localStorage.getItem("adaptive-gym-context"));
+  const loadCurrent = useCallback(async () => {
+    const response = await fetch("/api/context/current", { cache: "no-store" });
+    if (!response.ok) {
+      setState("disconnected");
+      return;
+    }
+    const data = (await response.json()) as { projection?: GymContextProjection };
+    if (data.projection) {
+      setProjection(data.projection);
+      setState("active");
+    } else {
+      setState("disconnected");
+    }
   }, []);
-  const selected = profiles.find((profile) => profile.projectionId === selectedId);
 
-  function connect(profileId = selectedId) {
-    window.localStorage.setItem("adaptive-gym-context", profileId);
-    setActiveId(profileId);
-    router.push("/session");
-  }
-
-  async function redeemGrant() {
-    setGrantMessage(null);
+  const redeem = useCallback(async (code: string) => {
+    setState("redeeming");
+    setMessage(null);
     const response = await fetch("/api/context/redeem", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: grantCode }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
     });
     const data = (await response.json()) as { projection?: GymContextProjection; error?: string };
     if (!response.ok || !data.projection) {
-      setGrantMessage(data.error ?? "That code could not be redeemed.");
+      setMessage(data.error ?? "The one-use code could not be redeemed.");
+      setState("error");
       return;
     }
-    setSelectedId(data.projection.projectionId);
-    window.localStorage.setItem("adaptive-gym-context", data.projection.projectionId);
-    setActiveId(data.projection.projectionId);
-    setGrantMessage("Context grant redeemed. The one-time code is now closed.");
+    setProjection(data.projection);
+    setState("active");
+  }, []);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.hash.slice(1)).get("code");
+    if (code) {
+      window.history.replaceState(null, "", window.location.pathname);
+      void redeem(code);
+      return;
+    }
+    void loadCurrent();
+  }, [loadCurrent, redeem]);
+
+  if (state === "loading" || state === "redeeming") {
+    return (
+      <section className="context-state card" aria-live="polite">
+        <LoaderCircle className="spin" size={34} />
+        <h2>{state === "redeeming" ? "Opening your private Gym session…" : "Checking context…"}</h2>
+        <p>
+          {state === "redeeming"
+            ? "The server is consuming the code once and creating an anonymous, persisted Gym session."
+            : "The Gym is checking its HttpOnly session cookie; it is not reading a Passport from browser storage."}
+        </p>
+      </section>
+    );
   }
 
-  return (
-    <div className="passport-layout">
-      <section className="passport-picker card">
-        <div className="panel-heading">
-          <span className="panel-heading__icon">
-            <UserRound size={19} />
+  if (!projection) {
+    return (
+      <div className="context-connect-grid">
+        <section className="context-state card">
+          <span className="context-state__icon">
+            <Fingerprint size={28} />
           </span>
-          <div>
-            <p>Demo participants</p>
-            <h2>Choose a minimum projection</h2>
-          </div>
-        </div>
-        <div className="profile-list">
-          {profiles.map((profile) => (
-            <button
-              type="button"
-              key={profile.projectionId}
-              className={
-                selectedId === profile.projectionId
-                  ? "profile-option is-selected"
-                  : "profile-option"
-              }
-              onClick={() => setSelectedId(profile.projectionId)}
-            >
-              <span className="profile-avatar">
-                {profile.subjectAlias
-                  .split(" ")
-                  .map((word) => word[0])
-                  .slice(0, 2)
-                  .join("")}
-              </span>
-              <span>
-                <strong>{profile.subjectAlias}</strong>
-                <small>
-                  {profile.ageBand} · {profile.experienceLevel}
-                </small>
-              </span>
-              {activeId === profile.projectionId ? (
-                <span className="tag tag--green">
-                  <Check size={12} /> Active
-                </span>
-              ) : (
-                <ChevronRight size={17} />
-              )}
-            </button>
-          ))}
-        </div>
-        <div className="grant-box">
-          <div>
-            <KeyRound size={18} />
-            <strong>Have a context grant?</strong>
-          </div>
+          <p className="eyebrow">No context connected</p>
+          <h2>Start from your own Passport.</h2>
           <p>
-            Redeem a one-time code generated by the Passport app. For this demo, try{" "}
-            <code>demo-mateo</code>.
+            Sign in as the Passport owner, review the exact Gym projection, then approve a
+            five-minute, one-use exchange. There is no profile picker inside the Gym.
           </p>
+          <Link className="button button--lime" href={`${passportUrl}/sharing`}>
+            Open Digital Passport <ArrowRight size={17} />
+          </Link>
+        </section>
+        <aside className="card handoff-proof">
+          <div>
+            <KeyRound size={20} />
+            <strong>Already have a one-use code?</strong>
+          </div>
+          <p>Paste it only as a fallback when the automatic handoff was interrupted.</p>
           <div className="grant-input">
             <input
-              value={grantCode}
-              onChange={(event) => setGrantCode(event.target.value)}
-              placeholder="Enter grant code"
+              autoComplete="off"
+              value={manualCode}
+              onChange={(event) => setManualCode(event.target.value)}
+              placeholder="One-use context code"
             />
-            <button type="button" onClick={() => void redeemGrant()} disabled={!grantCode.trim()}>
+            <button
+              type="button"
+              disabled={manualCode.trim().length < 32}
+              onClick={() => void redeem(manualCode.trim())}
+            >
               Redeem
             </button>
           </div>
-          {grantMessage && (
-            <p className="grant-message" role="status">
-              {grantMessage}
+          {message ? (
+            <p className="grant-message" role="alert">
+              {message}
             </p>
-          )}
-        </div>
-      </section>
+          ) : null}
+          <ul className="handoff-list">
+            <li>
+              <Check size={15} /> Code stored only as SHA-256 in Neon
+            </li>
+            <li>
+              <Check size={15} /> Atomic replay protection
+            </li>
+            <li>
+              <Check size={15} /> No identity, labs, medications, or documents
+            </li>
+          </ul>
+        </aside>
+      </div>
+    );
+  }
 
-      <section className="projection-card" aria-live="polite">
-        {selected ? (
-          <>
-            <div className="projection-card__top">
-              <div>
-                <p className="eyebrow">Gym projection preview</p>
-                <h2>{selected.subjectAlias}</h2>
-                <p>This is the full set of context Adaptive Gym receives.</p>
-              </div>
-              <Fingerprint size={38} />
-            </div>
-            <div className="projection-summary">
-              <div>
-                <span>Age range</span>
-                <strong>{selected.ageBand}</strong>
-              </div>
-              <div>
-                <span>Experience</span>
-                <strong>{selected.experienceLevel}</strong>
-              </div>
-              <div>
-                <span>Session</span>
-                <strong>{selected.preferredSessionMinutes} min</strong>
-              </div>
-            </div>
-            <ContextSection title="Goals" values={selected.goals} />
-            <ContextSection
-              title="Movement considerations"
-              values={selected.movementConsiderations}
-              emphasis
-            />
-            {selected.accessibilityNeeds.length > 0 && (
-              <ContextSection title="Access needs" values={selected.accessibilityNeeds} />
-            )}
-            <ContextSection title="Stop signals" values={selected.stopSignals} danger />
-            <div className="privacy-boundary">
-              <LockKeyhole size={18} />
-              <p>
-                <strong>Not shared:</strong> name, birthday, contact details, diagnoses,
-                medications, laboratories, documents and clinician identity.
-              </p>
-            </div>
-            <div className="projection-expiry">
-              <Clock3 size={14} /> Valid until{" "}
-              {new Date(selected.expiresAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </div>
-            <button
-              className="button button--lime button--block"
-              type="button"
-              onClick={() => connect()}
-            >
-              <ShieldCheck size={18} /> Use this context in Adaptive Gym
-            </button>
-          </>
-        ) : (
-          <p>No projection selected.</p>
-        )}
-      </section>
-    </div>
+  return (
+    <section className="projection-card projection-card--connected" aria-live="polite">
+      <div className="projection-card__top">
+        <div>
+          <p className="eyebrow">Connected Gym context</p>
+          <h2>{projection.subjectAlias}</h2>
+          <p>This is the complete dataset Adaptive Gym can see for this session.</p>
+        </div>
+        <span className="verified-context">
+          <ShieldCheck size={18} /> One-use grant redeemed
+        </span>
+      </div>
+      <div className="projection-summary">
+        <div>
+          <span>Age range</span>
+          <strong>{projection.ageBand}</strong>
+        </div>
+        <div>
+          <span>Experience</span>
+          <strong>{projection.experienceLevel}</strong>
+        </div>
+        <div>
+          <span>Preferred session</span>
+          <strong>{projection.preferredSessionMinutes} min</strong>
+        </div>
+      </div>
+      <div className="connected-context-grid">
+        <ContextSection title="Goals" values={projection.goals} />
+        <ContextSection
+          title="Movement considerations"
+          values={projection.movementConsiderations}
+          emphasis
+        />
+        {projection.accessibilityNeeds.length ? (
+          <ContextSection title="Access needs" values={projection.accessibilityNeeds} />
+        ) : null}
+        <ContextSection title="Stop signals" values={projection.stopSignals} danger />
+      </div>
+      <div className="privacy-boundary">
+        <LockKeyhole size={18} />
+        <p>
+          <strong>Not shared:</strong> name, birth date, contact details, diagnoses, medications,
+          laboratories, documents, Passport ID, and clinician identity.
+        </p>
+      </div>
+      <div className="projection-actions">
+        <span className="projection-expiry">
+          <Clock3 size={14} /> Context expires {new Date(projection.expiresAt).toLocaleString()}
+        </span>
+        <div>
+          <button
+            className="button button--light"
+            type="button"
+            onClick={async () => {
+              await fetch("/api/context/current", { method: "DELETE" });
+              setProjection(null);
+              setState("disconnected");
+            }}
+          >
+            Disconnect
+          </button>
+          <Link className="button button--lime" href="/session">
+            Choose a walkthrough <ArrowRight size={17} />
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 

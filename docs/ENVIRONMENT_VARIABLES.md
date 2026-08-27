@@ -1,51 +1,51 @@
 # Environment variables
 
-This document is the deployment contract. Exact validation lives in server code; missing secrets must fail closed.
+This is the runtime contract implemented by the current code. Missing server secrets fail closed; no secret may use a `NEXT_PUBLIC_` prefix.
 
-## Shared server-only values
+## Passport Vercel project
 
-| Variable               | Passport       | Gym                                       | Purpose                                                              |
-| ---------------------- | -------------- | ----------------------------------------- | -------------------------------------------------------------------- |
-| `DATABASE_URL`         | Required       | Required                                  | Neon pooled application connection                                   |
-| `DATABASE_URL_DIRECT`  | Migration only | Migration only                            | Direct connection for migrations; never browser-exposed              |
-| `AUTH_SECRET`          | Required       | Required if sessions are verified locally | High-entropy authentication secret                                   |
-| `CONTEXT_GRANT_PEPPER` | Required       | Required                                  | Keyed digest for one-time context codes; same value on both projects |
-| `AUDIT_HMAC_KEY`       | Required       | Required                                  | Integrity/pseudonymization for sensitive audit metadata              |
-| `DEMO_MODE`            | Required       | Required                                  | Must be `true` for public hackathon demos                            |
+| Variable                   | Required | Exposure     | Purpose                                                         |
+| -------------------------- | -------- | ------------ | --------------------------------------------------------------- |
+| `DATABASE_URL`             | Yes      | Server only  | Neon pooled connection used by Better Auth and application data |
+| `BETTER_AUTH_SECRET`       | Yes      | Server only  | High-entropy Better Auth signing secret, at least 32 characters |
+| `BETTER_AUTH_URL`          | Yes      | Server only  | Exact canonical Passport origin                                 |
+| `NEXT_PUBLIC_PASSPORT_URL` | Yes      | Browser-safe | Canonical Passport origin used in metadata and links            |
+| `NEXT_PUBLIC_GYM_URL`      | Yes      | Browser-safe | Exact Gym origin used for the approved handoff                  |
+| `SEED_DEMO`                | No       | Server only  | Keep unset/false in deployed apps; sign-up remains disabled     |
 
-## Passport project
+## Gym Vercel project
 
-| Variable                   | Exposure            | Purpose                                              |
-| -------------------------- | ------------------- | ---------------------------------------------------- |
-| `NEXT_PUBLIC_PASSPORT_URL` | Browser-safe        | Canonical Passport origin only                       |
-| `GYM_ORIGIN`               | Server-only         | Exact allowed Gym origin for redirects and exchanges |
-| `BLOB_READ_WRITE_TOKEN`    | Server-only         | Private Vercel Blob access for synthetic documents   |
-| `WEBMCP_ENABLED`           | Server/build config | Feature gate; keep standard UI functional when false |
+| Variable                     | Required | Exposure     | Purpose                                                                     |
+| ---------------------------- | -------- | ------------ | --------------------------------------------------------------------------- |
+| `DATABASE_URL`               | Yes      | Server only  | Neon pooled connection for one-use grants, anonymous sessions, and feedback |
+| `ADAPTIVE_WORLD_DEMO_SECRET` | Yes      | Server only  | High-entropy HMAC key for the Gym's HttpOnly session token                  |
+| `NEXT_PUBLIC_GYM_URL`        | Yes      | Browser-safe | Canonical Gym origin                                                        |
+| `NEXT_PUBLIC_PASSPORT_URL`   | Yes      | Browser-safe | Canonical Passport origin for the connect flow                              |
 
-## Gym project
+The current opaque context grant does not require a shared pepper: the code is 256 random bits and only its lowercase SHA-256 digest is stored. Passport and Gym coordinate through Neon and do not share a browser cookie.
 
-| Variable              | Exposure            | Purpose                                               |
-| --------------------- | ------------------- | ----------------------------------------------------- |
-| `NEXT_PUBLIC_GYM_URL` | Browser-safe        | Canonical Gym origin only                             |
-| `PASSPORT_ORIGIN`     | Server-only         | Exact Passport origin for server-to-server redemption |
-| `WEBMCP_ENABLED`      | Server/build config | Feature gate                                          |
+## Migration and seed only
+
+| Variable                           | Purpose                                                                      |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `DATABASE_URL`                     | Migration/seed target; use a direct URL for one-off tooling when appropriate |
+| `CONFIRM_SYNTHETIC_DEMO_SEED=true` | Explicit guard required by the versioned demo seed                           |
+| `DEMO_ACCOUNT_PASSWORD`            | Optional override for the two synthetic Better Auth accounts                 |
+
+The public fallback demo password is acceptable only because every identity and record is synthetic. Use a unique value in any non-public environment.
+
+## Production values
+
+| Variable          | Passport value                      | Gym value                               |
+| ----------------- | ----------------------------------- | --------------------------------------- |
+| Canonical origin  | `https://passport-eosin.vercel.app` | `https://gym-alpha-amber-89.vercel.app` |
+| Paired public URL | Gym origin                          | Passport origin                         |
 
 ## Rules
 
-- Never put tokens, database URLs, health data, identifiers, or cryptographic keys in variables prefixed `NEXT_PUBLIC_`.
-- Scope Preview variables to disposable data. Preview deployments must not access the production database or Blob store.
-- Mark secrets sensitive in Vercel. Do not copy them into GitHub Actions unless the workflow truly requires them.
-- Use separate authentication and grant keys per environment.
-- Rotate `CONTEXT_GRANT_PEPPER` only with an invalidation plan for outstanding grants.
-- Values changed in Vercel apply to new deployments; redeploy after a rotation.
-- Do not log values during startup validation.
-
-## Suggested origin values
-
-| Environment | Passport                            | Gym                                 |
-| ----------- | ----------------------------------- | ----------------------------------- |
-| Development | `http://localhost:3000`             | `http://localhost:3001`             |
-| Preview     | Project-specific Vercel preview URL | Project-specific Vercel preview URL |
-| Production  | Final Passport domain               | Final Gym domain                    |
-
-Use an exact allowlist. Wildcard preview origins should be avoided for any cross-origin exchange; instead derive paired preview URLs through controlled deployment metadata or disable exchanges in arbitrary previews.
+- Mark `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `ADAPTIVE_WORLD_DEMO_SECRET` sensitive in Vercel.
+- Use separate secrets per environment. Preview should use an isolated Neon branch whenever it permits mutations.
+- Do not put tokens, database URLs, clinical values, or identifiers in browser-visible environment variables.
+- Redeploy after changing a Vercel variable; existing deployments do not receive the new value.
+- Never log environment values or include them in GitHub Actions artifacts.
+- The checked-in CI build fallbacks are unreachable application endpoints used only so static production compilation can run without production credentials.

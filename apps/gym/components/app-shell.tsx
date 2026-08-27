@@ -5,7 +5,7 @@ import { Activity, ArrowUpRight, Dumbbell, Fingerprint, Sparkles } from "lucide-
 const navigation = [
   { href: "/equipment", label: "Equipment" },
   { href: "/passport", label: "Passport context" },
-  { href: "/session", label: "Build a session" },
+  { href: "/session", label: "Staff walkthroughs" },
 ];
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -40,11 +40,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="topbar__actions">
-            <span className="webmcp-pill" title="This page exposes structured WebMCP tools">
-              <Sparkles size={13} /> WebMCP ready
+            <span className="webmcp-pill" title="This site can expose structured WebMCP tools">
+              <Sparkles size={13} /> WebMCP surface
             </span>
             <Link className="button button--dark button--small" href="/session">
-              Start session <ArrowUpRight size={15} />
+              Member visit <ArrowUpRight size={15} />
             </Link>
           </div>
         </div>
@@ -53,18 +53,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="footer">
         <div className="footer__brand">
           <BrandMark />
-          <p>Designed to use only the context you permit—and only the equipment this gym has.</p>
+          <p>
+            Consent-first context matched to verified products and published staff walkthroughs.
+          </p>
         </div>
         <div className="footer__principles" aria-label="Product principles">
           <span>
             <Fingerprint size={16} /> Consent-first context
           </span>
           <span>
-            <Dumbbell size={16} /> Real catalog grounding
+            <Dumbbell size={16} /> Manufacturer-verified products
           </span>
         </div>
         <p className="footer__legal">
-          Synthetic demo data. Not medical advice or a clinical system.
+          Synthetic club inventory and member data. Product models and source links are real. Not
+          medical advice.
         </p>
       </footer>
       <nav className="mobile-nav" aria-label="Mobile navigation">

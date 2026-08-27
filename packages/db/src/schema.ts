@@ -264,6 +264,35 @@ export const labResults = pgTable(
   ],
 );
 
+export const clinicalGuidance = pgTable(
+  "clinical_guidance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "cascade" }),
+    doctorUserId: uuid("doctor_user_id")
+      .notNull()
+      .references(() => users.id),
+    relationshipId: uuid("relationship_id")
+      .notNull()
+      .references(() => doctorPatientRelationships.id),
+    accessGrantId: uuid("access_grant_id")
+      .notNull()
+      .references(() => accessGrants.id),
+    guidance: text("guidance").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("clinical_guidance_patient_time_idx").on(table.patientId, table.createdAt),
+    index("clinical_guidance_doctor_time_idx").on(table.doctorUserId, table.createdAt),
+    check("clinical_guidance_length_check", sql`length(${table.guidance}) BETWEEN 1 AND 2000`),
+    check("clinical_guidance_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
 export const contextGrants = pgTable(
   "context_grants",
   {

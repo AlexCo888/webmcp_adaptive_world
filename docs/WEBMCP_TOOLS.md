@@ -35,14 +35,14 @@ There is intentionally no global `search_patients` tool.
 
 ## Adaptive Gym
 
-| Tool                      | Type             | Available when                              | Result/side effect                                    |
-| ------------------------- | ---------------- | ------------------------------------------- | ----------------------------------------------------- |
-| `get_gym_profile`         | Read             | Public Gym route                            | Services, accessibility, hours/status needed by agent |
-| `search_equipment`        | Read/untrusted   | Catalog route                               | Bounded matches from the real catalog                 |
-| `get_equipment`           | Read/untrusted   | Valid catalog item                          | One specification record                              |
-| `get_active_context`      | Read             | Context has been redeemed and remains valid | Minimum projection only                               |
-| `create_session_draft`    | Write-like draft | Context and equipment selected              | Visible, editable draft; no autonomous booking        |
-| `record_session_feedback` | Write            | Session complete                            | Confirmation and bounded feedback event               |
+| Tool                      | Type             | Available when                              | Result/side effect                                     |
+| ------------------------- | ---------------- | ------------------------------------------- | ------------------------------------------------------ |
+| `get_gym_profile`         | Read             | Public Gym route                            | Services, accessibility, hours/status needed by agent  |
+| `search_equipment`        | Read/untrusted   | Catalog route                               | Bounded matches from the real catalog                  |
+| `get_equipment`           | Read/untrusted   | Valid catalog item                          | One specification record                               |
+| `get_active_context`      | Read             | Context has been redeemed and remains valid | Minimum projection only                                |
+| `create_session_draft`    | Write-like draft | Active context and published template ID    | Persisted walkthrough with template/catalog provenance |
+| `record_session_feedback` | Write            | Session complete                            | Confirmation and bounded feedback event                |
 
 ## Server call sequence
 
@@ -52,7 +52,7 @@ Every tool handler uses the same sequence:
 2. Resolve the server session; never accept actor or role from the tool input.
 3. Resolve resource through the actor's authorized relationship set.
 4. Re-check scope, grant status, purpose, expiry, and revocation.
-5. Execute a bounded query or idempotent mutation.
+5. Execute a bounded query or purpose-specific mutation.
 6. Write a redacted audit event.
 7. Return the minimum structured result and a stable error code on failure.
 
@@ -74,7 +74,7 @@ Errors use `ok: false`, a stable `error.code`, and a human-readable message that
 
 ## Confirmation contract
 
-Mutating WebMCP calls prepare an action and bring the first-party UI to a review state. The user sees target, fields, purpose, expiry, and effect. Execution occurs only after an explicit click/tap in that UI. Cancel returns `CANCELLED` without mutation. Repeated completion with the same idempotency key returns the original result.
+Mutating WebMCP calls prepare an action and bring the first-party UI to a review state. The user sees target, fields, purpose, expiry, and effect. Execution occurs only after an explicit click/tap in that UI. Cancel returns `CANCELLED` without mutation. The server rechecks the active relationship or session immediately before the write and records the exact persisted resource.
 
 ## Character budgets
 

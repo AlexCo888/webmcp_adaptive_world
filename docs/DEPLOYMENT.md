@@ -20,7 +20,7 @@ Keep **Include source files outside of the Root Directory** enabled when the app
 
 - **Development:** local origins and a disposable Neon branch.
 - **Preview:** isolated Neon branch/data, synthetic-only documents, random secrets, and Preview origins.
-- **Production demo:** synthetic dataset only, production domains, private Blob, and `DEMO_MODE=true`.
+- **Production demo:** synthetic dataset only, production domains, real Better Auth sessions, and high-entropy secrets.
 
 Preview must never inherit a production `DATABASE_URL` or production Blob token.
 
@@ -38,7 +38,7 @@ Preview must never inherit a production `DATABASE_URL` or production Blob token.
 
 - [ ] GitHub `CI` workflow is green.
 - [ ] Passport and Gym Preview deployments are both **Ready** for the same commit.
-- [ ] `node tests/evals/validate.mjs` reports 16 valid fixtures.
+- [ ] `node tests/evals/validate.mjs` reports 17 valid fixtures.
 - [ ] Synthetic disclaimer appears on both apps.
 - [ ] Owner, clinician, and Gym critical journeys work through the standard UI.
 - [ ] Chrome DevTools **Application → WebMCP** shows only route/role-appropriate tools.

@@ -6,204 +6,178 @@ import {
   ArrowRight,
   Check,
   Clock3,
+  ClipboardCheck,
   Dumbbell,
   Fingerprint,
   LoaderCircle,
   RotateCcw,
-  Sparkles,
+  ShieldCheck,
+  UserCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { facilityTemplates, type FacilityTemplate } from "@/lib/session-planner";
 
-const goals = [
-  "General full-body fitness",
-  "Build whole-body strength",
-  "Cardiovascular endurance",
-  "Mobility and balance",
-  "Return to confident movement",
-];
-
-export function SessionPlanner({
-  profiles,
-  equipment,
-  initialEquipmentId,
-}: {
-  profiles: GymContextProjection[];
-  equipment: Equipment[];
-  initialEquipmentId?: string;
-}) {
-  const [profileId, setProfileId] = useState("");
-  const [goal, setGoal] = useState(goals[0] ?? "General fitness");
-  const [duration, setDuration] = useState(50);
-  const [selectedEquipment, setSelectedEquipment] = useState<string[]>(
-    initialEquipmentId ? [initialEquipmentId] : [],
-  );
+export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
+  const [context, setContext] = useState<GymContextProjection | null>(null);
+  const [templateId, setTemplateId] = useState<FacilityTemplate["id"]>("first_visit_foundations");
   const [session, setSession] = useState<GeneratedSession | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [status, setStatus] = useState<"loading-context" | "idle" | "matching" | "error">(
+    "loading-context",
+  );
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setProfileId(
-      window.localStorage.getItem("adaptive-gym-context") ?? profiles[0]?.projectionId ?? "",
-    );
-  }, [profiles]);
-  const profile = profiles.find((entry) => entry.projectionId === profileId);
-  const selectedNames = useMemo(
-    () =>
-      selectedEquipment.map((id) => equipment.find((item) => item.id === id)?.name).filter(Boolean),
-    [equipment, selectedEquipment],
-  );
+    async function load() {
+      const [contextResponse, sessionResponse] = await Promise.all([
+        fetch("/api/context/current", { cache: "no-store" }),
+        fetch("/api/session", { cache: "no-store" }),
+      ]);
+      if (contextResponse.ok) {
+        const data = (await contextResponse.json()) as { projection?: GymContextProjection };
+        setContext(data.projection ?? null);
+      }
+      if (sessionResponse.ok) {
+        const data = (await sessionResponse.json()) as { session?: GeneratedSession | null };
+        if (data.session) {
+          setSession(data.session);
+          setTemplateId(data.session.templateId as FacilityTemplate["id"]);
+        }
+      }
+      setStatus("idle");
+    }
+    void load();
+  }, []);
 
-  async function generate() {
-    if (!profile) {
-      setMessage("Connect a Passport context before building a session.");
+  async function matchTemplate() {
+    if (!context) {
+      setMessage("Connect a Passport context before choosing a walkthrough.");
       setStatus("error");
       return;
     }
-    setStatus("loading");
+    setStatus("matching");
     setMessage("");
-    setSession(null);
     const response = await fetch("/api/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profile,
-        goal,
-        durationMinutes: duration,
-        equipmentIds: selectedEquipment,
-      }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId, createdVia: "site-ui" }),
     });
     const data = (await response.json()) as { session?: GeneratedSession; error?: string };
     if (!response.ok || !data.session) {
-      setMessage(data.error ?? "The draft could not be generated.");
+      setMessage(data.error ?? "The walkthrough could not be matched.");
       setStatus("error");
       return;
     }
     setSession(data.session);
     setStatus("idle");
-    window.sessionStorage.setItem("adaptive-gym-last-session", JSON.stringify(data.session));
+  }
+
+  if (status === "loading-context") {
+    return (
+      <section className="context-state card">
+        <LoaderCircle className="spin" size={32} />
+        <h2>Loading your Gym session…</h2>
+        <p>The profile is resolved server-side from the signed, HttpOnly session cookie.</p>
+      </section>
+    );
   }
 
   return (
-    <div className="planner-grid">
+    <div className="planner-grid planner-grid--templates">
       <aside className="planner-controls card">
         <div className="panel-heading">
           <span className="panel-heading__icon">
-            <Sparkles size={19} />
+            <ClipboardCheck size={19} />
           </span>
           <div>
-            <p>Grounded generator</p>
-            <h2>Shape your session</h2>
+            <p>Published by Gym staff</p>
+            <h2>Choose a walkthrough</h2>
           </div>
         </div>
-        <label className="field">
-          <span>Passport context</span>
-          <select value={profileId} onChange={(event) => setProfileId(event.target.value)}>
-            {profiles.map((entry) => (
-              <option key={entry.projectionId} value={entry.projectionId}>
-                {entry.subjectAlias} · {entry.ageBand}
-              </option>
-            ))}
-          </select>
-        </label>
-        {profile && (
+        {context ? (
           <div className="active-context">
             <Fingerprint size={16} />
             <span>
-              <strong>{profile.subjectAlias}</strong>
-              {profile.movementConsiderations.length} considerations ·{" "}
-              {profile.accessibilityNeeds.length} access needs
+              <strong>{context.subjectAlias}</strong>
+              {context.movementConsiderations.length} movement signals ·{" "}
+              {context.accessibilityNeeds.length} access needs
             </span>
             <Link href="/passport">Review</Link>
           </div>
-        )}
-        <label className="field">
-          <span>Session focus</span>
-          <select value={goal} onChange={(event) => setGoal(event.target.value)}>
-            {goals.map((entry) => (
-              <option key={entry}>{entry}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>
-            Time available <strong>{duration} min</strong>
-          </span>
-          <input
-            type="range"
-            min="20"
-            max="75"
-            step="5"
-            value={duration}
-            onChange={(event) => setDuration(Number(event.target.value))}
-          />
-        </label>
-        <div className="field">
-          <span>
-            Specific equipment <small>(optional)</small>
-          </span>
-          <div className="selected-equipment">
-            {selectedNames.length ? (
-              selectedNames.map((name) => (
-                <span className="tag tag--green" key={name}>
-                  {name}
-                </span>
-              ))
-            ) : (
-              <p>Let the matcher choose from all available equipment.</p>
-            )}
+        ) : (
+          <div className="context-required">
+            <Fingerprint size={19} />
+            <div>
+              <strong>Passport context required</strong>
+              <p>The Gym cannot choose a synthetic person for you.</p>
+            </div>
+            <Link href="/passport" className="button button--dark button--small">
+              Connect
+            </Link>
           </div>
-          <Link className="inline-link" href="/equipment">
-            Browse equipment <ArrowRight size={14} />
-          </Link>
+        )}
+        <div className="template-list" role="radiogroup" aria-label="Facility walkthrough">
+          {facilityTemplates.map((template) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={templateId === template.id}
+              className={`template-option ${templateId === template.id ? "is-selected" : ""}`}
+              key={template.id}
+              onClick={() => setTemplateId(template.id)}
+            >
+              <span>
+                <strong>{template.name}</strong>
+                <small>
+                  {template.durationMinutes} min · v{template.version}
+                </small>
+              </span>
+              <p>{template.summary}</p>
+              <em>{template.bestFor}</em>
+            </button>
+          ))}
         </div>
         <button
           type="button"
           className="button button--lime button--block"
-          disabled={status === "loading" || !profile}
-          onClick={() => void generate()}
+          disabled={status === "matching" || !context}
+          onClick={() => void matchTemplate()}
         >
-          {status === "loading" ? (
+          {status === "matching" ? (
             <>
-              <LoaderCircle className="spin" size={18} /> Matching equipment…
+              <LoaderCircle className="spin" size={18} /> Verifying catalog…
             </>
           ) : (
             <>
-              <Sparkles size={18} /> Generate grounded draft
+              <ShieldCheck size={18} /> Match this staff template
             </>
           )}
         </button>
         <p className="fine-print">
-          This creates a reviewable draft—not a medical prescription. Stop signals remain visible
-          throughout.
+          This does not ask an AI to invent a routine. It matches a versioned, staff-authored
+          walkthrough to the active minimum context and verified inventory.
         </p>
       </aside>
 
       <section className="session-canvas" aria-live="polite">
-        {status === "error" && (
+        {status === "error" ? (
           <div className="error-notice">
             <AlertTriangle size={18} />
             {message}
           </div>
-        )}
+        ) : null}
         {session ? (
-          <SessionResult
-            session={session}
-            onReset={() => {
-              setSession(null);
-              setSelectedEquipment([]);
-            }}
-          />
+          <SessionResult session={session} equipment={equipment} onReset={() => setSession(null)} />
         ) : (
           <div className="session-empty">
             <div className="session-empty__orbit">
               <Dumbbell size={38} />
             </div>
-            <p className="eyebrow">Ready when you are</p>
-            <h2>Your matched session will appear here.</h2>
+            <p className="eyebrow">No fabricated routine</p>
+            <h2>A verified facility walkthrough will appear here.</h2>
             <p>
-              Every exercise will reference an available item from the 68-piece catalog and explain
-              why it was selected.
+              You will see the template version, real product models, manufacturer sources, and the
+              exact decision trace—including whether Site UI or WebMCP requested it.
             </p>
           </div>
         )}
@@ -212,45 +186,91 @@ export function SessionPlanner({
   );
 }
 
-function SessionResult({ session, onReset }: { session: GeneratedSession; onReset: () => void }) {
+function SessionResult({
+  session,
+  equipment,
+  onReset,
+}: {
+  session: GeneratedSession;
+  equipment: Equipment[];
+  onReset: () => void;
+}) {
+  const equipmentById = useMemo(
+    () => new Map(equipment.map((item) => [item.id, item])),
+    [equipment],
+  );
   return (
     <div className="session-result">
       <div className="session-result__header">
         <div>
-          <p className="eyebrow">Draft · Review before starting</p>
+          <p className="eyebrow">Staff template · Review before starting</p>
           <h2>{session.title}</h2>
           <span>
             <Clock3 size={15} /> {session.durationMinutes} minutes · {session.exercises.length}{" "}
             stations
           </span>
         </div>
-        <button type="button" className="icon-button" onClick={onReset} aria-label="Reset session">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={onReset}
+          aria-label="Choose another walkthrough"
+        >
           <RotateCcw size={17} />
         </button>
       </div>
+      <div className="session-provenance">
+        <span>
+          <UserCheck size={15} /> Template {session.templateId}@{session.templateVersion}
+        </span>
+        <span>
+          <Fingerprint size={15} /> Requested via{" "}
+          {session.createdVia === "webmcp" ? "WebMCP" : "site UI"}
+        </span>
+        <span>
+          <ShieldCheck size={15} /> Catalog {session.catalogVersion}
+        </span>
+      </div>
       <ol className="exercise-list">
-        {session.exercises.map((exercise, index) => (
-          <li key={exercise.equipmentId}>
-            <span className="exercise-number">{String(index + 1).padStart(2, "0")}</span>
-            <div className="exercise-content">
-              <div>
-                <h3>{exercise.name}</h3>
-                <span className="tag">{exercise.intensity}</span>
+        {session.exercises.map((exercise, index) => {
+          const item = equipmentById.get(exercise.equipmentId);
+          return (
+            <li key={exercise.equipmentId}>
+              <span className="exercise-number">{String(index + 1).padStart(2, "0")}</span>
+              <div className="exercise-content">
+                <div>
+                  <h3>{exercise.name}</h3>
+                  <span className="tag">{exercise.intensity}</span>
+                </div>
+                <p className="exercise-prescription">
+                  {exercise.durationMinutes} minutes of setup and orientation
+                </p>
+                <p>{exercise.instructions[0]}</p>
+                <div className="adaptation-reason">
+                  <Check size={14} />
+                  {exercise.adaptationReason}
+                </div>
+                {item ? (
+                  <div className="station-source">
+                    <Link href={`/equipment/${item.slug}`}>Gym record</Link>
+                    <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                      Manufacturer source <ArrowRight size={12} />
+                    </a>
+                  </div>
+                ) : null}
               </div>
-              <p className="exercise-prescription">
-                {exercise.durationMinutes
-                  ? `${exercise.durationMinutes} minutes`
-                  : `${exercise.sets ?? 2} sets · ${exercise.reps ?? "controlled repetitions"}`}
-              </p>
-              <p>{exercise.instructions[0]}</p>
-              <div className="adaptation-reason">
-                <Check size={14} />
-                {exercise.adaptationReason}
-              </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
+      <div className="decision-trace">
+        <h3>Why this result exists</h3>
+        <ol>
+          {session.decisionTrace.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ol>
+      </div>
       <div className="safety-callout">
         <AlertTriangle size={19} />
         <div>
@@ -263,7 +283,7 @@ function SessionResult({ session, onReset }: { session: GeneratedSession; onRese
         </div>
       </div>
       <Link href="/session/feedback" className="button button--dark button--block">
-        Start session and record feedback <ArrowRight size={17} />
+        Start walkthrough and record feedback <ArrowRight size={17} />
       </Link>
     </div>
   );

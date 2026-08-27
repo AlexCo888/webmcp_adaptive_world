@@ -297,7 +297,7 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
 }
 
 export function DoctorView() {
-  const { passports, grants, notify } = usePortal();
+  const { actor, passports, grants, notify } = usePortal();
   const authorized = useMemo(
     () =>
       passports.filter((passport) =>
@@ -316,6 +316,7 @@ export function DoctorView() {
   const [query, setQuery] = useState("");
   const [guidance, setGuidance] = useState("");
   const [showGuidance, setShowGuidance] = useState(false);
+  const [savingGuidance, setSavingGuidance] = useState(false);
   const patient = authorized.find((item) => item.id === selectedId) ?? authorized[0];
   const filtered = authorized.filter((item) =>
     item.identity.displayName.toLowerCase().includes(query.toLowerCase()),
@@ -323,11 +324,21 @@ export function DoctorView() {
   useEffect(() => {
     if (!patient && authorized[0]) setSelectedId(authorized[0].id);
   }, [authorized, patient]);
+  const patientGrant = grants.find(
+    (grant) =>
+      grant.passportId === patient?.id &&
+      grant.granteeType === "clinician" &&
+      grant.status === "active",
+  );
   const sections: Array<{ id: Section; label: string; icon: IconName }> = [
     { id: "overview", label: "Overview", icon: "user" },
-    { id: "clinical", label: "Clinical", icon: "heart" },
+    ...(patientGrant?.scopes.includes("passport.clinical.read")
+      ? ([{ id: "clinical", label: "Clinical", icon: "heart" }] as const)
+      : []),
     { id: "movement", label: "Movement", icon: "activity" },
-    { id: "documents", label: "Sources", icon: "file" },
+    ...(patientGrant?.scopes.includes("passport.documents.read")
+      ? ([{ id: "documents", label: "Sources", icon: "file" }] as const)
+      : []),
   ];
 
   return (
@@ -343,7 +354,7 @@ export function DoctorView() {
           <p className="eyebrow" style={{ color: "var(--lime)" }}>
             Welcome back
           </p>
-          <h2>Dr. Elena Vargas</h2>
+          <h2>{actor.displayName}</h2>
           <p>Sports medicine · Adaptive World Demo Clinic</p>
         </div>
         <div className="doctor-stat">
@@ -411,9 +422,13 @@ export function DoctorView() {
                 </p>
               </div>
             </div>
-            <button className="button primary" onClick={() => setShowGuidance(true)}>
-              <Icon name="plus" width="14" /> Add guidance
-            </button>
+            {patientGrant?.scopes.includes("passport.guidance.write") ? (
+              <button className="button primary" onClick={() => setShowGuidance(true)}>
+                <Icon name="plus" width="14" /> Add guidance
+              </button>
+            ) : (
+              <span className="pill neutral">Read-only grant</span>
+            )}
           </div>
           <div className="disclosure">
             <nav className="disclosure-nav" aria-label="Patient sections">
@@ -486,13 +501,24 @@ export function DoctorView() {
               <button
                 className="button primary"
                 disabled={!guidance.trim()}
-                onClick={() => {
-                  notify("Clinical guidance added to the demo timeline");
+                onClick={async () => {
+                  setSavingGuidance(true);
+                  const response = await fetch("/api/guidance", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ patientId: patient.id, guidance }),
+                  });
+                  setSavingGuidance(false);
+                  if (!response.ok) {
+                    notify("Guidance was blocked because the active scope was insufficient");
+                    return;
+                  }
+                  notify("Clinical guidance saved in the patient’s Passport and audit history");
                   setGuidance("");
                   setShowGuidance(false);
                 }}
               >
-                Confirm & add
+                {savingGuidance ? "Saving…" : "Confirm & add"}
               </button>
             </div>
           </section>

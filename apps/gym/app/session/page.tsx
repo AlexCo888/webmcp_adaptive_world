@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { demoGymProfiles, equipmentCatalog } from "@adaptive-world/demo-data";
+import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { SessionPlanner } from "@/components/session-planner";
 
 export const metadata: Metadata = {
@@ -7,28 +7,19 @@ export const metadata: Metadata = {
   description: "Build a reviewable session grounded in Adaptive Gym's real equipment catalog.",
 };
 
-type Props = { searchParams: Promise<{ equipment?: string }> };
-
-export default async function SessionPage({ searchParams }: Props) {
-  const { equipment } = await searchParams;
-  const initialEquipmentId = equipmentCatalog.some((item) => item.id === equipment)
-    ? equipment
-    : undefined;
+export default function SessionPage() {
   return (
     <div className="page-wrap">
       <header className="session-header">
         <p className="eyebrow">Match → Act</p>
         <h1 className="page-title">Build with what’s actually here.</h1>
         <p className="page-intro">
-          Your minimum context guides the match. Availability and recorded equipment capabilities
-          keep it grounded.
+          Choose a versioned walkthrough written by Gym staff. The server reads your minimum
+          context, verifies every station against current inventory, and records the invocation
+          path.
         </p>
       </header>
-      <SessionPlanner
-        profiles={demoGymProfiles}
-        equipment={equipmentCatalog}
-        {...(initialEquipmentId ? { initialEquipmentId } : {})}
-      />
+      <SessionPlanner equipment={equipmentCatalog} />
     </div>
   );
 }

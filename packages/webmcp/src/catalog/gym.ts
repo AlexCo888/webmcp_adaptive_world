@@ -22,9 +22,8 @@ export interface GetEquipmentInput {
 }
 
 export interface CreateSessionDraftInput {
-  readonly goal: string;
-  readonly durationMinutes?: number;
-  readonly equipmentIds?: readonly string[];
+  readonly templateId:
+    "first_visit_foundations" | "low_impact_orientation" | "accessible_equipment_tour";
 }
 
 export interface RecordSessionFeedbackInput {
@@ -147,33 +146,23 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
     makeTool<CreateSessionDraftInput>(
       {
         name: "create_session_draft",
-        title: "Create a session draft",
+        title: "Select a published walkthrough",
         description:
-          "Create a draft using available equipment and the active minimum context after user confirmation.",
+          "Match one versioned, staff-authored walkthrough to available equipment and active minimum context after confirmation.",
         inputSchema: {
           type: "object",
           properties: {
-            goal: {
+            templateId: {
               type: "string",
-              description: "Goal for this session.",
-              minLength: 1,
-              maxLength: 160,
-            },
-            durationMinutes: {
-              type: "integer",
-              description: "Requested session duration in minutes.",
-              minimum: 10,
-              maximum: 180,
-            },
-            equipmentIds: {
-              type: "array",
-              description: "Optional verified equipment identifiers.",
-              items: { type: "string", maxLength: 128 },
-              uniqueItems: true,
-              maxItems: 20,
+              description: "Published facility template identifier.",
+              enum: [
+                "first_visit_foundations",
+                "low_impact_orientation",
+                "accessible_equipment_tour",
+              ],
             },
           },
-          required: ["goal"],
+          required: ["templateId"],
           additionalProperties: false,
         },
         readOnly: false,

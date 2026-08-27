@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { PortalProvider } from "@/lib/portal-context";
+import { getOptionalActor, loadPortalBootstrap } from "@/lib/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,11 +25,13 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const actor = await getOptionalActor();
+  const bootstrap = actor ? await loadPortalBootstrap(actor) : null;
   return (
     <html lang="en">
       <body>
-        <PortalProvider>{children}</PortalProvider>
+        {bootstrap ? <PortalProvider bootstrap={bootstrap}>{children}</PortalProvider> : children}
       </body>
     </html>
   );

@@ -10,31 +10,41 @@ function relativeLabel(value: string) {
 }
 
 export function AccessLogView() {
-  const { patient, grants } = usePortal();
-  const patientGrants = grants.filter((grant) => grant.passportId === patient.id);
-  const events = [
-    ...patientGrants.map((grant) => ({
-      id: `${grant.id}_${grant.status}`,
-      title: grant.status === "revoked" ? "Permission revoked" : "Passport access granted",
-      detail: `${grant.granteeType === "clinician" ? "Dr. Elena Vargas" : "Adaptive Gym"} · ${grant.scopes.length} approved scope${grant.scopes.length === 1 ? "" : "s"}`,
-      time: grant.revokedAt ?? grant.issuedAt,
-      outcome: grant.status === "revoked" ? "Revoked" : "Allowed",
-    })),
-    {
-      id: "owner_view",
-      title: "Passport opened",
-      detail: "You · Owner dashboard · Full private view",
-      time: patient.updatedAt,
-      outcome: "Allowed",
+  const { auditEvents } = usePortal();
+  const labels: Record<string, { title: string; detail: string }> = {
+    "passport.demo.seeded": {
+      title: "Synthetic Passport initialized",
+      detail: "Demo fixture was loaded into the private Passport store",
     },
-    {
-      id: "doctor_denied",
-      title: "Unauthorized request blocked",
-      detail: "Unknown clinician · No active relationship",
-      time: "2026-08-19T16:22:00.000Z",
-      outcome: "Denied",
+    "doctor.access_grant.created": {
+      title: "Doctor permission created",
+      detail: "An exact set of clinical scopes was persisted",
     },
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    "doctor.access_grant.revoked": {
+      title: "Doctor permission revoked",
+      detail: "Subsequent protected requests are blocked",
+    },
+    "gym.context_grant.created": {
+      title: "One-use Gym context approved",
+      detail: "A minimum projection was stored behind a hashed exchange token",
+    },
+    "gym.context_grant.redeemed": {
+      title: "Gym context redeemed",
+      detail: "The code was atomically closed and an anonymous Gym session began",
+    },
+    "clinical_guidance.confirmed": {
+      title: "Clinical guidance confirmed",
+      detail: "The authorized clinician confirmed a write action",
+    },
+  };
+  const events = auditEvents.map((event) => ({
+    id: event.id,
+    title: labels[event.action]?.title ?? event.action,
+    detail: labels[event.action]?.detail ?? "Purpose-bound server event",
+    time: event.occurredAt,
+    outcome:
+      event.outcome === "success" ? "Allowed" : event.outcome === "denied" ? "Denied" : "Error",
+  }));
   return (
     <PortalShell view="access" title="Access log">
       <PageHeading
@@ -47,17 +57,18 @@ export function AccessLogView() {
           <div className="card-header">
             <div>
               <h2>Recent activity</h2>
-              <p className="card-subtitle">Synthetic audit events for the selected profile</p>
+              <p className="card-subtitle">Persisted server events for this signed-in Passport</p>
             </div>
             <span className="pill neutral">Immutable log</span>
           </div>
           <div className="timeline">
+            {!events.length ? <p className="card-subtitle">No persisted events yet.</p> : null}
             {events.map((event) => (
               <article className="timeline-item" key={event.id}>
                 <span
                   className="timeline-dot"
                   style={
-                    event.outcome === "Denied"
+                    event.outcome === "Denied" || event.outcome === "Error"
                       ? { background: "var(--red)" }
                       : event.outcome === "Revoked"
                         ? { background: "var(--amber)" }
@@ -67,7 +78,7 @@ export function AccessLogView() {
                 <h3>
                   {event.title}{" "}
                   <span
-                    className={`pill ${event.outcome === "Denied" ? "warning" : "neutral"}`}
+                    className={`pill ${event.outcome === "Denied" || event.outcome === "Error" ? "warning" : "neutral"}`}
                     style={{ marginLeft: 6 }}
                   >
                     {event.outcome}
@@ -104,9 +115,9 @@ export function AccessLogView() {
               <div className="metric">
                 <div className="metric-label">Blocked</div>
                 <div className="metric-value">
-                  {events.filter((item) => item.outcome === "Denied").length}
+                  {events.filter((item) => item.outcome !== "Allowed").length}
                 </div>
-                <small>denied requests</small>
+                <small>denied or failed events</small>
               </div>
             </div>
           </section>

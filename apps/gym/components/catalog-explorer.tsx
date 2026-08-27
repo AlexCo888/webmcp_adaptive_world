@@ -2,6 +2,7 @@
 
 import type { Equipment } from "@adaptive-world/contracts";
 import { ArrowRight, Check, Grid2X2, List, Search, SlidersHorizontal, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 
@@ -13,16 +14,6 @@ const categoryLabels: Record<Equipment["category"], string> = {
   "functional-training": "Functional",
   "pilates-mobility": "Pilates & mobility",
   rehabilitation: "Rehabilitation",
-};
-
-const categoryColors: Record<Equipment["category"], string> = {
-  cardio: "#dcebd4",
-  "selectorized-strength": "#f3dfbb",
-  "plate-loaded-strength": "#e5dfd2",
-  "free-weights": "#d8e8ec",
-  "functional-training": "#f6d8c8",
-  "pilates-mobility": "#dfdaf2",
-  rehabilitation: "#f2e5ae",
 };
 
 type Props = { equipment: Equipment[] };
@@ -113,7 +104,8 @@ export function CatalogExplorer({ equipment }: Props) {
           </label>
         </fieldset>
         <p className="fine-print">
-          All catalog entries are synthetic but modeled after equipment found in a full-service gym.
+          Product models, specifications, images, and source links are manufacturer-backed. Only
+          this demo club&apos;s ownership and live availability are synthetic.
         </p>
       </aside>
 
@@ -188,19 +180,17 @@ export function CatalogExplorer({ equipment }: Props) {
 }
 
 function EquipmentCard({ item, featured }: { item: Equipment; featured: boolean }) {
-  const initials = item.name
-    .split(" ")
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("");
   return (
     <article
       className={featured ? "equipment-card equipment-card--featured card" : "equipment-card card"}
     >
-      <div className="equipment-card__visual" style={{ background: categoryColors[item.category] }}>
-        <span className="equipment-monogram" aria-hidden="true">
-          {initials}
-        </span>
+      <div className="equipment-card__visual equipment-card__visual--product">
+        <Image
+          src={item.imageUrl}
+          alt={item.imageAlt}
+          fill
+          sizes={featured ? "(max-width: 900px) 100vw, 48vw" : "(max-width: 900px) 100vw, 28vw"}
+        />
         <span className="tag">{categoryLabels[item.category]}</span>
         <span className="availability">
           <Check size={12} /> Available
@@ -212,6 +202,9 @@ function EquipmentCard({ item, featured }: { item: Equipment; featured: boolean 
         </p>
         <h2>{item.name}</h2>
         <p>{item.summary}</p>
+        <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
+          Verified from {item.sourceLabel} <ArrowRight size={12} />
+        </a>
         <div className="equipment-card__meta">
           <span>
             {item.dimensionsCm.length} × {item.dimensionsCm.width} cm

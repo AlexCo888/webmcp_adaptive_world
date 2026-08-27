@@ -1,41 +1,65 @@
-import { demoGymProfiles } from "@adaptive-world/demo-data";
+import { auditEvents } from "@adaptive-world/db/schema";
+import { hashOpaqueToken, type GymProjection } from "@adaptive-world/security";
+import { sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import { z } from "zod";
+import { db } from "@/lib/database";
+import { createGymCookieToken, GYM_SESSION_COOKIE, toPublicGymContext } from "@/lib/gym-session";
 
-const RequestSchema = z.object({ code: z.string().trim().min(3).max(96) });
+const RequestSchema = z.object({ code: z.string().trim().min(32).max(160) });
 
-const demoGrantState = globalThis as typeof globalThis & {
-  adaptiveWorldRedeemedDemoCodes?: Set<string>;
+type RedeemedRow = {
+  gym_session_id: string;
+  anonymous_subject_id: string;
+  grant_id: string;
+  patient_id: string;
+  projection: { version: 1; profile: GymProjection; validUntil: string };
 };
-const redeemedCodes =
-  demoGrantState.adaptiveWorldRedeemedDemoCodes ??
-  (demoGrantState.adaptiveWorldRedeemedDemoCodes = new Set<string>());
 
 export async function POST(request: Request) {
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
-    return Response.json({ error: "Enter a valid context grant code." }, { status: 400 });
-  const normalized = parsed.data.code.toLowerCase().replaceAll("_", "-");
-  if (redeemedCodes.has(normalized)) {
-    return Response.json(
-      { error: "This one-time context grant has already been redeemed." },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Enter a valid one-use context code." }, { status: 400 });
+  }
+  const subjectId = crypto.randomUUID();
+  const tokenHash = await hashOpaqueToken(parsed.data.code);
+  const rows = await db.execute<RedeemedRow>(sql`
+    select * from redeem_context_grant_session(
+      ${tokenHash}::varchar,
+      ${"adaptive-gym"}::varchar,
+      ${subjectId}::uuid
+    )
+  `);
+  const redeemed = rows.rows[0];
+  if (!redeemed) {
+    return NextResponse.json(
+      { error: "This context code is invalid, expired, revoked, or already used." },
+      { status: 409, headers: { "cache-control": "no-store" } },
     );
   }
-  const alias = normalized.startsWith("demo-") ? normalized.slice(5) : normalized;
-  const demoAliases = ["mateo", "daniel", "maya", "evelyn", "michael", "amina"];
-  const aliasIndex = demoAliases.indexOf(alias);
-  const projection =
-    aliasIndex >= 0
-      ? demoGymProfiles[aliasIndex]
-      : demoGymProfiles.find((profile) => profile.projectionId.toLowerCase() === normalized);
-  if (!projection)
-    return Response.json(
-      { error: "This context grant is invalid, expired or already redeemed." },
-      { status: 404 },
-    );
-  redeemedCodes.add(normalized);
-  return Response.json(
-    { projection, redeemed: true, demo: true },
-    { status: 200, headers: { "Cache-Control": "no-store" } },
+
+  await db.insert(auditEvents).values({
+    patientId: redeemed.patient_id,
+    action: "gym.context_grant.redeemed",
+    resourceType: "gym_session",
+    resourceId: redeemed.gym_session_id,
+    outcome: "success",
+    metadata: { audience: "adaptive-gym", anonymousSession: true },
+  });
+  const publicContext = toPublicGymContext(redeemed.projection, redeemed.gym_session_id);
+  const response = NextResponse.json({ projection: publicContext, redeemed: true });
+  response.cookies.set(
+    GYM_SESSION_COOKIE,
+    await createGymCookieToken(redeemed.gym_session_id, subjectId),
+    {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+      path: "/",
+    },
   );
+  response.headers.set("cache-control", "no-store");
+  response.headers.set("referrer-policy", "no-referrer");
+  return response;
 }

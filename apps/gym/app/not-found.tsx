@@ -8,7 +8,7 @@ export default function NotFoundPage() {
         <SearchX size={34} />
         <p className="eyebrow">404</p>
         <h1>That equipment isn’t in this gym.</h1>
-        <p>Adaptive sessions can only reference records in the current 68-item catalog.</p>
+        <p>Adaptive sessions can only reference verified models in the current club catalog.</p>
         <Link className="button button--dark" href="/equipment">
           <ArrowLeft size={16} /> Explore the catalog
         </Link>

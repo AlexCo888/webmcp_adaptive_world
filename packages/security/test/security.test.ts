@@ -3,11 +3,14 @@ import {
   assertSafeGymProjection,
   authorizeGrant,
   buildGymProjection,
+  createPkceChallenge,
   createOpaqueToken,
   hashOpaqueToken,
   issueContextGrant,
   redeemContextGrant,
   revokeContextGrant,
+  signDemoToken,
+  verifyDemoToken,
   type ContextGrantStore,
   type NewStoredContextGrant,
   type StoredContextGrant,
@@ -101,6 +104,57 @@ describe("opaque context grants", () => {
     const revocable = await issueContextGrant(store, { ...base, ttlMs: 1_000 });
     expect(await revokeContextGrant(store, revocable.id, actor, now)).toBe(true);
     expect(await redeemContextGrant(store, revocable.token, "adaptive-gym", now)).toBeNull();
+  });
+});
+
+describe("browser-bound synthetic demo tokens", () => {
+  it("verifies exact issuer, audience and type while rejecting tampering", async () => {
+    const now = new Date("2026-08-27T12:00:00.000Z");
+    const token = await signDemoToken({
+      issuer: "passport",
+      audience: "adaptive-gym",
+      subject: "passport_mateo",
+      type: "gym-context-grant",
+      ttlSeconds: 300,
+      now,
+      tokenId: "grant-test",
+      secret: "test-secret-with-enough-entropy",
+      data: { challenge: "challenge", projectionId: "gym_passport_mateo" },
+    });
+
+    const verified = await verifyDemoToken<{ challenge: string; projectionId: string }>(token, {
+      issuer: "passport",
+      audience: "adaptive-gym",
+      type: "gym-context-grant",
+      now,
+      secret: "test-secret-with-enough-entropy",
+    });
+    expect(verified?.sub).toBe("passport_mateo");
+    expect(verified?.data.projectionId).toBe("gym_passport_mateo");
+    expect(
+      await verifyDemoToken(token, {
+        issuer: "passport",
+        audience: "another-app",
+        type: "gym-context-grant",
+        now,
+        secret: "test-secret-with-enough-entropy",
+      }),
+    ).toBeNull();
+    expect(
+      await verifyDemoToken(`${token.slice(0, -1)}x`, {
+        issuer: "passport",
+        audience: "adaptive-gym",
+        type: "gym-context-grant",
+        now,
+        secret: "test-secret-with-enough-entropy",
+      }),
+    ).toBeNull();
+  });
+
+  it("binds a grant to a high-entropy browser verifier", async () => {
+    const verifier = createOpaqueToken();
+    expect(await createPkceChallenge(verifier)).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    await expect(createPkceChallenge("short")).rejects.toThrow();
   });
 });
 

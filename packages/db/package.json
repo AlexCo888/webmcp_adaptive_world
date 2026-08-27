@@ -10,8 +10,9 @@
   "scripts": {
     "build": "tsc --noEmit",
     "generate": "drizzle-kit generate",
-    "lint": "eslint src drizzle.config.ts --max-warnings=0",
+    "lint": "eslint src scripts drizzle.config.ts --max-warnings=0",
     "migrate": "drizzle-kit migrate",
+    "seed:demo": "node --import tsx scripts/seed-demo.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -21,8 +22,11 @@
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
+    "@adaptive-world/demo-data": "workspace:*",
     "@types/node": "^22.15.0",
+    "better-auth": "1.7.2",
     "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.5",
     "typescript": "catalog:",
     "vitest": "^3.2.4"
   }

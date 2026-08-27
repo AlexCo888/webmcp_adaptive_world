@@ -34,10 +34,16 @@ export const EquipmentSchema = z.object({
   suitabilityTags: z.array(z.string().min(2).max(60)).min(1).max(12),
   locationZone: z.string().min(2).max(60),
   available: z.boolean(),
-  syntheticCatalogEntry: z.literal(true),
+  verifiedProduct: z.literal(true),
+  syntheticFacilityInventory: z.literal(true),
+  sourceUrl: z.string().url(),
+  sourceLabel: z.string().min(2).max(120),
+  sourceCheckedAt: z.string().date(),
+  imageUrl: z.string().url(),
+  imageAlt: z.string().min(5).max(180),
 });
 
-export const EquipmentCatalogSchema = z.array(EquipmentSchema).length(68);
+export const EquipmentCatalogSchema = z.array(EquipmentSchema).length(12);
 
 export const SessionExerciseSchema = z.object({
   equipmentId: IdSchema,
@@ -55,10 +61,15 @@ export const GeneratedSessionSchema = z.object({
   projectionId: IdSchema,
   title: z.string().min(2).max(120),
   goal: z.string().min(2).max(160),
+  templateId: IdSchema,
+  templateVersion: z.string().min(1).max(24),
+  createdVia: z.enum(["site-ui", "webmcp"]),
+  catalogVersion: z.string().min(1).max(40),
   durationMinutes: z.number().int().min(10).max(180),
   status: z.enum(["draft", "confirmed", "completed", "cancelled"]),
   exercises: z.array(SessionExerciseSchema).min(1).max(20),
   safetyNotes: z.array(z.string().min(2).max(200)).max(8),
+  decisionTrace: z.array(z.string().min(3).max(240)).min(2).max(12),
   createdAt: z.string().datetime({ offset: true }),
 });
 

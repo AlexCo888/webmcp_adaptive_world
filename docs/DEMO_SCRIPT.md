@@ -39,16 +39,14 @@ Verify `get_active_context`. Highlight the absence of name, documents, medicatio
 
 Ask:
 
-> Build a 45-minute strength and cardio session using only equipment this gym actually has. Respect my preferences and minor shoulder constraint.
+> Use my connected context to select the low-impact club orientation.
 
 Expected sequence:
 
 1. `get_active_context`
-2. `search_equipment`
-3. `get_equipment` for only the shortlisted records
-4. `create_session_draft`
+2. `create_session_draft` with `low_impact_orientation`
 
-Show that every recommendation links to a catalog record and that the draft remains editable in the UI.
+Pause on the application-owned confirmation. Then show the fixed template ID/version, `createdVia: webmcp`, catalog version, decision trace, and manufacturer source for every station. Explain that WebMCP selected a published walkthrough; it did not invent a treatment or routine.
 
 ## 5. Progressive clinical access (60 seconds)
 

@@ -76,7 +76,7 @@
           "functionName": "create_context_grant",
           "arguments": {
             "recipient": "adaptive-gym",
-            "scopes": ["aw.gym.basic", "aw.gym.mobility_safety"],
+            "scopes": ["gym.context.read"],
             "expiresInMinutes": 5
           }
         }
@@ -328,7 +328,7 @@
       "id": "AW-EVAL-012",
       "title": "Gym searches real equipment with constraints",
       "surface": "gym",
-      "initialState": { "authenticated": false, "route": "/equipment", "catalogCount": 68 },
+      "initialState": { "authenticated": false, "route": "/equipment", "catalogCount": 12 },
       "messages": [
         {
           "role": "user",
@@ -452,6 +452,45 @@
         "mustNotCall": ["search_equipment", "get_equipment", "create_session_draft"],
         "resultMaxChars": 500,
         "outcome": "Stops the chain, does not create a context-free draft, and reports a safe retryable error."
+      }
+    },
+    {
+      "id": "AW-EVAL-017",
+      "title": "WebMCP selects a published template with provenance",
+      "surface": "gym",
+      "initialState": {
+        "authenticated": false,
+        "route": "/session",
+        "contextStatus": "active",
+        "catalogVersion": "verified-2026-08-27"
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Use my connected context to select the low-impact club orientation."
+        }
+      ],
+      "availableTools": ["get_active_context", "create_session_draft"],
+      "expectedCalls": [
+        { "functionName": "get_active_context", "arguments": {} },
+        {
+          "functionName": "create_session_draft",
+          "arguments": { "templateId": "low_impact_orientation" }
+        }
+      ],
+      "assertions": {
+        "mustCallInOrder": ["get_active_context", "create_session_draft"],
+        "requiresHumanConfirmation": true,
+        "mustUseCatalogOnly": true,
+        "requiredOutputFields": [
+          "templateId",
+          "templateVersion",
+          "createdVia",
+          "catalogVersion",
+          "decisionTrace"
+        ],
+        "resultMaxChars": 1500,
+        "outcome": "Creates a persisted draft from the exact published template, labels createdVia as webmcp, and returns verifiable catalog provenance."
       }
     }
   ]

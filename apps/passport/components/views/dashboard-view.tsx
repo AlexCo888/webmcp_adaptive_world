@@ -16,7 +16,7 @@ function formatDate(value: string) {
 }
 
 export function DashboardView() {
-  const { patient, grants } = usePortal();
+  const { patient, grants, guidance } = usePortal();
   const initials = patient.identity.displayName
     .split(" ")
     .slice(0, 2)
@@ -128,6 +128,30 @@ export function DashboardView() {
               </div>
             </div>
           </section>
+
+          {guidance.length ? (
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <h2>Current clinician guidance</h2>
+                  <p className="card-subtitle">Visible in your Passport; never copied into Gym</p>
+                </div>
+                <span className="pill neutral">Private</span>
+              </div>
+              {guidance.slice(0, 3).map((item) => (
+                <div className="insight" key={item.id}>
+                  <div className="insight-icon blue">
+                    <Icon name="doctor" width="17" />
+                  </div>
+                  <div>
+                    <h3>{item.doctorName}</h3>
+                    <p>{item.guidance}</p>
+                    <small>Expires {formatDate(item.expiresAt)}</small>
+                  </div>
+                </div>
+              ))}
+            </section>
+          ) : null}
 
           <section className="card">
             <div className="card-header">

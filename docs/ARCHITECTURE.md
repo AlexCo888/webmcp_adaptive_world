@@ -6,10 +6,10 @@ Status: implementation baseline for the WebMCP hackathon MVP.
 
 One monorepo produces two independently deployed, human-first web applications:
 
-| Vercel project            | Root directory  | Audience                                | Responsibility                                                                                 |
-| ------------------------- | --------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician | Identity, consent, shares, sources, audit history, and one-time context grants                 |
-| `adaptive-world-gym`      | `apps/gym`      | Gym visitor                             | Equipment discovery, temporary minimum-necessary context, adaptive session draft, and feedback |
+| Vercel project            | Root directory  | Audience                                | Responsibility                                                                              |
+| ------------------------- | --------------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician | Identity, consent, shares, sources, audit history, and one-time context grants              |
+| `adaptive-world-gym`      | `apps/gym`      | Gym visitor                             | Product discovery, temporary minimum context, published walkthrough selection, and feedback |
 
 The applications share contracts, authorization primitives, UI, demo fixtures, and database access through `packages/*`. They do not share browser cookies or place health context in URLs.
 
@@ -55,6 +55,14 @@ The share's lifetime and the redemption code's lifetime are different. A code ca
 - Gym never receives names, birth dates, contacts, medications, raw labs, source documents, or clinician identity.
 - Mutating tools require an explicit review step and an idempotency key.
 - Every denial is safe to repeat and does not reveal whether an unauthorized resource exists.
+
+## Authentication and actor separation
+
+- Better Auth owns password verification and server-side sessions in its own tables.
+- The application maps the authenticated subject to a server-stored role; role is never accepted from the browser.
+- Passport owners and doctors use distinct navigation and route boundaries. There is no role switch or patient-profile picker.
+- The doctor can enumerate only active relationships and then only sections covered by the associated grant.
+- Gym is a separate origin with no Passport cookie. After one-use redemption it receives only a signed, anonymous Gym session cookie.
 
 ## WebMCP posture
 

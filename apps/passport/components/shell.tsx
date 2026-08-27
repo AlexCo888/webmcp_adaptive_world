@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "./icon";
-import { usePortal, type PortalRole } from "@/lib/portal-context";
+import { SignOutButton } from "./sign-out-button";
+import { usePortal } from "@/lib/portal-context";
 
 export type ViewName = "dashboard" | "documents" | "sharing" | "access" | "doctor" | "tools";
 
@@ -59,25 +59,6 @@ function Nav({ view, mobile = false }: { view: ViewName; mobile?: boolean }) {
   );
 }
 
-function RoleSwitch() {
-  const router = useRouter();
-  const { role, setRole } = usePortal();
-  const choose = (nextRole: PortalRole) => {
-    setRole(nextRole);
-    router.push(nextRole === "doctor" ? "/doctor" : "/");
-  };
-  return (
-    <div className="role-switch" aria-label="Demo role">
-      <button className={role === "owner" ? "active" : ""} onClick={() => choose("owner")}>
-        My Passport
-      </button>
-      <button className={role === "doctor" ? "active" : ""} onClick={() => choose("doctor")}>
-        Doctor
-      </button>
-    </div>
-  );
-}
-
 export function PortalShell({
   view,
   title,
@@ -87,7 +68,7 @@ export function PortalShell({
   title: string;
   children: ReactNode;
 }) {
-  const { webmcp, toast } = usePortal();
+  const { actor, role, webmcp, toast } = usePortal();
   const statusLabel =
     webmcp.status === "active"
       ? "Active"
@@ -122,7 +103,13 @@ export function PortalShell({
               <span className={`status-dot ${webmcp.status === "active" ? "live" : ""}`} />
               WebMCP · {statusLabel}
             </Link>
-            <RoleSwitch />
+            <div className="signed-in-actor">
+              <span>
+                <small>{role === "doctor" ? "Clinician workspace" : "Passport owner"}</small>
+                <strong>{actor.displayName}</strong>
+              </span>
+              <SignOutButton />
+            </div>
           </div>
         </header>
         <div className="content">{children}</div>
@@ -134,34 +121,6 @@ export function PortalShell({
           {toast.message}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-export function PatientSelector() {
-  const { patient, patientId, passports, setPatientId } = usePortal();
-  const initials = patient.identity.displayName
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("");
-  return (
-    <div className="demo-select">
-      <div className="avatar">{initials}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <label htmlFor="demo-patient">Synthetic demo profile</label>
-        <select
-          id="demo-patient"
-          value={patientId}
-          onChange={(event) => setPatientId(event.target.value)}
-        >
-          {passports.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.identity.displayName}
-            </option>
-          ))}
-        </select>
-      </div>
     </div>
   );
 }
@@ -179,6 +138,14 @@ export function PageHeading({
   selector?: boolean;
   action?: ReactNode;
 }) {
+  const { actor, patient, role } = usePortal();
+  const label = role === "owner" ? patient.identity.displayName : actor.displayName;
+  const initials = label
+    .split(" ")
+    .filter((part) => !part.endsWith("."))
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("");
   return (
     <div className="page-heading">
       <div>
@@ -186,7 +153,17 @@ export function PageHeading({
         <h1>{title}</h1>
         <p>{description}</p>
       </div>
-      {action ?? (selector ? <PatientSelector /> : null)}
+      {action ??
+        (selector ? (
+          <div className="identity-lockup">
+            <div className="avatar">{initials}</div>
+            <span>
+              <small>{role === "owner" ? "Signed-in owner" : "Verified clinician"}</small>
+              <strong>{label}</strong>
+            </span>
+            <Icon name="lock" width="14" />
+          </div>
+        ) : null)}
     </div>
   );
 }
