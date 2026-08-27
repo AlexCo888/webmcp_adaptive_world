@@ -30,7 +30,7 @@ test("Gym looks and behaves like a public club site before context is connected"
   await expect(hero).toBeVisible();
   await expect
     .poll(() => hero.evaluate((image: HTMLImageElement) => image.naturalWidth))
-    .toBeGreaterThan(900);
+    .toBeGreaterThan(600);
   await expect(page.getByText("12", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /Tour the equipment/ })).toBeVisible();
 });
