@@ -1,0 +1,29 @@
+{
+  "name": "@adaptive-world/gym",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack --hostname 127.0.0.1 --port 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@adaptive-world/contracts": "workspace:*",
+    "@adaptive-world/demo-data": "workspace:*",
+    "@adaptive-world/ui": "workspace:*",
+    "@adaptive-world/webmcp": "workspace:*",
+    "lucide-react": "^0.468.0",
+    "next": "16.3.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.2"
+  }
+}

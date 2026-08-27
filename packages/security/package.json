@@ -1,0 +1,22 @@
+{
+  "name": "@adaptive-world/security",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@adaptive-world/contracts": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

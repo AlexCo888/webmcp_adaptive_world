@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptive.world/schemas/webmcp-tools.json",
+  "title": "Adaptive World WebMCP tool catalog",
+  "type": "object",
+  "properties": {
+    "passport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "get_my_passport_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sections": {
+              "type": "array",
+              "items": { "enum": ["profile", "health", "mobility", "goals"] },
+              "uniqueItems": true,
+              "maxItems": 4
+            }
+          }
+        },
+        "list_my_shares": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "enum": ["active", "expired", "revoked", "all"],
+              "default": "active"
+            }
+          }
+        },
+        "create_context_grant": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "recipient": { "const": "adaptive-gym" },
+            "scopes": {
+              "type": "array",
+              "items": { "enum": ["aw.gym.basic", "aw.gym.mobility_safety"] },
+              "minItems": 1,
+              "maxItems": 2,
+              "uniqueItems": true
+            },
+            "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 60, "default": 5 }
+          },
+          "required": ["recipient", "scopes"]
+        },
+        "revoke_access_grant": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "grantId": { "$ref": "#/$defs/id" } },
+          "required": ["grantId"]
+        }
+      },
+      "required": [
+        "get_my_passport_summary",
+        "list_my_shares",
+        "create_context_grant",
+        "revoke_access_grant"
+      ]
+    },
+    "doctor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "search_my_patients": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string", "maxLength": 100 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 20, "default": 10 }
+          }
+        },
+        "get_patient_overview": { "$ref": "#/$defs/patientInput" },
+        "get_patient_section": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "patientId": { "$ref": "#/$defs/id" },
+            "section": {
+              "enum": ["summary", "medications", "allergies", "labs", "mobility", "documents"]
+            }
+          },
+          "required": ["patientId", "section"]
+        },
+        "get_patient_changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "patientId": { "$ref": "#/$defs/id" },
+            "since": { "type": "string", "format": "date-time" }
+          },
+          "required": ["patientId", "since"]
+        },
+        "open_patient_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "patientId": { "$ref": "#/$defs/id" },
+            "sourceId": { "$ref": "#/$defs/id" }
+          },
+          "required": ["patientId", "sourceId"]
+        },
+        "add_clinical_guidance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "patientId": { "$ref": "#/$defs/id" },
+            "guidance": { "type": "string", "minLength": 1, "maxLength": 2000 },
+            "expiresAt": { "type": "string", "format": "date-time" }
+          },
+          "required": ["patientId", "guidance"]
+        }
+      },
+      "required": [
+        "search_my_patients",
+        "get_patient_overview",
+        "get_patient_section",
+        "get_patient_changes",
+        "open_patient_source",
+        "add_clinical_guidance"
+      ]
+    },
+    "gym": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "get_gym_profile": { "$ref": "#/$defs/emptyInput" },
+        "search_equipment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string", "maxLength": 120 },
+            "categories": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 60 },
+              "uniqueItems": true,
+              "maxItems": 8
+            },
+            "maxWidthCm": { "type": "number", "minimum": 1, "maximum": 10000 },
+            "maxDepthCm": { "type": "number", "minimum": 1, "maximum": 10000 },
+            "accessible": { "type": "boolean" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 20, "default": 10 }
+          }
+        },
+        "get_equipment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "equipmentId": { "$ref": "#/$defs/id" } },
+          "required": ["equipmentId"]
+        },
+        "get_active_context": { "$ref": "#/$defs/emptyInput" },
+        "create_session_draft": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "goal": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "durationMinutes": { "type": "integer", "minimum": 10, "maximum": 180 },
+            "equipmentIds": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/id" },
+              "uniqueItems": true,
+              "maxItems": 20
+            }
+          },
+          "required": ["goal"]
+        },
+        "record_session_feedback": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sessionId": { "$ref": "#/$defs/id" },
+            "perceivedExertion": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "pain": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "notes": { "type": "string", "maxLength": 1000 }
+          },
+          "required": ["sessionId"]
+        }
+      },
+      "required": [
+        "get_gym_profile",
+        "search_equipment",
+        "get_equipment",
+        "get_active_context",
+        "create_session_draft",
+        "record_session_feedback"
+      ]
+    }
+  },
+  "required": ["passport", "doctor", "gym"],
+  "$defs": {
+    "emptyInput": { "type": "object", "additionalProperties": false, "properties": {} },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "patientInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "patientId": { "$ref": "#/$defs/id" } },
+      "required": ["patientId"]
+    }
+  }
+}

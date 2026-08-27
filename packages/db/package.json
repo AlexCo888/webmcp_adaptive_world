@@ -1,0 +1,29 @@
+{
+  "name": "@adaptive-world/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "lint": "eslint src drizzle.config.ts --max-warnings=0",
+    "migrate": "drizzle-kit migrate",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@adaptive-world/security": "workspace:*",
+    "@neondatabase/serverless": "^1.0.1",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.4",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}
