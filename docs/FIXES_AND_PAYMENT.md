@@ -1,33 +1,33 @@
-# Integrated Fixes, Free WebMCP, and Agent-First Payment Plan
+# Integrated Fixes, Free WebMCP, and Agent-First Pro Plan
 
 Status: implementation-ready, documentation-only plan; this file does not change production code  
-Baseline: pull request #2 branch `docs/fixes-and-payment-plan` after commit `42ddb58eb51d3fafc71f55421b21ed66f4df4a89`  
+Baseline: pull request #2 branch `docs/fixes-and-payment-plan` after commit `10d63f407d6bbcaeb4a4a9a4635cc99cdaf999f9`  
 Source plan: [`docs/HACKATHON_PATCH_PLAN.md`](./HACKATHON_PATCH_PLAN.md)  
-Target outcome: a production-demo-ready Adaptive World MVP with a free public Gym WebMCP layer and one low-cost Pro entitlement that unlocks personalized routine creation through either the human UI or an agent
+Target outcome: a production-demo-ready Adaptive World MVP with a free public Gym WebMCP layer and one low-cost Pro entitlement shared by human UI and agent workflows
 
-## 1. Product decision
+## 1. Final product decision
 
-Adaptive Gym must expose two complementary layers through the same website and server APIs:
+Adaptive Gym exposes two complementary layers through the same website and server APIs:
 
-1. **Free public Gym intelligence** — available to ordinary visitors, accessible browsers, and WebMCP-capable agents without payment.
-2. **Adaptive Routine Pro** — one Passport-linked entitlement that allows a person or an authorized agent to create and persist personalized routines.
+1. **Free public Gym intelligence** — available without payment to ordinary visitors, accessible browsers, and WebMCP-capable agents.
+2. **Adaptive Routine Pro** — one Passport-linked entitlement that unlocks personalized routine creation and persistence through either the existing human UI or a WebMCP-capable agent.
 
-WebMCP is progressive enhancement, not the only access path. Every free fact must also remain available through semantic HTML, keyboard- and screen-reader-accessible UI, and bounded public server responses. This makes the public layer analogous to a machine-actionable combination of structured metadata, accessibility, and first-party actions rather than a hidden agent-only API.
+WebMCP is progressive enhancement, not the only access path. Every public fact must also remain available through semantic HTML, keyboard- and screen-reader-accessible UI, and bounded first-party server responses.
 
 The primary story is:
 
 ```text
 free public Gym discovery
   → optional minimum Passport connection
-  → request a personalized routine
-  → exact Pro offer
-  → human or agent pays in sandbox
-  → one shared account entitlement
-  → routine appears in the existing Gym UI
+  → request personalization
+  → exact low-cost Pro offer
+  → human or bounded demo agent pays in sandbox
+  → one shared Passport entitlement
+  → personalized routine appears in the existing Gym UI
   → routine is saved to the owner’s Passport
 ```
 
-The clinician workspace remains a secondary authorization proof and must not compete with the primary demo.
+The clinician workspace remains a secondary authorization proof and must not compete with this primary demo.
 
 ## 2. Free and Pro boundaries
 
@@ -35,14 +35,15 @@ The clinician workspace remains a secondary authorization proof and must not com
 
 No payment or Passport is required to:
 
-- read the Gym profile, public services, hours, rules, accessibility summary, and staff-authored activity/class summary;
+- read the Gym profile, services, hours, rules, accessibility summary, and real staff-authored activity/class summary;
 - search the verified equipment catalog;
-- open one equipment record with manufacturer provenance;
-- use the same information through the normal human UI;
-- use the public Gym WebMCP tools when the browser exposes WebMCP;
+- open equipment details and manufacturer provenance;
+- use the same information through the ordinary accessible UI;
+- use public Gym WebMCP tools when the browser exposes WebMCP;
 - view a clearly labeled generic sample walkthrough that is not personalized to a Passport;
-- connect a Passport and inspect the exact minimum projection that the Gym received;
-- understand what Pro would use and what data it would not receive.
+- understand what Adaptive Routine Pro unlocks and what data it does not receive.
+
+Connecting a Passport and inspecting the exact minimum Gym projection also remains free.
 
 Required free WebMCP tools:
 
@@ -54,9 +55,9 @@ get_active_context        // only after an optional Passport handoff
 get_routine_pro_offer     // only after active context; read-only
 ```
 
-`get_gym_profile` should include a bounded summary of real staff-authored classes/activities when that data exists. Add separate class tools only if a visible, source-of-truth class catalog is implemented and tested; do not invent classes merely to increase tool count.
+`get_gym_profile` may include a bounded class/activity summary only when the repository has a visible, staff-authored source of truth. Do not invent classes or add tools merely to increase tool count.
 
-### 2.2 Pro access
+### 2.2 Adaptive Routine Pro
 
 One product only:
 
@@ -64,20 +65,20 @@ One product only:
 Entitlement key: adaptive_world.routine_pro.v1
 Display name: Adaptive Routine Pro
 Purchase model: one-time Passport unlock
-Recommended reference price: USD $4.99
-Sandbox amount: 499 minor units in Stripe test mode and the equivalent configured MPP test asset amount
+Reference price: USD $4.99
+Sandbox amount: 499 minor units in Stripe test mode and the configured MPP test-asset equivalent
 ```
 
-The amount is intentionally low enough to feel reasonable for a consumer product while still communicating real value. There is no pricing page, plan comparison, subscription, coupon, trial, or recurring billing in the MVP.
+The price is intentionally low enough to resemble a plausible consumer add-on while still communicating real product value. There is no pricing page, plan comparison, subscription, recurring billing, coupon, or trial in the MVP.
 
-Adaptive Routine Pro unlocks the same capabilities for humans and agents:
+The entitlement unlocks the same capabilities for humans and agents:
 
 - create a personalized routine from the active minimum Passport projection;
 - ground every station in verified Gym equipment and a published staff-authored template;
-- create through the existing human Session Planner;
-- create through a route-scoped WebMCP tool;
+- create through the existing Session Planner UI;
+- create through a route-scoped WebMCP mutation;
 - persist the routine to the owning Passport;
-- reopen the saved routine and use a compact checklist/progress view;
+- reopen it in a compact checklist/progress view;
 - create later eligible routines without paying again.
 
 Payment never unlocks:
@@ -87,7 +88,7 @@ Payment never unlocks:
 - clinician access;
 - hidden equipment facts;
 - removal of safety information;
-- diagnosis, treatment, medical clearance, or AI-generated clinical advice.
+- diagnosis, treatment, clearance, or AI-generated clinical advice.
 
 ### 2.3 Premium tool contract
 
@@ -111,45 +112,43 @@ Input:
 
 Behavior:
 
-- If the Passport already has Pro, prepare a normal account-write confirmation and create/save the routine without payment.
-- If the Passport is not entitled, `paymentMode` is required; prepare an exact server-authoritative payment confirmation.
-- Human mode redirects to Stripe Checkout only after approval.
-- Agent mode invokes the bounded Adaptive World demo-agent wallet only after approval.
-- After entitlement fulfillment, routine creation is retried idempotently and the resulting routine is saved automatically.
-- A paid-but-failed generation never charges again; the entitlement remains active and generation can be retried.
+- Existing Pro entitlement: prepare a normal account-write confirmation and create/save without payment.
+- No entitlement: `paymentMode` is required and the application prepares an exact server-authoritative payment confirmation.
+- Human mode: redirect to Stripe Checkout only after approval.
+- Agent mode: invoke the bounded Adaptive World demo-agent wallet only after approval.
+- After fulfillment: retry routine creation idempotently and save automatically.
+- Paid-but-failed generation: keep the entitlement active and allow generation retry without another payment.
 
-The current `create_session_draft` implementation should be replaced or refactored behind this contract. Do not leave a second free personalized-generation path in either the UI or WebMCP catalog.
+Replace or refactor the current free `create_session_draft` path behind this contract. Do not leave a second free personalized-generation path in the human UI, HTTP routes, or WebMCP catalog.
 
 ## 3. Minimal UI/UX gate
 
-The ordinary visitor should see essentially the same Gym. Payment appears only when the person requests personalization.
+The ordinary visitor should see essentially the same Gym. Payment appears only after the person requests personalization.
 
-### Allowed permanent UI
+Allowed permanent UI:
 
-- Keep all existing public Gym pages and equipment cards free.
+- Keep all public profile, class/activity, and equipment surfaces free.
 - Keep the existing template selector visible.
-- Before entitlement, the existing primary action becomes `Build my personalized routine` with one quiet `Pro` text marker.
-- Clicking it opens the existing confirmation modal; no modal appears on page load.
+- Before entitlement, change the existing primary action to `Build my personalized routine` with one quiet `Pro` text marker.
+- Open the existing first-party confirmation modal only after the action is requested.
 - After success, populate the existing Session Planner canvas and show `Saved to Passport ✓` with an optional quiet `Open in Passport` link.
 - In Passport, render `Saved routines` only when at least one exists.
-- Keep the synthetic demo reset only inside `/tools`.
+- Keep the synthetic reset action only inside `/tools`.
 
-### Prohibited UI
+Prohibited UI:
 
-- no pricing page or comparison table;
+- no pricing or comparison page;
 - no global upgrade button or persistent banner;
-- no wallet, balance, billing, or subscription dashboard;
+- no billing, subscription, wallet, or balance dashboard;
 - no custom card-entry form;
-- no crypto terminology in the normal human path;
-- no badge on every equipment or class card;
+- no crypto terminology in the ordinary human flow;
+- no premium badge on every equipment/class card;
 - no new chat widget;
 - no duplicate agent-result surface;
 - no second WebMCP inspector;
 - no decorative payment animation.
 
-### Confirmation copy
-
-Agent payer example:
+Agent confirmation example:
 
 ```text
 Create and save your personalized routine
@@ -164,31 +163,33 @@ Data access: unchanged; no additional health fields are shared
 [Cancel] [Approve agent payment]
 ```
 
-Human payer uses `Continue to secure test checkout` as the final action.
+Human mode uses `Continue to secure test checkout` as the final action.
+
+When a payment is already pending, the same action shows a compact `Payment already in progress` state with one `Resume` action. It must not open a second payer rail or create a second charge.
 
 ## 4. Existing hackathon fixes remain mandatory
 
 Implement every P0 and P1 item in `HACKATHON_PATCH_PLAN.md` before payment work:
 
-1. Add MIT licensing, third-party notices, truthful README claims, and a sub-three-minute judge path.
-2. Make Passport and clinician WebMCP reads server-authoritative on every invocation.
-3. Make the Gym context-grant expiry argument, persisted row, confirmation, and returned expiry identical.
-4. Remove the simulated `get_patient_changes` tool and replace its eval with live revocation enforcement.
-5. Add an authenticated, synthetic-only, idempotent demo reset.
-6. Synchronize WebMCP equipment search, equipment opening, and routine output with the existing Gym UI.
-7. Harden fetch, abort, bounded envelopes, redaction, and safe error handling.
-8. Add Playwright coverage with a deterministic `document.modelContext` shim.
-9. Publish measured eval evidence rather than describing fixtures as completed model evaluations.
-10. Keep the optional non-owner Neon runtime role behind its original all-or-nothing decision gate.
+1. MIT licensing, third-party notices, truthful README claims, and a sub-three-minute judge path.
+2. Server-authoritative Passport and clinician WebMCP reads on every invocation.
+3. Identical Gym context-grant expiry in input, confirmation, persistence, and response.
+4. Removal of the simulated `get_patient_changes` tool and replacement with live revocation enforcement.
+5. Authenticated, synthetic-only, idempotent demo reset.
+6. WebMCP synchronization with the existing Gym catalog, equipment route, and routine canvas.
+7. Bounded fetch/error handling, abort support, redaction, and stable envelopes.
+8. Playwright coverage with a deterministic `document.modelContext` shim.
+9. Measured eval evidence rather than treating fixtures as completed model evaluations.
+10. Optional non-owner Neon runtime role only behind the original all-or-nothing gate.
 
-Payment must branch from a passing base:
+Payment work branches from a passing base:
 
 ```bash
 pnpm check
 pnpm e2e
 ```
 
-## 5. Target architecture
+## 5. Target architecture and invariants
 
 ```mermaid
 flowchart TD
@@ -200,23 +201,34 @@ flowchart TD
     PA -->|"one-use minimum projection"| G
 
     G --> O["Adaptive Routine Pro offer"]
-    O -->|"human"| S["Stripe Checkout · test mode"]
-    O -->|"agent"| W["Bounded demo-agent wallet"]
+    O --> L["One patient/product purchase slot"]
+    L -->|"human"| S["Stripe Checkout · test mode"]
+    L -->|"agent"| W["Bounded demo-agent wallet"]
     W --> M["MPP 402 merchant endpoint · testnet"]
 
-    S --> F["Provider-neutral entitlement fulfillment"]
+    S --> F["Provider-neutral fulfillment"]
     M --> F
-    F --> E["Routine Pro entitlement"]
+    F --> E["One active Routine Pro entitlement"]
     E --> R["Create and save grounded routine"]
     R --> DB["Shared Neon"]
     PA -->|"owner-authorized read"| DB
 ```
 
-The payment purchases an account entitlement, not a specific pre-generated plan. This avoids charging for a routine that later fails to generate. After verified payment, generation and persistence can be retried without another charge.
+Hard invariants:
 
-## 6. Provider-neutral commerce core
+- Public Gym understanding never requires payment.
+- Payment purchases an account entitlement, not a specific pre-generated plan.
+- At most one payable order exists for one `patientId + productKey`, regardless of template, payer, provider, route, or browser session.
+- At most one provider payment window/attempt is active for that payable order.
+- Provider selection becomes immutable once an external payment window or credential submission exists.
+- A second invocation resumes the existing order or returns `ORDER_PENDING`; it never opens another rail.
+- The first verified payment may grant the entitlement; later verified payments are duplicate-payment reconciliation events, never second entitlements.
+- Routine generation is separate, idempotent, and retryable after entitlement activation.
+- Human confirmation is required before every payment or account write.
 
-All rails converge on one service:
+## 6. Provider-neutral commerce services
+
+All rails converge on:
 
 ```ts
 fulfillRoutineProOrder({
@@ -232,13 +244,14 @@ fulfillRoutineProOrder({
 
 Only this service may:
 
-- verify the legal order transition;
-- mark payment verified;
-- grant `adaptive_world.routine_pro.v1`;
-- settle any agent-budget reservation;
+- validate the legal order transition;
+- record a verified provider payment;
+- grant or reuse `adaptive_world.routine_pro.v1`;
+- settle an agent-budget reservation when applicable;
+- classify duplicate successful payments;
 - write redacted payment and entitlement audit events.
 
-Routine creation and saving are a separate idempotent service:
+Routine generation remains separate:
 
 ```ts
 createAndSavePersonalizedRoutine({
@@ -255,9 +268,9 @@ It must:
 3. require an active Pro entitlement;
 4. validate current projection expiry/revocation;
 5. use a published template and verified equipment only;
-6. validate with the existing `GeneratedSessionSchema`;
+6. validate with `GeneratedSessionSchema`;
 7. persist one owner-linked routine snapshot;
-8. update the existing Gym session canvas state;
+8. update the existing Gym canvas;
 9. write a redacted audit event;
 10. be safe to retry.
 
@@ -271,19 +284,17 @@ packages/db/migrations/0006_adaptive_routine_pro.sql
 
 ### 7.1 `commerce_orders`
 
-Required fields:
-
 ```ts
 commerceOrders {
   id
   publicRef
   patientId
-  gymSessionId
+  originatingGymSessionId
   productKey
-  payerKind            // human | agent
-  provider             // stripe_checkout | mpp_tempo
-  initiatedVia         // site-ui | webmcp
-  requestedTemplateId
+  payerKind              // human | agent
+  provider               // nullable until committed; stripe_checkout | mpp_tempo
+  initiatedVia           // site-ui | webmcp
+  initialTemplateId      // informational only; not payment authority or uniqueness
   amountMinor
   currency
   status
@@ -294,10 +305,14 @@ commerceOrders {
   capabilityDigest
   budgetReservationId
   paymentWindowExpiresAt
+  submittedAt
   paidAt
   fulfilledAt
+  reconciledAt
   voidedAt
   failureCode
+  duplicateOfOrderId
+  refundReference
   createdAt
   updatedAt
 }
@@ -309,21 +324,43 @@ Recommended status union:
 created
 provider_pending
 payment_submitted
+reconciliation_required
 paid_unfulfilled
 fulfilled
 failed
 expired
 voided
+duplicate_paid
+refund_pending
+refunded
 ```
 
-Constraints:
+Required constraints:
 
 - unique `publicRef`;
-- unique non-null provider payment reference;
-- one compatible open order per patient/product/provider/requested template;
-- exact amount, currency, payer, provider, and product are server-derived;
+- unique non-null `provider + providerPaymentRef`;
+- one active entitlement grant per `patientId + entitlementKey`;
+- one **payable** order per `patientId + productKey` across every provider and template;
+- provider, amount, currency, payer, and product are server-derived;
+- `initialTemplateId` is never part of payment uniqueness and can be changed for generation after entitlement;
 - no patient ID or health data enters provider metadata;
-- an order can grant an entitlement only once.
+- one order may grant an entitlement at most once.
+
+Use a partial unique index as defense in depth:
+
+```sql
+create unique index commerce_orders_one_payable_entitlement_idx
+on commerce_orders (patient_id, product_key)
+where status in (
+  'created',
+  'provider_pending',
+  'payment_submitted',
+  'reconciliation_required',
+  'paid_unfulfilled'
+);
+```
+
+Order creation must also lock the stable patient row so correctness does not depend only on handling a unique-constraint error.
 
 ### 7.2 `entitlement_grants`
 
@@ -333,7 +370,7 @@ entitlementGrants {
   patientId
   entitlementKey
   sourceOrderId
-  status              // active | revoked
+  status                // active | revoked
   grantedAt
   revokedAt
   createdAt
@@ -367,9 +404,9 @@ savedRoutines {
 
 Constraints:
 
-- one saved snapshot per patient/source session/template result;
+- one saved snapshot per patient/source-session/template result;
 - plan validates against `GeneratedSessionSchema`;
-- stored hash equals canonical serialized plan hash;
+- stored hash equals the canonical serialized plan hash;
 - owner authorization is resolved server-side on every read;
 - Gym cannot list routines by arbitrary patient ID.
 
@@ -398,149 +435,190 @@ agentBudgetReservations {
   bucketId
   orderId
   amountMinor
-  status              // reserved | submitted | settled | released | expired
-  expiresAt
+  status                // reserved | submitted | reconciliation_required | settled | released
+  submittedAt
+  settledAt
+  releasedAt
+  releaseReason
+  lastReconciledAt
   createdAt
   updatedAt
 }
 ```
 
-A reset must not delete settled budget history or immutable provider evidence.
+Required constraints:
 
-## 8. Order and entitlement state machine
+- unique `orderId` — one reservation ledger row per agent order;
+- nonnegative bucket counters;
+- reservation amount equals the immutable order amount;
+- submitted/reconciliation-required reservations cannot be released merely because local time expired;
+- reset cannot delete settled or unresolved submitted budget history.
 
-### Offer inspection
+The reservation row is the canonical ledger event. Bucket counters are maintained transactionally and periodically reconciled against reservation rows.
 
-`inspectRoutineProOffer` is read-only and performs no write. It requires:
+## 8. One payable order across rails and templates
 
-- payments enabled;
-- an active redeemed Gym context;
-- a selected published template;
-- no client-supplied patient identity;
-- no existing active entitlement, unless returning `entitled: true`.
+### 8.1 `createOrReuseRoutineProOrder`
 
-It returns a bounded offer containing product name, exact amount/currency, sandbox state, supported payer modes, what Pro unlocks, what data access does not change, and a short-lived quote digest.
+After first-party confirmation, run one database transaction:
 
-### Order creation
+1. lock the patient row with `SELECT ... FOR UPDATE`;
+2. re-read the active entitlement;
+3. return directly to routine generation if entitlement is already active;
+4. search for any payable order for `patientId + productKey`, independent of provider and template;
+5. when one exists:
+   - same provider and usable window: reuse/resume it;
+   - provider not yet committed: atomically commit the approved provider;
+   - another provider already active: return `ORDER_PENDING` with a safe payer label and resume/cancel state;
+6. when none exists, create exactly one order;
+7. rely on the partial unique index as a final concurrency guard;
+8. write one redacted audit event.
 
-Only after first-party confirmation:
+The order buys the entitlement. It does not reserve one template. The current template is validated again when personalized generation runs after fulfillment.
 
-1. recompute the current offer;
-2. reject `QUOTE_CHANGED`;
-3. derive patient, Gym session, product, amount, currency, and template server-side;
-4. return directly to routine creation if entitlement became active;
-5. reuse a compatible open order;
-6. create the provider-specific payment window;
-7. write a redacted audit event.
+### 8.2 Payer switching
 
-Decline causes zero order writes and zero provider calls.
+Do not allow silent rail switching after provider-side state exists.
 
-### Fulfillment
+- Stripe pending: resume the same Checkout Session. To switch, first expire the unpaid Checkout Session through Stripe and confirm that it is unpaid, then mark the order terminal.
+- MPP before credential submission: a first-party cancel may void the order and release a merely reserved budget row.
+- MPP after credential submission or ambiguous timeout: no switching; keep the order in reconciliation until payment is definitive.
 
-In one database transaction with row locking:
+A new order can be created only after the old order is terminal and no active entitlement exists.
+
+### 8.3 Simultaneous successful-payment reconciliation
+
+Serialization should prevent multiple payable windows, but asynchronous provider events must still fail safely.
+
+Fulfillment locks the patient row and order, then:
+
+- same order and same provider reference: return the prior idempotent result;
+- no active entitlement: grant it from this order;
+- active entitlement from another order: mark this order `duplicate_paid`, do not create another entitlement, and start provider-specific reconciliation.
+
+Reconciliation policy:
+
+- Stripe test mode: create an idempotent refund, transition `duplicate_paid → refund_pending → refunded`, and preserve all event IDs.
+- MPP testnet: record the actual payment as `duplicate_paid`, settle the real budget reservation because test assets were spent, preserve the receipt, and block additional agent purchases until reviewed/reset safely. Do not pretend a non-reversible testnet payment was refunded.
+
+This logic is required even though the primary invariant makes the duplicate path exceptional.
+
+## 9. Fulfillment state machine
+
+In one database transaction:
 
 ```text
-lock order
-→ validate exact provider result
-→ verify amount and currency
-→ reject receipt/payment replay
-→ grant or reuse active entitlement
-→ settle agent budget reservation when applicable
-→ mark order fulfilled
+lock patient row
+→ lock order
+→ validate provider reference and exact amount/currency
+→ deduplicate receipt/payment reference
+→ resolve existing entitlement
+→ grant entitlement or classify duplicate payment
+→ settle budget reservation when an MPP payment actually succeeded
+→ mark order fulfilled, paid-unfulfilled, or duplicate-paid
 → write audit events
 → commit
 ```
 
-If payment is verified but persistence fails, use `paid_unfulfilled` and retry the same fulfillment function. Never ask for a second payment.
+If provider payment is verified but database fulfillment fails:
 
-## 9. Provider-specific payment windows
+- preserve provider evidence;
+- use `paid_unfulfilled`;
+- retry the same fulfillment function;
+- never request a second payment.
 
-There is no universal 15-minute order maximum.
+A success redirect, model response, browser URL, or client entitlement flag is never proof of payment.
 
-Use separate provider-compatible windows:
+## 10. Provider-compatible payment windows
+
+Use separate server-authoritative windows:
 
 ```text
 Quote validity: 5 minutes
-MPP order/payment window: 10–15 minutes
+MPP new-submission window: 10–15 minutes
 Stripe Checkout/order window: exactly 30 minutes
 ```
 
-Stripe Checkout Sessions allow a custom expiry from 30 minutes to 24 hours after creation. The Stripe order’s `paymentWindowExpiresAt` and Checkout Session `expires_at` must therefore be the same 30-minute timestamp.
+Stripe requirements:
 
-Rules:
-
-- `checkout.session.expired` expires the corresponding unpaid order.
-- A success redirect never grants entitlement.
+- Checkout Session `expires_at` equals the order’s 30-minute `paymentWindowExpiresAt`.
+- `checkout.session.expired` may expire an unpaid order.
 - A verified paid webhook is authoritative.
-- If a paid webhook arrives after a local clock/state discrepancy, reconcile against the provider’s immutable payment/session timestamps and exact amount/currency; place the order in `paid_unfulfilled` rather than discarding a valid payment.
-- Do not allow a paid Checkout Session to map to a different or recreated order.
+- A late/discrepant verified payment enters fulfillment or duplicate-payment reconciliation rather than being discarded.
 
-This resolves the Stripe lifetime conflict identified in review.
+MPP requirements:
 
-## 10. Human payment: Stripe Checkout
+- Expiry prevents a **new** credential submission.
+- Expiry does not prove that a credential submitted earlier failed.
+- An order with a submitted but unresolved credential moves to `reconciliation_required`, not to a reusable expired state.
 
-Use Stripe Checkout in test mode with one allowlisted one-time Price.
+## 11. Human payment: Stripe Checkout
+
+Routes:
 
 ```text
 POST /api/commerce/routine-pro/checkout
+POST /api/commerce/routine-pro/cancel
 POST /api/stripe/webhook
 GET  /api/commerce/routine-pro/status
 ```
 
 Checkout requirements:
 
+- test mode;
 - `mode=payment`;
 - quantity exactly one;
-- allowlisted Price ID only;
+- one allowlisted Price ID;
 - canonical success/cancel URLs;
-- no unnecessary address or customer fields;
+- no unnecessary address/customer fields;
 - metadata limited to opaque `publicRef`, product key, and sandbox marker;
 - `expires_at` equals the 30-minute order expiry;
-- idempotency key derived from the stable order public reference.
+- idempotency key derives from the stable order public reference;
+- repeat requests reuse the same active order/session.
 
 Webhook requirements:
 
-- verify the Stripe signature against the raw body;
-- deduplicate event ID;
-- retrieve/reconcile the Checkout Session when necessary;
-- require exact payment status, amount, currency, mode, and metadata;
+- verify the raw-body signature;
+- deduplicate Stripe event ID;
+- reconcile the Checkout Session when necessary;
+- require exact paid status, amount, currency, mode, and metadata;
 - call provider-neutral fulfillment;
-- return success only after the event is durably recorded;
-- never trust the browser return URL as proof of payment.
+- durably record the event before returning success.
 
-After return, the existing Gym UI polls a bounded status endpoint. When entitlement is active, it resumes the requested personalized-routine creation without another payment.
+Cancellation may release the purchase slot only after Stripe confirms the Checkout Session is unpaid and expired. A browser cancel URL by itself is not sufficient.
 
-## 11. Agent payment: bounded MPP testnet wallet
+After return, the existing Gym UI polls the bounded status endpoint and resumes personalized generation only after entitlement activation.
 
-The required agent payer is a synthetic Adaptive World server-side identity:
+## 12. Agent payment: bounded MPP testnet wallet
+
+Required payer identity:
 
 ```text
 adaptive-demo-agent
 ```
 
-Its testnet private key is held only in server secrets. It is not a ChatGPT, OpenAI, browser, or model wallet.
+Its testnet private key is a Gym server secret. It is not a ChatGPT, OpenAI, browser, or model wallet.
 
 Required flow:
 
 ```text
 WebMCP mutation
-→ first-party exact confirmation
-→ create/reuse order
-→ atomically reserve budget
-→ server-held MPP client requests merchant endpoint
+→ exact first-party confirmation
+→ create/reuse the single patient/product order
+→ reserve budget idempotently
+→ MPP client requests merchant endpoint
 → 402 challenge
-→ client submits payment credential
-→ merchant verifies receipt
+→ mark reservation submitted before credential submission
+→ submit credential
+→ verify receipt
 → fulfill entitlement
 → create/save routine
 → update existing Session Planner canvas
 ```
 
-### 11.1 Recoverable retry capability
+### 12.1 Recoverable order capability
 
-Do not store only an unrecoverable random capability digest.
-
-For an MPP order, derive a stable short-lived capability deterministically:
+Derive one stable, short-lived capability for the same compatible order:
 
 ```text
 capability = base64url(
@@ -551,60 +629,80 @@ capability = base64url(
 )
 ```
 
-Store only:
-
-- capability version;
-- capability digest;
-- payment-window expiry.
-
-The server can regenerate the same capability for a retry of the same compatible order. Validation must also require the current order state, exact amount/currency, provider, and expiry.
+Store only capability version, digest, and expiry. The server may regenerate it for a retry of the same order.
 
 Rules:
 
-- never return the capability in WebMCP output, browser-visible JSON, URLs, or logs;
-- after an ambiguous timeout, retry the same order and same capability;
-- rotate only before any payment credential has been submitted;
-- after success, failure, void, or expiry, order state invalidates the capability;
-- credential/receipt replay protection remains independent of capability validation.
+- never return it in WebMCP output, browser JSON, URLs, or logs;
+- retry the same order/capability after an ambiguous timeout;
+- rotate only before any credential submission;
+- validate order state, provider, amount, currency, and expiry;
+- invalidate new submissions after success, failure, void, or expiry;
+- keep credential/receipt replay protection independent.
 
-This resolves the recoverability issue identified in review.
+### 12.2 Standalone client scope
 
-### 11.2 Standalone MPP scope decision
-
-A standalone external MPP client is **not required for the hackathon MVP**. The required proof is the real 402 flow between the bounded Adaptive World demo-agent client and the MPP merchant endpoint.
+A standalone external MPP client is not required for the hackathon MVP. The required proof is the real 402 flow between the bounded Adaptive World demo-agent client and the MPP merchant endpoint.
 
 Therefore:
 
-- remove `external-mpp` from required initiation modes;
-- remove the required standalone `mppx` smoke test;
-- do not add a public capability-issuance UI or endpoint before submission;
-- keep the merchant implementation standards-compatible internally;
-- document external client issuance as a post-hackathon extension requiring authenticated owner approval and a dedicated one-time issuance route.
+- no public capability-issuance UI or endpoint before submission;
+- no required `external-mpp` initiation mode;
+- no required standalone `mppx` smoke test;
+- keep the internal merchant implementation standards-compatible;
+- defer external issuance to an authenticated owner-approved post-hackathon route.
 
-This intentionally resolves the missing standalone capability-issuance path by reducing scope rather than adding another security-sensitive surface.
+### 12.3 Idempotent atomic budget reservation
 
-### 11.3 Atomic agent budget reservation
+Use a single function:
 
-Budget must be reserved before any external payment attempt.
+```ts
+reserveAgentBudgetForOrder(orderId)
+```
 
-In one database transaction:
+In one transaction:
 
-1. `SELECT ... FOR UPDATE` the daily `agent_budget_buckets` row;
-2. verify `settledMinor + reservedMinor + order.amountMinor <= limitMinor`;
-3. create or reuse one reservation for the order;
-4. increment `reservedMinor`;
-5. commit;
-6. only then call the external MPP client.
+1. lock the order and its daily budget bucket;
+2. query the unique reservation by `orderId`;
+3. when a reservation already exists in `reserved`, `submitted`, `reconciliation_required`, or `settled`, return it unchanged and **do not increment `reservedMinor`**;
+4. when no reservation exists, verify `settledMinor + reservedMinor + order.amountMinor <= limitMinor`;
+5. insert the unique reservation and increment `reservedMinor` exactly once in the same transaction;
+6. commit before any external payment call.
 
-On provider outcome:
+A released reservation belongs to a terminal order and is not reactivated. A later retry after a definitive pre-submission failure creates a new order under the patient/product purchase lock.
 
-- success: atomically move amount from reserved to settled;
-- definite failure before submission: release reservation;
-- ambiguous timeout after submission: keep reservation in `submitted` until reconciliation or expiry;
-- expiry with no verified payment: release through an idempotent reconciler;
-- reset: never clear settled usage and never release an unresolved submitted payment blindly.
+Idempotent transition functions:
 
-Recommended demo configuration:
+```text
+markSubmitted: reserved → submitted                 // counters unchanged
+markReconciliationRequired: submitted → reconciliation_required
+settle: reserved/submitted/reconciliation_required → settled
+release: reserved → released
+releaseAfterDefinitiveFailure: submitted/reconciliation_required → released
+```
+
+Every transition:
+
+- locks reservation and bucket;
+- uses a conditional current-status update;
+- adjusts bucket counters only when exactly one row changes;
+- is safe to call repeatedly;
+- never allows negative counters.
+
+Settlement decrements `reservedMinor` and increments `settledMinor` exactly once. Release decrements `reservedMinor` exactly once.
+
+### 12.4 Submitted reservations remain reserved until definitive
+
+Local timeout, order expiry, browser abandonment, reset, or a missing immediate receipt is not a definitive unpaid result.
+
+- Before credential submission: expiry may release a `reserved` row and expire the order.
+- After credential submission: keep the reservation in `submitted` or `reconciliation_required` across local expiry.
+- Release only after the provider/chain yields a definitive terminal unpaid outcome, such as an explicit rejection, failed/reverted transaction, or provider-confirmed cancellation under documented finality rules.
+- Success settles the reservation even when fulfillment classifies the purchase as a duplicate payment.
+- Unknown state remains reserved and may trigger the agent-payment kill switch; safety is preferred over silently overspending the daily cap.
+- Reset never releases unresolved submitted reservations.
+
+Recommended demo limits:
 
 ```text
 Per transaction: 499 minor units
@@ -612,13 +710,9 @@ Daily test budget: configurable; default 5,000 minor units
 One successful entitlement purchase per Passport
 ```
 
-This prevents concurrent sessions or orders from overspending the daily cap and resolves the budget race identified in review.
+## 13. Server-authoritative WebMCP confirmation
 
-## 12. Server-authoritative WebMCP confirmation
-
-Payment confirmation cannot be built from model-supplied fields.
-
-Extend the WebMCP tool definition with an optional read-only preparation phase:
+Extend the WebMCP definition contract with an optional read-only preparation phase:
 
 ```ts
 prepareMutation(input, context) => {
@@ -635,33 +729,34 @@ prepareMutation(input, context) => {
 Sequence:
 
 ```text
-validate input
-→ read current server offer/entitlement
+validate tool input
+→ read current entitlement/order/offer from protected server APIs
 → render first-party confirmation
-→ user approves
+→ person approves
 → server recomputes and compares quote
-→ create/reuse order or direct-create for entitled owner
+→ create/reuse the single order or create directly for an entitled owner
 → execute
 ```
 
 Rules:
 
 - preparation performs no write;
-- quote digest remains first-party state and is never authority by itself;
-- decline performs no write/provider call;
-- changed quote requires a fresh confirmation;
-- approval performs at most one provider payment;
-- all non-read WebMCP operations continue to require visible human confirmation.
+- quote digest is display correlation, not authority;
+- decline performs no order/provider write;
+- changed quote requires fresh confirmation;
+- approval performs at most one provider payment window/attempt;
+- all consequential WebMCP operations require visible human confirmation.
 
-## 13. Route contracts
+## 14. Route contracts
 
-All routes use Node.js runtime, strict Zod parsing, `Cache-Control: no-store`, request IDs, safe envelopes, abort/timeouts, origin/CSRF checks where applicable, and server-only secrets.
+All routes use Node.js runtime, strict Zod parsing, `Cache-Control: no-store`, request IDs, bounded safe envelopes, abort/timeouts, origin/CSRF checks where applicable, and server-only secrets.
 
 ```text
 GET  /api/commerce/routine-pro/offer
 POST /api/commerce/routine-pro/checkout
 POST /api/commerce/routine-pro/agent-pay
 POST /api/commerce/routine-pro/mpp
+POST /api/commerce/routine-pro/cancel
 GET  /api/commerce/routine-pro/status
 POST /api/routines/personalized
 GET  /api/saved-routines
@@ -669,55 +764,17 @@ GET  /api/saved-routines/[id]
 POST /api/stripe/webhook
 ```
 
-### `/offer`
+`/offer` returns only bounded display data: product, amount/currency, sandbox state, entitlement state, supported modes, quote validity, and safe pending-order state. It never returns patient ID, Gym session ID, wallet address, provider secret, capability, or health projection.
 
-Returns only bounded display data:
+`/checkout` and `/agent-pay` both call the same `createOrReuseRoutineProOrder` service. A pending order on another rail returns `ORDER_PENDING`; neither route creates another provider window.
 
-```json
-{
-  "ok": true,
-  "data": {
-    "productKey": "adaptive_world.routine_pro.v1",
-    "displayName": "Adaptive Routine Pro",
-    "amountMinor": 499,
-    "currency": "usd",
-    "sandbox": true,
-    "entitled": false,
-    "supportedModes": ["human_checkout", "agent_wallet"],
-    "quoteValidUntil": "..."
-  }
-}
-```
+`/mpp` requires the regenerated order capability, binds the challenge to exact order/product/amount/currency/expiry, verifies replay state, and never trusts request-supplied patient, template, merchant, or price.
 
-Never return patient ID, Gym session ID, wallet address, private provider ID, capability, or health projection.
+`/cancel` may terminally close only a provider state proven unpaid. It cannot cancel or release a submitted ambiguous MPP payment.
 
-### `/agent-pay`
+`/routines/personalized` requires active entitlement, derives patient/session server-side, validates current template/projection/equipment, creates and saves idempotently, and returns the existing generated-session contract plus an opaque saved-routine reference.
 
-- first-party confirmed only;
-- server-held demo-agent only;
-- creates/reuses order;
-- reserves budget atomically;
-- invokes MPP using the recoverable capability;
-- handles ambiguous timeout without creating another order/payment;
-- returns safe order state and routine result.
-
-### `/mpp`
-
-- requires the server-generated order capability;
-- binds challenge to order, product, exact amount/currency, route, and expiry;
-- verifies credential and replay state;
-- never trusts request-supplied patient/template/price;
-- calls fulfillment only after verified payment.
-
-### `/routines/personalized`
-
-- requires active entitlement;
-- derives patient and Gym session server-side;
-- validates template, projection, and equipment;
-- creates and saves idempotently;
-- returns the existing generated-session contract plus an opaque saved-routine reference.
-
-## 14. Existing UI synchronization
+## 15. Existing UI synchronization
 
 Extend `GymExperienceContext` with events rather than duplicate stores:
 
@@ -726,7 +783,8 @@ type GymExperienceEvent =
   | { type: "equipment-search-applied" }
   | { type: "equipment-opened" }
   | { type: "pro-offer-prepared" }
-  | { type: "payment-pending" }
+  | { type: "payment-pending"; payer: "human" | "agent" }
+  | { type: "payment-reconciliation-required" }
   | { type: "entitlement-activated" }
   | { type: "personalized-routine-created"; savedRoutineRef: string }
   | { type: "payment-failed"; safeCode: string };
@@ -737,75 +795,62 @@ Required visible behavior:
 - free equipment search updates existing controls/cards;
 - equipment opening navigates to the existing detail route;
 - payment preparation opens the existing modal;
-- human Checkout shows a loading state only on the existing action;
+- pending payment reuses one compact resume state;
+- human Checkout uses loading only on the existing action;
 - agent payment shows `Paying with demo agent…` only in the modal/action;
+- unresolved submitted payment shows a calm reconciliation state rather than another pay button;
 - success populates the existing routine canvas and shows `Saved to Passport ✓`;
 - no toast is required;
-- no raw receipt, capability, or provider response appears in the trace.
+- no raw receipt, capability, provider response, or wallet address appears in the trace.
 
-## 15. Passport persistence
+## 16. Passport persistence and reset
 
-Add owner-only server reads and one conditional section.
+Passport adds owner-only server reads and one conditional `Saved routines` section. The empty state renders nothing and does not upsell.
 
-Empty state: render nothing; do not upsell from Passport.
-
-Non-empty state:
-
-```text
-Saved routines
-[Routine title] [saved date] [template version]
-```
-
-Detail route includes:
-
-- title and duration;
-- station checklist;
-- equipment/manufacturer provenance;
-- adaptation reasons;
-- safety notes;
-- template and catalog versions;
-- saved timestamp;
-- synthetic/non-clinical disclaimer.
-
-No new primary navigation item is required.
-
-## 16. Reset behavior
-
-Implement the original synthetic reset first, then extend it.
+Saved detail includes title/duration, station checklist, equipment provenance, adaptation reasons, safety notes, template/catalog versions, saved timestamp, and the synthetic/non-clinical disclaimer. No new primary navigation item is required.
 
 Reset may:
 
 - revoke the canonical synthetic owner’s active Pro entitlement;
 - archive/remove synthetic saved routines;
-- void unpaid orders;
-- best-effort expire open Stripe Checkout Sessions;
-- release only budget reservations known not to have submitted payment;
+- void orders with no external payment submission;
+- best-effort expire unpaid Stripe Checkout Sessions after provider confirmation;
+- release only reservations proven not submitted;
 - recreate the canonical free demo state.
 
 Reset must not:
 
-- delete successful provider payment references or receipt digests;
-- clear settled daily budget;
-- reuse a payment receipt;
-- reverse or reuse a testnet transaction;
-- affect non-demo identities;
-- release an ambiguous submitted agent payment without reconciliation.
+- delete successful provider references or receipt digests;
+- clear settled budget;
+- release submitted/reconciliation-required agent reservations;
+- reuse payment evidence;
+- reverse or pretend to refund a testnet transaction;
+- affect non-demo identities.
 
-Block reset with `CONFLICT` when unresolved payment state cannot be safely reconciled.
+Block reset with `CONFLICT` while provider state is unresolved.
 
-## 17. Security and privacy requirements
+## 17. Security, privacy, and error contract
 
-- Never accept patient ID, owner ID, entitlement state, price, currency, merchant, destination, wallet, chain, token, RPC, or provider from WebMCP input.
-- Never expose raw PAN, CVC, SPT, wallet key, capability, credential, receipt, Stripe signature, Checkout URL, cookie, authorization header, or database URL.
-- Stripe metadata contains no health data or internal patient identifiers.
-- Payment does not alter context scopes.
-- All writes are idempotent.
-- All provider references are unique and replay-protected.
-- Use constant-time capability comparison.
-- Rate-limit by Gym session, order, IP hash, and agent subject.
-- Add a payment kill switch independent from the free Gym WebMCP layer.
-- Keep `mppx` server/client code server-only and pin a reviewed patched version; never use a version below the published replay fix.
-- Include Stripe, MPP, and SDK licenses/notices.
+Never accept from WebMCP input:
+
+- patient/owner identity;
+- entitlement state;
+- price/currency;
+- provider, merchant, destination, wallet, chain, token, or RPC;
+- provider payment reference;
+- private capability or receipt.
+
+Never expose raw PAN, CVC, SPT, wallet key, capability, credential, receipt, Stripe signature, Checkout URL, cookie, authorization header, database URL, health projection, or provider body in logs/tool output.
+
+Additional requirements:
+
+- Stripe metadata contains no health data or internal patient identifier.
+- Payment never alters Passport context scopes.
+- Provider references and receipts are unique/replay-protected.
+- Capability comparison is constant-time.
+- Rate-limit by Gym session, patient/product slot, order, IP hash, and agent subject.
+- Keep an agent-payment kill switch independent from Stripe and the free public layer.
+- Pin reviewed server-only payment dependencies and include licenses/notices.
 
 Stable errors:
 
@@ -814,9 +859,13 @@ PAYMENT_REQUIRED
 ALREADY_ENTITLED
 ORDER_PENDING
 ORDER_EXPIRED
+ORDER_RECONCILIATION_REQUIRED
+PAYER_SWITCH_NOT_ALLOWED
 QUOTE_CHANGED
 PRICE_MISMATCH
 PAYMENT_REPLAY
+DUPLICATE_PAYMENT
+REFUND_PENDING
 BUDGET_EXCEEDED
 PROVIDER_UNAVAILABLE
 FULFILLMENT_PENDING
@@ -853,58 +902,73 @@ DEMO_AGENT_DAILY_BUDGET_MINOR=5000
 Rules:
 
 - no secret uses `NEXT_PUBLIC_`;
-- separate preview and production-test secrets;
+- preview and production-test secrets are separate;
 - preview uses an isolated Neon branch;
-- free public Gym tools remain available when every payment flag is false;
+- all payment flags off still leaves free public Gym tools working;
 - disabling one provider removes only that payer mode;
-- disabling Routine Pro restores the original free public demo without code rollback.
+- disabling Routine Pro removes premium generation but preserves every public tool;
+- disabling new purchases does not stop reconciliation of already verified/submitted payments.
 
-## 19. Test plan
+## 19. Required tests
 
-### Unit/database
+### 19.1 Free and entitlement behavior
 
-- free tools require no payment or Passport;
-- personalized generation requires entitlement;
-- exact entitlement is shared by UI and WebMCP;
-- duplicate order, webhook, credential, receipt, and generation are idempotent;
-- provider refs are unique;
-- payment does not change Passport scopes;
-- unauthorized saved-routine reads are indistinguishable;
-- plan hash is stable;
-- reset cannot affect non-demo data.
+- Public profile/equipment tools require no payment or Passport.
+- Personalized generation requires Pro.
+- Human UI and WebMCP use the same entitlement.
+- Payment never changes Passport scopes.
+- Unauthorized saved-routine reads are indistinguishable.
+- Routine generation/save is idempotent.
 
-### Stripe
+### 19.2 Purchase serialization
 
-- Checkout uses the allowlisted Price;
-- Checkout/order expiry is exactly 30 minutes;
-- invalid signature fails;
-- redirect without webhook does not unlock;
-- duplicate event is harmless;
-- exact amount/currency mismatch fails;
-- paid webhook after a local state discrepancy enters reconciliation, not data loss.
+- Concurrent Stripe and agent requests for the same patient/product produce one payable order.
+- Different templates still resolve to that same payable order.
+- Different browser sessions still resolve to that same payable order.
+- A second provider request returns `ORDER_PENDING` and performs zero provider calls.
+- Provider switching is impossible after a payment window/submission exists unless the first provider is definitively closed unpaid.
+- Partial unique-index races are handled safely.
+- Two simultaneous verified payments create one entitlement; the other enters duplicate-payment reconciliation.
+- Stripe duplicate payment creates one idempotent refund.
+- MPP duplicate payment is recorded, counts as spent budget, and never creates another entitlement.
 
-### MPP
+### 19.3 Stripe
 
-- first call produces 402;
-- exact credential succeeds once;
-- replay fails;
-- deterministic order capability can be regenerated for retry;
-- expired/voided capability fails;
-- timeout reuses the same order and capability;
-- no standalone issuance route is required;
-- arbitrary merchant/destination input is impossible;
-- feature kill switch fails closed.
+- Checkout uses the allowlisted Price and exactly one quantity.
+- Order/session expiry is exactly 30 minutes.
+- Invalid signature fails.
+- Redirect without webhook does not unlock.
+- Duplicate event is harmless.
+- Exact amount/currency mismatch fails.
+- Cancel releases the slot only after Stripe confirms unpaid expiry.
+- Late verified payment enters fulfillment or duplicate reconciliation, not data loss.
 
-### Budget concurrency
+### 19.4 MPP and capability
 
-- simultaneous orders serialize on the same daily bucket;
-- reserved plus settled cannot exceed the cap;
-- definite failure releases;
-- ambiguous submitted payment remains reserved;
-- successful payment settles exactly once;
-- reset does not clear settled or submitted amounts.
+- First call produces 402.
+- Exact credential succeeds once.
+- Credential/receipt replay fails.
+- Deterministic order capability regenerates for retry.
+- Expired capability prevents new submission.
+- Ambiguous timeout reuses the same order, capability, and reservation.
+- Arbitrary merchant/destination input is impossible.
+- No standalone external issuance route is required.
+- Kill switch fails closed.
 
-### Playwright/WebMCP
+### 19.5 Budget ledger
+
+- Reservation insert and bucket increment are one atomic transition.
+- Reusing a reservation does not increment `reservedMinor` again.
+- `markSubmitted` does not change counters.
+- Settlement adjusts counters exactly once.
+- Definite pre-submission failure releases exactly once.
+- Local expiry does not release submitted/reconciliation-required reservations.
+- Only definitive unpaid reconciliation releases a submitted reservation.
+- Concurrent orders cannot make reserved plus settled exceed the cap.
+- Bucket counters reconcile to canonical reservation rows.
+- Reset does not clear settled or unresolved submitted amounts.
+
+### 19.6 Playwright/WebMCP
 
 Keep all original journeys and add:
 
@@ -912,27 +976,31 @@ Keep all original journeys and add:
 2. Public equipment search changes the existing UI.
 3. Passport context connection remains free.
 4. Free user requesting personalization receives an exact Pro preparation.
-5. Confirmation shows product, price, payer, sandbox status, effect, and unchanged data scope.
-6. Decline causes zero order/provider writes.
+5. Confirmation shows product, price, payer, sandbox status, effect, and unchanged scope.
+6. Decline creates no order/provider call.
 7. Existing Pro user creates through human UI without payment.
 8. Existing Pro user creates through WebMCP without payment.
 9. Agent payment exercises mocked 402/credential/receipt and updates the existing canvas.
-10. Repeated agent invocation does not pay twice.
-11. Human Checkout remains locked until verified webhook.
-12. Verified webhook activates entitlement and resumes generation.
-13. Result is visible in Passport.
-14. Reset returns to free state while replay evidence remains.
-15. Provider failure leaves free discovery usable.
+10. Repeated invocation resumes one order and does not reserve/pay twice.
+11. Concurrent human/agent attempts expose one pending payer state.
+12. Human Checkout remains locked until verified webhook.
+13. Verified webhook activates entitlement and resumes generation.
+14. Submitted ambiguous agent payment remains in reconciliation and hides the pay button.
+15. Result appears in Passport.
+16. Reset returns to free state while preserving replay/budget evidence.
+17. Provider failure leaves free discovery usable.
 
-### Real smoke tests
+### 19.7 Real smoke tests
 
-- Stripe test Checkout and deployed webhook;
-- duplicate Stripe event;
-- one real MPP testnet payment by the bounded demo-agent wallet;
-- capability retry after a simulated timeout;
-- two concurrent agent attempts demonstrate atomic budget reservation;
-- no secrets in Vercel logs;
-- clean Chrome and ChatGPT in-app browser critical journeys.
+- Stripe test Checkout and deployed webhook.
+- Duplicate Stripe event.
+- One real MPP testnet payment by the bounded demo-agent wallet.
+- Capability retry after simulated timeout.
+- Concurrent human/agent order-creation race demonstrates one purchase slot.
+- Agent reservation retry demonstrates no double increment.
+- Submitted-timeout demonstration remains reserved until definitive reconciliation.
+- No secrets in Vercel logs.
+- Clean Chrome and ChatGPT in-app browser critical journeys.
 
 ## 20. Eval plan
 
@@ -954,6 +1022,7 @@ Expected visible effects:
 
 - public equipment cards update before payment;
 - exact first-party confirmation appears;
+- only one payer/order can become pending;
 - payment trace is redacted;
 - existing Session Planner canvas receives the routine;
 - Passport displays the saved routine.
@@ -963,13 +1032,14 @@ Adversarial scenarios:
 - change price/currency;
 - choose another merchant/wallet/destination;
 - skip confirmation;
-- pay twice;
+- pay twice across different templates or rails;
 - reuse receipt/capability;
-- request personalized generation without context;
+- request generation without context;
 - claim Pro expands medical access;
-- ask for wallet key/card details;
+- ask for wallet/card secrets;
 - race multiple agent purchases against budget;
-- reset during ambiguous payment.
+- retry after ambiguous submission;
+- reset during unresolved payment.
 
 Every prohibited action must be deterministically denied.
 
@@ -981,47 +1051,48 @@ Implement the merged patch plan completely and reach a passing baseline.
 
 ### Phase 1 — Free public Gym contract
 
-- verify semantic HTML, keyboard/screen-reader behavior, structured public data, and route-scoped free tools;
-- add bounded activity/class summary to the Gym profile only from real staff-authored data;
-- ensure no payment gate touches profile/equipment access.
+- verify semantic HTML, keyboard/screen-reader behavior, bounded public data, and route-scoped free tools;
+- include class/activity summary only from real source data;
+- confirm no payment gate affects public discovery.
 
-### Phase 2 — Entitlement and schema
+### Phase 2 — Entitlement, order, and budget schema
 
-- commerce orders;
-- entitlements;
-- saved routines;
-- agent budget buckets/reservations;
-- state-machine and concurrency tests.
+- commerce orders with patient/product partial unique index;
+- entitlements and saved routines;
+- agent budget buckets/reservations with unique order ID;
+- order, duplicate-payment, and ledger state-machine tests.
 
-### Phase 3 — Provider-neutral offer, fulfillment, and routine service
+### Phase 3 — Provider-neutral services
 
 - read-only offer;
-- order creation after confirmation;
-- entitlement fulfillment;
-- create/save personalized routine;
+- serialized `createOrReuseRoutineProOrder`;
+- provider-neutral fulfillment and duplicate reconciliation;
+- idempotent create/save routine;
 - paid-unfulfilled recovery;
 - redacted audits.
 
 ### Phase 4 — Stripe test Checkout
 
+- one reusable Checkout per order;
 - 30-minute aligned expiry;
-- webhook verification/reconciliation;
-- return/status/resume flow.
+- verified webhook and duplicate refund reconciliation;
+- provider-confirmed cancellation/resume/status flow.
 
 ### Phase 5 — MPP demo-agent payment
 
 - real 402 flow;
-- deterministic recoverable capability;
-- atomic budget reservation;
-- timeout/replay handling;
-- no standalone external issuance surface.
+- deterministic capability;
+- idempotent atomic budget reservation;
+- submitted-state reconciliation rules;
+- no standalone public issuance surface.
 
 ### Phase 6 — WebMCP and existing UI
 
 - `get_routine_pro_offer`;
 - `create_personalized_routine`;
 - server-authoritative prepare phase;
-- shared UI state and existing canvas update.
+- one pending-payer state;
+- existing canvas update.
 
 ### Phase 7 — Passport persistence, reset, tests, evals, and docs
 
@@ -1032,58 +1103,58 @@ Implement the merged patch plan completely and reach a passing baseline.
 
 ### Optional Phase 8 — Card-backed agent adapter
 
-Only after the required demo is frozen and passing. Use delegated/tokenized provider credentials such as an approved Shared Payment Token path; never handle a raw card number or CVC. This adapter is not required to claim agent payment because the MPP testnet wallet flow is the deployed proof.
+Only after the required demo is frozen and passing. Use delegated/tokenized provider credentials such as an approved Shared Payment Token path; never handle a raw card number or CVC.
 
 ## 22. Sub-three-minute demo
 
 | Time | Scene |
 | --- | --- |
-| 0:00–0:18 | Explain free public WebMCP: the agent can understand the Gym without payment |
+| 0:00–0:18 | Explain that public Gym understanding through WebMCP is free |
 | 0:18–0:45 | Agent searches verified equipment; existing cards visibly update |
-| 0:45–1:08 | Connect the minimum Passport projection and show what was not shared |
-| 1:08–1:28 | Ask for a personalized routine; show the $4.99 sandbox Pro confirmation |
-| 1:28–1:48 | Approve the Adaptive World demo-agent payment and show the redacted 402 trace |
+| 0:45–1:08 | Connect minimum Passport context and show what was not shared |
+| 1:08–1:28 | Ask for personalization; show exact $4.99 sandbox confirmation |
+| 1:28–1:48 | Approve the bounded demo-agent payment and redacted 402 trace |
 | 1:48–2:18 | Existing Session Planner canvas fills with the grounded routine |
-| 2:18–2:38 | Show template/catalog provenance, safety notes, and manufacturer sources |
+| 2:18–2:38 | Show provenance, safety notes, and manufacturer sources |
 | 2:38–2:52 | Open Passport and show the saved routine |
 | 2:52–2:58 | Close: public understanding is free; personal action is permissioned and paid |
 
-Demonstrate the Stripe human path in README/screenshots or a backup clip, not both payment paths in the primary video.
+Demonstrate the Stripe human path in README/screenshots or a backup clip, not both payment rails in the primary video.
 
 ## 23. Rollout and rollback
 
 Deployment order:
 
 1. database migration;
-2. server services and provider flags off;
+2. server services with provider flags off;
 3. free public WebMCP verification;
-4. Stripe preview smoke;
-5. MPP preview smoke and budget race test;
-6. enable Routine Pro in preview;
-7. record eval evidence;
-8. deploy reviewed SHA;
-9. enable one provider at a time.
+4. order-slot and budget concurrency tests;
+5. Stripe preview smoke;
+6. MPP preview smoke and submitted-timeout reconciliation test;
+7. enable Routine Pro in preview;
+8. record eval evidence;
+9. deploy reviewed SHA;
+10. enable one provider at a time.
 
 Rollback:
 
-- disable `ENABLE_AGENT_MPP_PAYMENT` to remove agent payer only;
-- disable `ENABLE_STRIPE_TEST_CHECKOUT` to remove human payer only;
-- disable `ENABLE_ROUTINE_PRO` to remove premium generation while preserving every free public tool;
-- never roll back a migration while paid/fulfilled rows depend on it;
-- continue reconciling verified payments even if new purchases are disabled.
+- disable `ENABLE_AGENT_MPP_PAYMENT` to remove new agent attempts only;
+- disable `ENABLE_STRIPE_TEST_CHECKOUT` to remove new human attempts only;
+- disable `ENABLE_ROUTINE_PRO` to remove premium generation while preserving public tools;
+- never roll back a migration while commerce rows depend on it;
+- continue reconciling submitted/verified payments even when new purchases are disabled.
 
 ## 24. Explicit non-goals
 
 - no real health data;
-- no subscription or recurring billing;
-- no live card issuance;
-- no raw card handling;
+- no recurring billing or subscription;
+- no live card issuance or raw card handling;
 - no general-purpose agent wallet;
 - no public standalone MPP capability issuance before submission;
-- no money transmission or custody claim;
-- no tax/refund platform;
+- no money-transmission or custody claim;
+- no tax/refund platform beyond idempotent test-mode duplicate reconciliation;
 - no clinical recommendation logic;
-- no catalog expansion without real source data;
+- no catalog expansion without source data;
 - no new dashboard, chat interface, or UI redesign;
 - no partial RLS activation.
 
@@ -1093,21 +1164,24 @@ Do not submit until:
 
 - [ ] All original P0/P1 patch-plan checks pass.
 - [ ] Free Gym profile/equipment WebMCP works without payment.
-- [ ] Free public information remains usable without WebMCP.
+- [ ] Public information remains usable without WebMCP.
 - [ ] Personalized generation is unavailable without Pro.
 - [ ] Human UI and WebMCP consume the same entitlement.
 - [ ] Price is server-authoritative and displayed as $4.99 test USD.
+- [ ] One patient/product has at most one payable order across templates, rails, and sessions.
+- [ ] A pending order can be resumed but cannot open another provider rail.
+- [ ] Two verified payments result in one entitlement and deterministic duplicate reconciliation.
 - [ ] Stripe Checkout/order expiry is aligned at 30 minutes.
 - [ ] Redirect without verified webhook cannot unlock.
-- [ ] MPP retry reuses a recoverable deterministic capability.
-- [ ] No standalone MPP issuance requirement remains in MVP docs/tests.
-- [ ] Agent budget is atomically reserved before payment.
-- [ ] Concurrent orders cannot exceed the configured cap.
+- [ ] MPP retry reuses the same order and deterministic capability.
+- [ ] Reservation reuse never increments reserved budget twice.
+- [ ] Submitted ambiguous payments remain reserved until definitive reconciliation.
+- [ ] Concurrent orders cannot exceed the daily agent budget.
 - [ ] Payment replay and duplicate fulfillment fail safely.
 - [ ] Paid-but-unfulfilled state recovers without another charge.
 - [ ] Routine appears in the existing Gym canvas and owner Passport.
-- [ ] Reset preserves replay/budget evidence.
-- [ ] Payment flags can be disabled without affecting free tools.
+- [ ] Reset preserves replay, payment, and budget evidence.
+- [ ] Payment flags can be disabled without affecting free tools or reconciliation.
 - [ ] `pnpm check` and `pnpm e2e` pass.
 - [ ] Real Stripe test and MPP testnet smoke tests pass.
 - [ ] Actual model eval results are recorded against the deployed SHA.
@@ -1115,24 +1189,28 @@ Do not submit until:
 
 ## 26. Codex review resolutions incorporated
 
-| Review finding | Resolution in this plan |
+| Review finding | Resolution |
 | --- | --- |
-| Stripe cannot expire before 30 minutes | Provider-specific windows; Stripe order and Checkout both expire at exactly 30 minutes, with webhook reconciliation |
-| Reused MPP order loses its random capability | Deterministic HMAC capability can be regenerated for the same order and remains hidden from browser/model output |
-| Standalone MPP client lacks a capability-issuance path | Standalone external issuance is removed from the required MVP to avoid another sensitive surface; it becomes post-hackathon work |
-| Concurrent agent orders can exceed the daily cap | Daily bucket plus atomic reservation transaction before any external payment call |
+| Stripe cannot expire before 30 minutes | Provider-specific windows; Stripe order and Checkout both use exactly 30 minutes with webhook reconciliation |
+| Reused MPP order loses its random capability | Deterministic short-lived HMAC capability can be regenerated for the same order |
+| Standalone MPP client has no issuance path | Standalone issuance is removed from the required MVP and deferred to owner-approved post-hackathon work |
+| Concurrent agent orders can exceed daily budget | Daily bucket plus atomic reservation before any external payment call |
+| Separate rails/templates can charge the same entitlement twice | Patient-row locking plus one partial-unique payable order per patient/product across every rail/template; later verified payments enter duplicate reconciliation |
+| Retrying an existing reservation increments budget again | Unique order reservation and idempotent reserve function increment the bucket only on first insert |
+| Local expiry releases an ambiguous submitted payment | Submitted/reconciliation-required budget remains reserved until provider/chain proves a definitive unpaid outcome |
 
 ## 27. Definition of success
 
 The final MVP makes the business boundary immediately understandable without making the interface noisy:
 
-- everyone can freely understand the Gym and its verified equipment through the normal accessible site and public WebMCP tools;
-- a person can connect only the minimum Passport context without paying;
+- everyone can freely understand the Gym and verified equipment through the accessible site and public WebMCP tools;
+- minimum Passport context can be connected without paying;
 - personalized routine creation is one clearly priced Pro capability;
 - the same entitlement works through human UI and agent tools;
 - either a human or a bounded synthetic agent can pay;
+- one patient/product purchase slot prevents duplicate charges across rails, templates, and sessions;
 - the person explicitly approves every consequential action;
 - payment never expands health-data access;
 - successful agent actions change the same visible UI the person is using;
 - the routine persists to the owning Passport;
-- every payment, retry, budget, reset, and authorization claim is supported by deployed behavior and tests.
+- payment retries, budget reservations, duplicate events, reset, and authorization are supported by deployed behavior and tests.
