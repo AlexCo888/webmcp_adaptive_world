@@ -58,18 +58,18 @@ After the patch, a normal visitor who never uses WebMCP should see essentially t
 
 ## 3. Priority stack
 
-| Priority | Patch | Why it matters |
-| --- | --- | --- |
-| P0 | License and submission compliance | Eligibility blocker |
-| P0 | Server-authoritative Passport/doctor reads | Revocation and scope changes must take effect without reload |
-| P0 | Fix Gym grant expiry contract | Current tool response can disagree with persisted expiry |
-| P0 | Remove the simulated `get_patient_changes` behavior | Trust is more valuable than tool count |
-| P0 | Add deterministic demo reset | Shared judge accounts must not break later evaluations |
-| P1 | Synchronize WebMCP results with existing Gym UI | Strongest improvement to WebMCP Leverage and Execution |
-| P1 | Add full WebMCP browser tests | Prevent demo-only integration failures |
-| P1 | Publish actual eval results | Distinguish fixture validation from behavioral evidence |
-| P1 | Rewrite the demo path to under three minutes | Submission and judging requirement |
-| P2 | Activate a non-owner Neon runtime role | Valuable hardening, but only ship if fully tested |
+| Priority | Patch                                               | Why it matters                                               |
+| -------- | --------------------------------------------------- | ------------------------------------------------------------ |
+| P0       | License and submission compliance                   | Eligibility blocker                                          |
+| P0       | Server-authoritative Passport/doctor reads          | Revocation and scope changes must take effect without reload |
+| P0       | Fix Gym grant expiry contract                       | Current tool response can disagree with persisted expiry     |
+| P0       | Remove the simulated `get_patient_changes` behavior | Trust is more valuable than tool count                       |
+| P0       | Add deterministic demo reset                        | Shared judge accounts must not break later evaluations       |
+| P1       | Synchronize WebMCP results with existing Gym UI     | Strongest improvement to WebMCP Leverage and Execution       |
+| P1       | Add full WebMCP browser tests                       | Prevent demo-only integration failures                       |
+| P1       | Publish actual eval results                         | Distinguish fixture validation from behavioral evidence      |
+| P1       | Rewrite the demo path to under three minutes        | Submission and judging requirement                           |
+| P2       | Activate a non-owner Neon runtime role              | Valuable hardening, but only ship if fully tested            |
 
 P0 items are release blockers. P1 items are required for the strongest submission. P2 must not destabilize the working demo.
 
@@ -556,17 +556,17 @@ The README should report measured results, not imply that the JSON fixtures them
 
 Target approximately 2:50:
 
-| Time | Scene |
-| --- | --- |
-| 0:00–0:12 | Problem: agents either guess from pages or receive too much context |
-| 0:12–0:27 | Thesis: purpose-bound context with permission |
+| Time      | Scene                                                                        |
+| --------- | ---------------------------------------------------------------------------- |
+| 0:00–0:12 | Problem: agents either guess from pages or receive too much context          |
+| 0:12–0:27 | Thesis: purpose-bound context with permission                                |
 | 0:27–0:50 | Owner asks agent to prepare a five-minute Gym share; show exact confirmation |
-| 0:50–1:10 | One-use handoff; show what Gym received and explicitly did not receive |
-| 1:10–1:40 | Agent searches verified equipment; existing cards visibly update |
-| 1:40–2:10 | Agent selects a published walkthrough; existing session canvas updates |
-| 2:10–2:30 | Show template/catalog provenance, decision trace, and manufacturer sources |
-| 2:30–2:42 | Open existing WebMCP inspector and show actual executions |
-| 2:42–2:50 | Close: user remained in control; full Passport was never transferred |
+| 0:50–1:10 | One-use handoff; show what Gym received and explicitly did not receive       |
+| 1:10–1:40 | Agent searches verified equipment; existing cards visibly update             |
+| 1:40–2:10 | Agent selects a published walkthrough; existing session canvas updates       |
+| 2:10–2:30 | Show template/catalog provenance, decision trace, and manufacturer sources   |
+| 2:30–2:42 | Open existing WebMCP inspector and show actual executions                    |
+| 2:42–2:50 | Close: user remained in control; full Passport was never transferred         |
 
 The clinician workspace may appear in screenshots or README, but it should not consume the primary video path unless the Passport-to-Gym sequence is already comfortably under the limit.
 
