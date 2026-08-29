@@ -83,6 +83,13 @@ footprint plus Adaptive Gym's synthetic 183 cm travel clearance. Space filters
 therefore use a 298 cm lane while the catalog still displays the product's
 physical footprint separately.
 
+Every equipment record added in this catalog expansion includes an explicit
+operating area. Where the manufacturer does not publish one, Adaptive Gym
+derives a conservative synthetic planning area by applying the record's
+declared clearance on every side of the physical footprint. These planning
+areas drive constrained-space searches and remain separate from manufacturer
+dimensions.
+
 ## Non-claims
 
 Official technical sources support implementation choices; they do not establish health-data compliance, clinical validity, or regulatory clearance. Those claims are explicitly outside this MVP.

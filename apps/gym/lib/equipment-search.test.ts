@@ -102,4 +102,41 @@ describe("shared equipment search", () => {
       }),
     ).toBe(true);
   });
+
+  it("uses explicit planning areas for every newly added equipment record", () => {
+    const addedEquipmentIds = [
+      "hs_linear_leg_press",
+      "hs_iso_lateral_high_row",
+      "rogue_sml_2c_squat_stand",
+      "torque_hex_dumbbell_rack",
+      "torque_f9_functional_trainer",
+      "torque_tank_m1",
+      "balanced_body_allegro_2",
+      "balanced_body_combo_chair",
+      "nustep_t6max",
+      "scifit_stepone",
+    ];
+    const addedEquipment = equipmentCatalog.filter((item) => addedEquipmentIds.includes(item.id));
+
+    expect(addedEquipment).toHaveLength(addedEquipmentIds.length);
+    expect(addedEquipment.every((item) => item.operatingDimensionsCm !== undefined)).toBe(true);
+
+    const comboChair = addedEquipment.find((item) => item.id === "balanced_body_combo_chair");
+    if (!comboChair) throw new Error("Expected the Combo Chair fixture in the equipment catalog");
+
+    expect(
+      matchesEquipmentSearch(comboChair, {
+        query: "combo chair",
+        maxWidthCm: 75,
+        maxDepthCm: 75,
+      }),
+    ).toBe(false);
+    expect(
+      matchesEquipmentSearch(comboChair, {
+        query: "combo chair",
+        maxWidthCm: 252,
+        maxDepthCm: 254,
+      }),
+    ).toBe(true);
+  });
 });

@@ -345,6 +345,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "45-degree plate-loaded leg press with an adjustable back pad, large foot platform and range-of-motion control.",
     dimensionsCm: { length: 241, width: 165, height: 145 },
+    operatingDimensionsCm: { length: 485, width: 409, height: 145 },
     requiredClearanceCm: 122,
     power: "none",
     stations: 1,
@@ -381,6 +382,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Plate-loaded high row with independent converging arms plus adjustable seat and thigh-pad positions.",
     dimensionsCm: { length: 163, width: 145, height: 201 },
+    operatingDimensionsCm: { length: 407, width: 389, height: 201 },
     requiredClearanceCm: 122,
     power: "none",
     stations: 1,
@@ -413,6 +415,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Commercial squat stand with 3-by-3-inch uprights, J-cups and an integrated single pull-up bar.",
     dimensionsCm: { length: 122, width: 124, height: 234 },
+    operatingDimensionsCm: { length: 366, width: 368, height: 234 },
     requiredClearanceCm: 122,
     power: "none",
     stations: 1,
@@ -439,6 +442,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Ten matched dumbbell pairs from 5 to 50 pounds in five-pound increments on a three-tier storage rack.",
     dimensionsCm: { length: 119, width: 52, height: 102 },
+    operatingDimensionsCm: { length: 301, width: 234, height: 102 },
     requiredClearanceCm: 91,
     power: "none",
     stations: 1,
@@ -529,6 +533,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Commercial Pilates reformer with a moving footbar, built-in standing platform and five springs.",
     dimensionsCm: { length: 239, width: 79, height: 38 },
+    operatingDimensionsCm: { length: 421, width: 261, height: 38 },
     requiredClearanceCm: 91,
     power: "none",
     stations: 1,
@@ -555,6 +560,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Compact Pilates chair with a split-or-single pedal, four springs and removable support handles.",
     dimensionsCm: { length: 72, width: 70, height: 65 },
+    operatingDimensionsCm: { length: 254, width: 252, height: 65 },
     requiredClearanceCm: 91,
     power: "none",
     stations: 1,
@@ -581,6 +587,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Inclusive recumbent cross trainer with a wide 360-degree swivel seat, StrideLock and adjustable arms.",
     dimensionsCm: { length: 185, width: 76, height: 117 },
+    operatingDimensionsCm: { length: 307, width: 198, height: 117 },
     requiredClearanceCm: 61,
     maxUserWeightKg: 272,
     power: "ac-adapter",
@@ -608,6 +615,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Low-step recumbent stepper with a removable swiveling seat and direct wheelchair access.",
     dimensionsCm: { length: 173, width: 76, height: 122 },
+    operatingDimensionsCm: { length: 355, width: 258, height: 122 },
     requiredClearanceCm: 91,
     maxUserWeightKg: 204,
     power: "self-powered",
