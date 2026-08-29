@@ -31,7 +31,11 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGymExperience } from "@/components/gym-experience-context";
 import { fetchBoundedJson, GymApiError } from "@/lib/api-client";
-import { matchesEquipmentSearch } from "@/lib/equipment-search";
+import {
+  compactEquipmentForTool,
+  createEquipmentSearchToolResult,
+  matchesEquipmentSearch,
+} from "@/lib/equipment-search";
 import {
   pendingRoutineProOrder,
   type PendingRoutineProOrder,
@@ -106,20 +110,6 @@ function samePendingPayment(
     prepared.payerLabel === current.payerLabel &&
     prepared.initialTemplateId === current.initialTemplateId
   );
-}
-
-function compactEquipment(item: ReturnType<typeof EquipmentSchema.parse>) {
-  return {
-    id: item.id,
-    name: item.name,
-    manufacturer: item.manufacturer,
-    model: item.model,
-    category: item.category,
-    dimensionsCm: item.dimensionsCm,
-    accessFeatures: item.accessibility.slice(0, 3),
-    locationZone: item.locationZone,
-    sourceUrl: item.sourceUrl,
-  };
 }
 
 export function WebMcpBridge() {
@@ -252,14 +242,7 @@ export function WebMcpBridge() {
           if (!context.signal?.aborted) applyEquipmentSearch(input, matches.length);
         }, 0);
         trace("search_equipment");
-        const requestedLimit = input.limit ?? 10;
-        const returned = matches.slice(0, Math.min(requestedLimit, 5));
-        return {
-          count: matches.length,
-          returned: returned.length,
-          truncated: matches.length > returned.length,
-          equipment: returned.map(compactEquipment),
-        };
+        return createEquipmentSearchToolResult(matches, input.limit);
       },
       get_equipment: async ({ equipmentId }, context) => {
         const response = await fetchBoundedJson<unknown>(
@@ -276,7 +259,7 @@ export function WebMcpBridge() {
           if (!context.signal?.aborted) openEquipment(item.slug);
         }, 0);
         trace("get_equipment");
-        return { equipment: compactEquipment(item) };
+        return { equipment: compactEquipmentForTool(item) };
       },
       get_active_context: async (_input, context) => {
         const response = await fetchBoundedJson<unknown>("/api/context/current", {}, context);

@@ -1,4 +1,5 @@
 import type { Equipment } from "@adaptive-world/contracts";
+import { DEFAULT_TOOL_OUTPUT_LIMIT } from "@adaptive-world/webmcp";
 
 export type EquipmentSearchCriteria = Readonly<{
   query?: string;
@@ -10,11 +11,15 @@ export type EquipmentSearchCriteria = Readonly<{
   availableOnly?: boolean;
 }>;
 
+export const DEFAULT_EQUIPMENT_TOOL_RESULT_LIMIT = 2;
+const MAX_EQUIPMENT_TOOL_RESULT_LIMIT = 5;
+
 const GENERIC_EQUIPMENT_TERMS = new Set(["equipment", "machine", "machines"]);
 const ACCESSIBILITY_TERMS = new Set(["accessible", "accessibility"]);
 const EQUIPMENT_TERM_ALIASES: Readonly<Record<string, readonly string[]>> = {
   rower: ["rowing"],
   rowers: ["rowing"],
+  trainers: ["trainer"],
 };
 
 function matchesSearchTerm(searchableText: string, term: string): boolean {
@@ -24,10 +29,7 @@ function matchesSearchTerm(searchableText: string, term: string): boolean {
 }
 
 function searchableEquipmentText(item: Equipment): string {
-  const categoryText =
-    item.category === "functional-training"
-      ? "functional training functional trainer"
-      : item.category.replaceAll("-", " ");
+  const categoryText = item.category.replaceAll("-", " ");
   return [
     item.name,
     item.manufacturer,
@@ -42,10 +44,21 @@ function searchableEquipmentText(item: Equipment): string {
     .toLowerCase();
 }
 
+export function getEquipmentOperatingDimensions(item: Equipment) {
+  return (
+    item.operatingDimensionsCm ?? {
+      length: item.dimensionsCm.length + item.requiredClearanceCm * 2,
+      width: item.dimensionsCm.width + item.requiredClearanceCm * 2,
+      height: item.dimensionsCm.height,
+    }
+  );
+}
+
 export function matchesEquipmentSearch(
   item: Equipment,
   criteria: EquipmentSearchCriteria,
 ): boolean {
+  const spaceDimensions = getEquipmentOperatingDimensions(item);
   const queryTerms = criteria.query?.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const requiresAccessibility = queryTerms.some((term) => ACCESSIBILITY_TERMS.has(term));
   const meaningfulQueryTerms = queryTerms.filter(
@@ -53,11 +66,57 @@ export function matchesEquipmentSearch(
   );
   if (criteria.category && item.category !== criteria.category) return false;
   if (criteria.categories?.length && !criteria.categories.includes(item.category)) return false;
-  if (criteria.maxWidthCm && item.dimensionsCm.width > criteria.maxWidthCm) return false;
-  if (criteria.maxDepthCm && item.dimensionsCm.length > criteria.maxDepthCm) return false;
+  if (criteria.maxWidthCm && spaceDimensions.width > criteria.maxWidthCm) return false;
+  if (criteria.maxDepthCm && spaceDimensions.length > criteria.maxDepthCm) return false;
   if (criteria.accessibleOnly && item.accessibility.length === 0) return false;
   if (requiresAccessibility && item.accessibility.length === 0) return false;
   if (criteria.availableOnly && !item.available) return false;
   const searchableText = searchableEquipmentText(item);
   return meaningfulQueryTerms.every((term) => matchesSearchTerm(searchableText, term));
+}
+
+export function compactEquipmentForTool(item: Equipment) {
+  return {
+    id: item.id,
+    name: item.name,
+    manufacturer: item.manufacturer,
+    model: item.model,
+    category: item.category,
+    dimensionsCm: item.dimensionsCm,
+    operatingDimensionsCm: getEquipmentOperatingDimensions(item),
+    accessFeatures: item.accessibility.slice(0, 3),
+    locationZone: item.locationZone,
+    sourceUrl: item.sourceUrl,
+  };
+}
+
+export function createEquipmentSearchToolResult(
+  matches: readonly Equipment[],
+  requestedLimit = DEFAULT_EQUIPMENT_TOOL_RESULT_LIMIT,
+) {
+  const boundedLimit = Math.min(
+    Math.max(1, Math.floor(requestedLimit)),
+    MAX_EQUIPMENT_TOOL_RESULT_LIMIT,
+  );
+  const equipment = matches.slice(0, boundedLimit).map(compactEquipmentForTool);
+
+  while (equipment.length > 0) {
+    const result = {
+      count: matches.length,
+      returned: equipment.length,
+      truncated: matches.length > equipment.length,
+      equipment,
+    };
+    if (JSON.stringify({ ok: true, data: result }).length <= DEFAULT_TOOL_OUTPUT_LIMIT) {
+      return result;
+    }
+    equipment.pop();
+  }
+
+  return {
+    count: matches.length,
+    returned: 0,
+    truncated: matches.length > 0,
+    equipment,
+  };
 }

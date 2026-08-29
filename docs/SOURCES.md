@@ -65,14 +65,30 @@ or ChatGPT/OpenAI wallet is claimed.
 
 ## Equipment and image provenance
 
-The exact Life Fitness, SCIFIT, Rogue Fitness, and Eleiko manufacturer
-product-page URLs remain stored beside each record in
-`packages/demo-data/src/equipment.ts`. They support specification provenance;
-they do not imply ownership, permission, affiliation, or endorsement. The Gym
-renders only local, logo-free SVG illustrations created for Adaptive World—no
-manufacturer product photography. The root
+The exact Life Fitness, Hammer Strength, SCIFIT, Rogue Fitness, Eleiko, Torque
+Fitness, Balanced Body, and NuStep manufacturer product-page URLs remain stored
+beside each record in `packages/demo-data/src/equipment.ts`. They support
+specification provenance; they do not imply ownership, permission, affiliation,
+or endorsement. The Gym renders local, logo-free WebP visualizations created
+for Adaptive World—no manufacturer product photography. The root
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) inventories the original
 artwork and applicable third-party notices.
+
+For the Torque Free-Standing F9, the catalog keeps the product page's doors-open
+machine footprint separate from the 244 × 274 cm live area in Torque's linked
+assembly guide. Constrained-space searches use the live area.
+
+For the mobile Torque TANK M1, the operating length is the 115 cm product
+footprint plus Adaptive Gym's synthetic 183 cm travel clearance. Space filters
+therefore use a 298 cm lane while the catalog still displays the product's
+physical footprint separately.
+
+Every equipment record added in this catalog expansion includes an explicit
+operating area. Where the manufacturer does not publish one, Adaptive Gym
+derives a conservative synthetic planning area by applying the record's
+declared clearance on every side of the physical footprint. These planning
+areas drive constrained-space searches and remain separate from manufacturer
+dimensions.
 
 ## Non-claims
 

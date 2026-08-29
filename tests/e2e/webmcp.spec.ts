@@ -57,7 +57,7 @@ const generatedRoutine = {
   templateId: "low_impact_orientation",
   templateVersion: "1.0",
   createdVia: "webmcp",
-  catalogVersion: "verified-2026-08-27",
+  catalogVersion: "verified-2026-08-29",
   durationMinutes: 40,
   status: "draft",
   exercises: [
@@ -252,14 +252,14 @@ test("canonical natural-language searches stay grounded in the visible catalog",
 
   const matchingOutput = await invokeModelContextTool(page, "search_equipment", {
     query: "low impact accessible equipment",
-    limit: 1,
   });
+  expect(String(matchingOutput).length).toBeLessThanOrEqual(1_500);
   expect(JSON.parse(String(matchingOutput))).toMatchObject({
     ok: true,
-    data: { count: 2, returned: 1, truncated: true },
+    data: { count: 5, returned: 2, truncated: true },
   });
-  await expect(page.locator(".results-summary strong")).toHaveText("2");
-  await expect(page.locator(".equipment-card")).toHaveCount(2);
+  await expect(page.locator(".results-summary strong")).toHaveText("5");
+  await expect(page.locator(".equipment-card")).toHaveCount(5);
 
   const unavailableOutput = await invokeModelContextTool(page, "search_equipment", {
     query: "anti-gravity treadmill",
@@ -294,10 +294,22 @@ test("tool output remains bounded and exact invocation input is recorded", async
   const output = await invokeModelContextTool(page, "search_equipment", { limit: 20 });
   expect(typeof output).toBe("string");
   expect(String(output).length).toBeLessThanOrEqual(1_500);
-  expect(JSON.parse(String(output))).toMatchObject({
-    ok: false,
-    error: { code: "OUTPUT_TOO_LARGE" },
+  const parsedOutput = JSON.parse(String(output)) as {
+    readonly ok: boolean;
+    readonly data: {
+      readonly count: number;
+      readonly returned: number;
+      readonly truncated: boolean;
+      readonly equipment: readonly unknown[];
+    };
+  };
+  expect(parsedOutput).toMatchObject({
+    ok: true,
+    data: { count: 22, truncated: true },
   });
+  expect(parsedOutput.data.returned).toBeGreaterThan(0);
+  expect(parsedOutput.data.returned).toBeLessThanOrEqual(5);
+  expect(parsedOutput.data.equipment).toHaveLength(parsedOutput.data.returned);
 
   const snapshot = await modelContextSnapshot(page);
   expect(snapshot.invocations.at(-1)).toEqual(

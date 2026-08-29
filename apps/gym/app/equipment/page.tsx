@@ -16,7 +16,7 @@ export default function EquipmentPage() {
           <h1 className="page-title">Equipment, made legible.</h1>
         </div>
         <p className="page-intro">
-          Search the same 12-model inventory exposed through WebMCP. Product details come from
+          Search the same 22-model inventory exposed through WebMCP. Product details come from
           manufacturer sources; only the demo club&apos;s ownership and availability are synthetic.
         </p>
       </header>
