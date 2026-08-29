@@ -3,6 +3,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const errors = [];
@@ -193,6 +194,28 @@ async function validateImage({ filePath, format, width, height, maxBytes }) {
   if (dimensions.width !== width || dimensions.height !== height) {
     fail(
       `${relativePath(filePath)} is ${dimensions.width}x${dimensions.height}; expected ${width}x${height}`,
+    );
+  }
+
+  try {
+    const { data, info } = await sharp(buffer, { failOn: "error" })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const expectedDecodedBytes = info.width * info.height * info.channels;
+
+    if (info.width !== dimensions.width || info.height !== dimensions.height) {
+      fail(
+        `${relativePath(filePath)} decodes to ${info.width}x${info.height}, but its ${format.toUpperCase()} header declares ${dimensions.width}x${dimensions.height}`,
+      );
+    }
+    if (data.length !== expectedDecodedBytes) {
+      fail(
+        `${relativePath(filePath)} decoded to ${data.length} bytes; expected ${expectedDecodedBytes} bytes for ${info.width}x${info.height} with ${info.channels} channels`,
+      );
+    }
+  } catch (error) {
+    fail(
+      `${relativePath(filePath)} could not be fully decoded as ${format.toUpperCase()}: ${error.message}`,
     );
   }
 }
