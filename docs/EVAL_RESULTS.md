@@ -7,25 +7,24 @@ an exact deployed Git SHA. A fixture or plan is not counted as an executed test.
 
 Last updated: 2026-08-29 UTC
 
-| Layer                                   | Git SHA / deployment            | Status                            | Evidence                                                                                                                                                            |
-| --------------------------------------- | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fixture structural validation           | Local final pre-PR working tree | Passed                            | `pnpm evals:validate`: 17/17 fixtures; no model executed                                                                                                            |
-| Unit and static database suite          | Local final pre-PR working tree | Passed                            | `pnpm test`: 127/127 tests across contracts, DB, data, security, WebMCP, Passport, and Gym                                                                          |
-| Formatting, lint, and typecheck         | Local final pre-PR working tree | Passed                            | `pnpm check`: Prettier, repository ESLint, and all TypeScript projects                                                                                              |
-| Production builds                       | Local final pre-PR working tree | Passed                            | `pnpm check`: optimized Passport and Gym Next.js builds                                                                                                             |
-| Playwright smoke and model-context shim | Local final pre-PR working tree | Browser execution blocked locally | 20 tests discovered; one API-only journey passed; 14 browser journeys need unavailable Chromium; 5 authenticated journeys require explicit seeded-environment flags |
-| Native Chrome WebMCP journey            | No release deployment recorded  | Not run                           | Record browser/version, registry, calls, and visible effects                                                                                                        |
-| ChatGPT in-app browser journey          | No release deployment recorded  | Not run                           | Record application/model environment and exact prompt                                                                                                               |
-| Stripe test Checkout + deployed webhook | No release deployment recorded  | Not run                           | Record redacted order/setup/event references and outcome                                                                                                            |
-| MPP bounded-wallet testnet 402 flow     | No release deployment recorded  | Not run                           | Record redacted challenge/receipt outcome and budget transition                                                                                                     |
-| Repeated primary model trials           | No release deployment recorded  | Not run                           | No accuracy percentage is claimed                                                                                                                                   |
-| Adversarial model trials                | No release deployment recorded  | Not run                           | No prohibited-disclosure rate is claimed                                                                                                                            |
+| Layer                                   | Git SHA / deployment                       | Status  | Evidence                                                                                                                                   |
+| --------------------------------------- | ------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Fixture structural validation           | `751bc6477355fac6907a66d5bc4940070f9b7f20` | Passed  | GitHub Actions CI run #19: 17/17 fixtures; no model executed                                                                               |
+| Unit and static database suite          | `751bc6477355fac6907a66d5bc4940070f9b7f20` | Passed  | GitHub Actions CI run #19: 131/131 tests across contracts, DB, data, security, WebMCP, Passport, and Gym                                   |
+| Formatting, lint, and typecheck         | `751bc6477355fac6907a66d5bc4940070f9b7f20` | Passed  | GitHub Actions CI run #19: Prettier, repository ESLint, and all TypeScript projects                                                        |
+| Production builds                       | `751bc6477355fac6907a66d5bc4940070f9b7f20` | Passed  | GitHub Actions CI run #19: optimized Passport and Gym Next.js builds                                                                       |
+| Playwright smoke and model-context shim | `751bc6477355fac6907a66d5bc4940070f9b7f20` | Passed  | GitHub Actions CI run #19: 20 discovered; 15 default journeys passed in Chromium 151.0.7922.34; 5 authenticated journeys skipped by design |
+| Native Chrome WebMCP journey            | No release deployment recorded             | Not run | Record browser/version, registry, calls, and visible effects                                                                               |
+| ChatGPT in-app browser journey          | No release deployment recorded             | Not run | Record application/model environment and exact prompt                                                                                      |
+| Stripe test Checkout + deployed webhook | No release deployment recorded             | Not run | Record redacted order/setup/event references and outcome                                                                                   |
+| MPP bounded-wallet testnet 402 flow     | No release deployment recorded             | Not run | Record redacted challenge/receipt outcome and budget transition                                                                            |
+| Repeated primary model trials           | No release deployment recorded             | Not run | No accuracy percentage is claimed                                                                                                          |
+| Adversarial model trials                | No release deployment recorded             | Not run | No prohibited-disclosure rate is claimed                                                                                                   |
 
-The exact pull-request head SHA and a rerun summary are recorded in the PR conversation after the
-branch is pushed. The local Playwright limitation is environmental, not counted as a passing
-browser run; CI must install the pinned Chromium build for the 14 default browser journeys. The
-five authenticated mutation journeys must run only against an explicitly opted-in, migrated,
-seeded synthetic environment.
+GitHub Actions CI run #19 installed pinned Chromium 151.0.7922.34 and passed all 15 default
+journeys at the exact SHA above. The five authenticated mutation journeys remain intentionally
+excluded from the default job and must run only against an explicitly opted-in, migrated, seeded
+synthetic environment.
 
 These not-run entries are release blockers, not failures hidden by a passing
 fixture validator. Update this file only from observed evidence.
