@@ -25,6 +25,14 @@ describe("shared equipment search", () => {
     expect(matches.every((item) => item.suitabilityTags.includes("low-impact"))).toBe(true);
   });
 
+  it("maps the rower equipment noun only to the rowing ergometer", () => {
+    const matches = equipmentCatalog.filter((item) =>
+      matchesEquipmentSearch(item, { query: "rower", availableOnly: true }),
+    );
+
+    expect(matches.map((item) => item.id)).toEqual(["lf_heat_row"]);
+  });
+
   it("does not weaken an unavailable anti-gravity treadmill request into a treadmill match", () => {
     const matches = equipmentCatalog.filter((item) =>
       matchesEquipmentSearch(item, { query: "anti-gravity treadmill", availableOnly: true }),

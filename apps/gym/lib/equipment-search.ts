@@ -12,6 +12,16 @@ export type EquipmentSearchCriteria = Readonly<{
 
 const GENERIC_EQUIPMENT_TERMS = new Set(["equipment", "machine", "machines"]);
 const ACCESSIBILITY_TERMS = new Set(["accessible", "accessibility"]);
+const EQUIPMENT_TERM_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  rower: ["rowing"],
+  rowers: ["rowing"],
+};
+
+function matchesSearchTerm(searchableText: string, term: string): boolean {
+  return [term, ...(EQUIPMENT_TERM_ALIASES[term] ?? [])].some((candidate) =>
+    searchableText.includes(candidate),
+  );
+}
 
 function searchableEquipmentText(item: Equipment): string {
   const categoryText =
@@ -49,5 +59,5 @@ export function matchesEquipmentSearch(
   if (requiresAccessibility && item.accessibility.length === 0) return false;
   if (criteria.availableOnly && !item.available) return false;
   const searchableText = searchableEquipmentText(item);
-  return meaningfulQueryTerms.every((term) => searchableText.includes(term));
+  return meaningfulQueryTerms.every((term) => matchesSearchTerm(searchableText, term));
 }
