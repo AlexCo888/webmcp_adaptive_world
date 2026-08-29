@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -46,7 +47,14 @@ export function SignInForm() {
     <main className="signin-shell">
       <section className="signin-story">
         <div className="brand signin-brand">
-          <div className="brand-mark">A</div>
+          <Image
+            alt=""
+            aria-hidden="true"
+            className="brand-mark"
+            height={34}
+            src="/icons/icon-192.png"
+            width={34}
+          />
           <div className="brand-copy">
             <strong>Adaptive World</strong>
             <small>Digital Passport</small>

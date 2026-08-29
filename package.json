@@ -16,9 +16,10 @@
     "test": "turbo run test",
     "evals": "pnpm evals:validate",
     "evals:validate": "node tests/evals/validate.mjs",
+    "assets:validate": "node scripts/validate-image-assets.mjs",
     "e2e": "playwright test",
     "e2e:shim": "playwright test tests/e2e/webmcp.spec.ts",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm evals && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm evals && pnpm assets:validate && pnpm build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -30,6 +31,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.3.0",
     "prettier": "^3.6.2",
+    "sharp": "0.35.3",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0"

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "./icon";
@@ -24,7 +25,14 @@ const doctorNav: Array<{ href: string; label: string; icon: IconName; view: View
 function Brand({ mobile = false }: { mobile?: boolean }) {
   return (
     <div className={mobile ? "mobile-brand" : "brand"}>
-      <div className="brand-mark">A</div>
+      <Image
+        alt=""
+        aria-hidden="true"
+        className="brand-mark"
+        height={34}
+        src="/icons/icon-192.png"
+        width={34}
+      />
       {!mobile ? (
         <div className="brand-copy">
           <strong>Adaptive World</strong>

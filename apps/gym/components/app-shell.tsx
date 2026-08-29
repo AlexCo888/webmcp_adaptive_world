@@ -1,6 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Activity, ArrowUpRight, Dumbbell, Fingerprint, Sparkles } from "lucide-react";
+import { ArrowUpRight, Dumbbell, Fingerprint, Sparkles } from "lucide-react";
 
 const navigation = [
   { href: "/equipment", label: "Equipment" },
@@ -12,7 +13,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="brand-mark" aria-label="Adaptive Gym">
       <span className="brand-mark__glyph" aria-hidden="true">
-        <Activity size={19} strokeWidth={2.2} />
+        <Image src="/icons/icon-192.png" alt="" width={38} height={38} sizes="38px" />
       </span>
       {!compact && (
         <span>

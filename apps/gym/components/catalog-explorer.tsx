@@ -131,8 +131,9 @@ export function CatalogExplorer({ equipment }: Props) {
           </label>
         </fieldset>
         <p className="fine-print">
-          Product names and specifications link to manufacturer sources. The neutral illustrations
-          are original; this demo club&apos;s ownership and live availability are synthetic.
+          AI-generated product visualizations support orientation only. Each cited manufacturer
+          source is authoritative for product identity and specifications; this demo club&apos;s
+          ownership and live availability are synthetic.
         </p>
       </aside>
 

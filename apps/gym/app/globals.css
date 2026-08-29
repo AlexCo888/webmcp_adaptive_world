@@ -106,12 +106,17 @@ button {
 .brand-mark__glyph {
   width: 38px;
   height: 38px;
-  display: grid;
-  place-items: center;
+  display: block;
+  overflow: hidden;
   border-radius: 12px;
   background: var(--ink);
-  color: var(--lime);
-  transform: rotate(-4deg);
+  transform: none;
+}
+.brand-mark__glyph img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .brand-mark > span:last-child {
   display: flex;
@@ -2532,7 +2537,7 @@ textarea:focus-visible {
 
 .equipment-card__visual--product {
   min-height: 225px;
-  background: #fff;
+  background: #fffdf7;
 }
 .equipment-card__visual--product::after,
 .detail-visual::after {
@@ -2555,7 +2560,7 @@ textarea:focus-visible {
   line-height: 1.4;
 }
 .detail-visual {
-  background: white;
+  background: #fffdf7;
   border: 1px solid var(--line);
 }
 .detail-visual > img {

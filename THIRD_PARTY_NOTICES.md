@@ -63,25 +63,33 @@ specification provenance and are summarized in
 [`docs/SOURCES.md`](./docs/SOURCES.md). Their inclusion does not imply
 manufacturer sponsorship, authorization, ownership, or endorsement.
 
-No manufacturer product photography is shipped or rendered. Every equipment
-image is a logo-free, neutral illustration created for this project. It is not
-an exact manufacturer product depiction.
+No official manufacturer product photography is shipped or rendered directly.
+Official manufacturer product images were used only as visual references for
+equipment geometry while creating new, logo-free visualizations. The resulting
+assets are original AI-generated visualizations, not official photography or
+exact manufacturer depictions. Product identity and specifications remain
+grounded in the cited manufacturer URL, not in the generated image.
 
-## Original project artwork
+## Generated project visuals
 
-The following original SVG artwork is part of Adaptive World and is covered by
-the root MIT License:
+The 15 versioned visual designs—the Gym hero, 12 equipment renders, and the Gym
+and Passport app icons—were created for Adaptive World with OpenAI's built-in
+image generation on 2026-08-29. Their source prompts, reference policy,
+versioned paths, and web-delivery derivatives are recorded in
+[`docs/GENERATED_VISUALS.md`](./docs/GENERATED_VISUALS.md).
 
-- Gym hero: `apps/gym/public/images/adaptive-gym-floor.svg`
-- Equipment set: `apps/gym/public/images/equipment/adjustable-bench.svg`,
-  `back-extension.svg`, `chest-press.svg`, `dual-pulley.svg`, `elliptical.svg`,
-  `fly-rear-delt.svg`, `half-rack.svg`, `recumbent-bike.svg`, `rower.svg`,
-  `seated-row.svg`, `total-body-ergometer.svg`, and `treadmill.svg`
-- App icons: `apps/gym/app/icon.svg` and `apps/passport/app/icon.svg`
+The generated assets contain no intentional manufacturer logos, product text,
+watermarks, or embedded third-party photographs. Incidental visual similarity
+to a referenced product does not imply manufacturer authorship, sponsorship,
+authorization, ownership, or endorsement. To the extent contributors hold
+protectable rights in the generated and derived project assets, those rights
+are licensed under the root MIT License; this does not grant rights to
+third-party trademarks or reference materials.
 
-These assets use project-created geometric shapes and the Adaptive World color
-palette. They contain no embedded fonts, logos, external image references, or
-third-party photographic material.
+Lucide icons and the applications' small interface icon components remain
+vector UI primitives. They are software interface elements governed by their
+applicable software licenses or project code license, not ImageGen-created
+content artwork, and are intentionally outside the raster-visual policy.
 
 ## No affiliation
 

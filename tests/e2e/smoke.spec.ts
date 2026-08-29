@@ -25,7 +25,7 @@ test("Gym looks and behaves like a public club site before context is connected"
   expect(response!.status()).toBeLessThan(500);
   await expect(page.getByRole("heading", { name: /Your first visit/ })).toBeVisible();
   const hero = page.getByAltText(
-    "Illustrated Adaptive Gym floor with cardio, cable, and free-weight zones",
+    "Sunlit gym interior with members using a cable row, treadmill, kettlebell, and squat rack",
   );
   await expect(hero).toBeVisible();
   await expect

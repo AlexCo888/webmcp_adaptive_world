@@ -42,8 +42,8 @@ export const EquipmentSchema = z.object({
   imageUrl: z
     .string()
     .regex(
-      /^\/images\/equipment\/[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/u,
-      "Equipment artwork must be a project-owned local SVG",
+      /^\/images\/equipment\/[a-z0-9]+(?:-[a-z0-9]+)*\.webp$/u,
+      "Equipment visualization must be a project-owned local WebP",
     ),
   imageAlt: z.string().min(5).max(180),
 });

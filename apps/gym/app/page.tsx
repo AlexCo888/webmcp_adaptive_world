@@ -27,11 +27,11 @@ export default function HomePage() {
       <section className="club-hero" aria-labelledby="hero-title">
         <div className="club-hero__media">
           <Image
-            src="/images/adaptive-gym-floor.svg"
-            alt="Illustrated Adaptive Gym floor with cardio, cable, and free-weight zones"
+            src="/images/adaptive-gym-interior.webp"
+            alt="Sunlit gym interior with members using a cable row, treadmill, kettlebell, and squat rack"
             fill
-            priority
-            sizes="(max-width: 900px) 100vw, 58vw"
+            preload
+            sizes="(max-width: 640px) calc(100vw - 24px), (max-width: 980px) calc(100vw - 40px), min(calc(54vw - 22px), 670px)"
           />
           <div className="club-hero__overlay" />
           <div className="club-status">
@@ -42,7 +42,7 @@ export default function HomePage() {
             <span>
               <MapPin size={14} /> Adaptive Gym Lab
             </span>
-            <strong>Real product models. Synthetic club inventory.</strong>
+            <strong>AI-generated scene. Real product records; synthetic inventory.</strong>
           </div>
         </div>
         <div className="club-hero__copy">

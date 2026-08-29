@@ -1,9 +1,22 @@
+import Image from "next/image";
+
 export default function Loading() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">A</div>
+          <Image
+            alt=""
+            aria-hidden="true"
+            className="brand-mark"
+            height={34}
+            src="/icons/icon-192.png"
+            width={34}
+          />
+          <div className="brand-copy">
+            <strong>Adaptive World</strong>
+            <small>Digital Passport</small>
+          </div>
         </div>
       </aside>
       <main className="main">

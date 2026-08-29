@@ -25,7 +25,8 @@ void test("contains 12 verified product records with unique ids, slugs, and sour
   for (const item of equipmentCatalog) {
     assert.equal(item.verifiedProduct, true);
     assert.match(item.sourceUrl, /^https:\/\//u);
-    assert.match(item.imageUrl, /^\/images\/equipment\/[a-z0-9-]+\.svg$/u);
+    assert.equal(item.imageUrl, `/images/equipment/${item.slug}.webp`);
+    assert.match(item.imageUrl, /^\/images\/equipment\/[a-z0-9-]+\.webp$/u);
     assert.doesNotMatch(item.imageUrl, /^https?:\/\//u);
     assert.equal(item.syntheticFacilityInventory, true);
   }
