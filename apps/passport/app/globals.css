@@ -76,11 +76,9 @@ a {
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: var(--lime);
-  color: var(--ink);
-  display: grid;
-  place-items: center;
-  font-weight: 900;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
 }
 .brand-copy {
   line-height: 1.05;

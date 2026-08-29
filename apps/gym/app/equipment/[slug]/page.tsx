@@ -37,12 +37,12 @@ export default async function EquipmentDetailPage({ params }: Props) {
             src={item.imageUrl}
             alt={item.imageAlt}
             fill
-            priority
-            sizes="(max-width: 900px) 100vw, 50vw"
+            preload
+            sizes="(max-width: 640px) calc(100vw - 24px), (max-width: 900px) calc(100vw - 40px), min(calc(45vw - 36px), 527px)"
           />
           <span className="tag tag--green">{item.category.replaceAll("-", " ")}</span>
           <div className="detail-visual__caption">
-            <span>Original neutral illustration</span>
+            <span>AI-generated product visualization</span>
             <strong>
               {item.manufacturer} · {item.model} record
             </strong>
@@ -128,9 +128,10 @@ export default async function EquipmentDetailPage({ params }: Props) {
         <section className="card detail-panel">
           <h2>Catalog integrity</h2>
           <p className="muted">
-            This is a real {item.manufacturer} product record checked on {item.sourceCheckedAt}.
-            Adaptive Gym&apos;s ownership, zone, and availability are explicitly synthetic for the
-            demo.
+            This real {item.manufacturer} product record was checked on {item.sourceCheckedAt}. The
+            cited manufacturer source—not the AI-generated visualization—is authoritative for
+            product identity and specifications. Adaptive Gym&apos;s ownership, zone, and
+            availability are explicitly synthetic for the demo.
           </p>
           <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
             {item.sourceLabel}

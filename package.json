@@ -16,9 +16,10 @@
     "test": "turbo run test",
     "evals": "pnpm evals:validate",
     "evals:validate": "node tests/evals/validate.mjs",
+    "assets:validate": "node scripts/validate-image-assets.mjs",
     "e2e": "playwright test",
     "e2e:shim": "playwright test tests/e2e/webmcp.spec.ts",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm evals && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm evals && pnpm assets:validate && pnpm build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
