@@ -104,7 +104,7 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
               description: "Maximum matches to return.",
               minimum: 1,
               maximum: 20,
-              default: 10,
+              default: 2,
             },
           },
           additionalProperties: false,

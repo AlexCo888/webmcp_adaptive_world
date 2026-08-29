@@ -1,6 +1,6 @@
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { describe, expect, it } from "vitest";
-import { matchesEquipmentSearch } from "./equipment-search";
+import { createEquipmentSearchToolResult, matchesEquipmentSearch } from "./equipment-search";
 
 describe("shared equipment search", () => {
   it("returns the same manufacturer matches used by the API, WebMCP result, and catalog UI", () => {
@@ -29,6 +29,10 @@ describe("shared equipment search", () => {
     ]);
     expect(matches.every((item) => item.accessibility.length > 0)).toBe(true);
     expect(matches.every((item) => item.suitabilityTags.includes("low-impact"))).toBe(true);
+
+    const toolResult = createEquipmentSearchToolResult(matches);
+    expect(toolResult).toMatchObject({ count: 5, returned: 2, truncated: true });
+    expect(JSON.stringify({ ok: true, data: toolResult }).length).toBeLessThanOrEqual(1_500);
   });
 
   it("maps the rower equipment noun only to the rowing ergometer", () => {

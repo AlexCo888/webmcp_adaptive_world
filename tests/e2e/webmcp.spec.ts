@@ -252,11 +252,11 @@ test("canonical natural-language searches stay grounded in the visible catalog",
 
   const matchingOutput = await invokeModelContextTool(page, "search_equipment", {
     query: "low impact accessible equipment",
-    limit: 1,
   });
+  expect(String(matchingOutput).length).toBeLessThanOrEqual(1_500);
   expect(JSON.parse(String(matchingOutput))).toMatchObject({
     ok: true,
-    data: { count: 5, returned: 1, truncated: true },
+    data: { count: 5, returned: 2, truncated: true },
   });
   await expect(page.locator(".results-summary strong")).toHaveText("5");
   await expect(page.locator(".equipment-card")).toHaveCount(5);

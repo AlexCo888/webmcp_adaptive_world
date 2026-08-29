@@ -10,6 +10,9 @@ export type EquipmentSearchCriteria = Readonly<{
   availableOnly?: boolean;
 }>;
 
+export const DEFAULT_EQUIPMENT_TOOL_RESULT_LIMIT = 2;
+const MAX_EQUIPMENT_TOOL_RESULT_LIMIT = 5;
+
 const GENERIC_EQUIPMENT_TERMS = new Set(["equipment", "machine", "machines"]);
 const ACCESSIBILITY_TERMS = new Set(["accessible", "accessibility"]);
 const EQUIPMENT_TERM_ALIASES: Readonly<Record<string, readonly string[]>> = {
@@ -59,4 +62,36 @@ export function matchesEquipmentSearch(
   if (criteria.availableOnly && !item.available) return false;
   const searchableText = searchableEquipmentText(item);
   return meaningfulQueryTerms.every((term) => matchesSearchTerm(searchableText, term));
+}
+
+export function compactEquipmentForTool(item: Equipment) {
+  return {
+    id: item.id,
+    name: item.name,
+    manufacturer: item.manufacturer,
+    model: item.model,
+    category: item.category,
+    dimensionsCm: item.dimensionsCm,
+    ...(item.operatingDimensionsCm ? { operatingDimensionsCm: item.operatingDimensionsCm } : {}),
+    accessFeatures: item.accessibility.slice(0, 3),
+    locationZone: item.locationZone,
+    sourceUrl: item.sourceUrl,
+  };
+}
+
+export function createEquipmentSearchToolResult(
+  matches: readonly Equipment[],
+  requestedLimit = DEFAULT_EQUIPMENT_TOOL_RESULT_LIMIT,
+) {
+  const boundedLimit = Math.min(
+    Math.max(1, Math.floor(requestedLimit)),
+    MAX_EQUIPMENT_TOOL_RESULT_LIMIT,
+  );
+  const returned = matches.slice(0, boundedLimit);
+  return {
+    count: matches.length,
+    returned: returned.length,
+    truncated: matches.length > returned.length,
+    equipment: returned.map(compactEquipmentForTool),
+  };
 }
