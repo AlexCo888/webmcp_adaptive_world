@@ -17,6 +17,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { db } from "./database";
+import { isDemoResetOperator } from "./demo-reset-authorization";
+import { listSavedRoutines, type SavedRoutineSummary } from "./saved-routines";
 
 export type PortalActor = {
   id: string;
@@ -26,9 +28,49 @@ export type PortalActor = {
   role: "owner" | "doctor";
 };
 
+export type DoctorPassportView = {
+  kind: "doctor-passport-view";
+  id: string;
+  displayName: string;
+  ageYears: number;
+  functional: DigitalPassport["functional"];
+  clinical: {
+    biologicalSex: DigitalPassport["identity"]["biologicalSex"];
+    heightCm: number;
+    weightKg: number;
+    vitalSigns: Array<
+      Pick<
+        DigitalPassport["vitalSigns"][number],
+        "code" | "label" | "value" | "unit" | "observedAt" | "interpretation" | "sourceId"
+      >
+    >;
+    conditions: Array<
+      Pick<DigitalPassport["conditions"][number], "id" | "label" | "status" | "sourceId">
+    >;
+    medications: DigitalPassport["medications"];
+    allergies: DigitalPassport["allergies"];
+    notableResults: Array<
+      Pick<
+        DigitalPassport["notableResults"][number],
+        "code" | "label" | "value" | "unit" | "observedAt" | "interpretation" | "sourceId"
+      >
+    >;
+  } | null;
+  documents: Array<
+    Pick<
+      DigitalPassport["documents"][number],
+      "id" | "title" | "kind" | "issuedAt" | "sourceId" | "synthetic"
+    >
+  >;
+  updatedAt: string;
+  synthetic: true;
+};
+
+export type PortalPassport = DigitalPassport | DoctorPassportView;
+
 export type PortalBootstrap = {
   actor: PortalActor;
-  passports: DigitalPassport[];
+  passports: PortalPassport[];
   grants: AccessGrant[];
   auditEvents: Array<{
     id: string;
@@ -44,10 +86,12 @@ export type PortalBootstrap = {
     createdAt: string;
     expiresAt: string;
   }>;
+  savedRoutines: SavedRoutineSummary[];
+  demoResetEnabled: boolean;
 };
 
-export async function getOptionalActor(): Promise<PortalActor | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
+export async function getActorFromHeaders(requestHeaders: Headers): Promise<PortalActor | null> {
+  const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session?.user.id) return null;
   const [actor] = await db
     .select()
@@ -64,6 +108,10 @@ export async function getOptionalActor(): Promise<PortalActor | null> {
   };
 }
 
+export async function getOptionalActor(): Promise<PortalActor | null> {
+  return getActorFromHeaders(await headers());
+}
+
 export async function requireActor(expected?: PortalActor["role"]): Promise<PortalActor> {
   const actor = await getOptionalActor();
   if (!actor) redirect("/sign-in");
@@ -71,19 +119,104 @@ export async function requireActor(expected?: PortalActor["role"]): Promise<Port
   return actor;
 }
 
-function mapGrant(row: typeof accessGrants.$inferSelect, passportId: string): AccessGrant {
+function mapGrant(
+  row: typeof accessGrants.$inferSelect,
+  passportId: string,
+  now = new Date(),
+): AccessGrant {
+  const status =
+    row.status === "active" && row.expiresAt.getTime() <= now.getTime() ? "expired" : row.status;
   return AccessGrantSchema.parse({
     id: row.id,
     passportId,
     granteeId: row.granteeUserId,
     granteeType: "clinician",
     scopes: row.scopes,
-    status: row.status,
+    status,
     purpose: row.purpose,
     issuedAt: row.createdAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt?.toISOString(),
   });
+}
+
+function ageInYears(dateOfBirth: string, now: Date): number {
+  const birth = new Date(`${dateOfBirth}T00:00:00.000Z`);
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const beforeBirthday =
+    now.getUTCMonth() < birth.getUTCMonth() ||
+    (now.getUTCMonth() === birth.getUTCMonth() && now.getUTCDate() < birth.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+export function projectDoctorPassport(
+  passport: DigitalPassport,
+  scopes: ReadonlySet<string>,
+  now: Date,
+): DoctorPassportView {
+  const clinical = scopes.has("passport.clinical.read");
+  const documents = scopes.has("passport.documents.read");
+  return {
+    kind: "doctor-passport-view",
+    id: passport.id,
+    displayName: passport.identity.displayName,
+    ageYears: ageInYears(passport.identity.dateOfBirth, now),
+    functional: passport.functional,
+    clinical: clinical
+      ? {
+          biologicalSex: passport.identity.biologicalSex,
+          heightCm: passport.heightCm,
+          weightKg: passport.weightKg,
+          vitalSigns: passport.vitalSigns.map(
+            ({ code, label, value, unit, observedAt, interpretation, sourceId }) => ({
+              code,
+              label,
+              value,
+              unit,
+              observedAt,
+              interpretation,
+              sourceId,
+            }),
+          ),
+          conditions: passport.conditions.map(({ id, label, status, sourceId }) => ({
+            id,
+            label,
+            status,
+            sourceId,
+          })),
+          notableResults: passport.notableResults.map(
+            ({ code, label, value, unit, observedAt, interpretation, sourceId }) => ({
+              code,
+              label,
+              value,
+              unit,
+              observedAt,
+              interpretation,
+              sourceId,
+            }),
+          ),
+          medications: passport.medications,
+          allergies: passport.allergies,
+        }
+      : null,
+    documents: documents
+      ? passport.documents.map(({ id, title, kind, issuedAt, sourceId, synthetic }) => ({
+          id,
+          title,
+          kind,
+          issuedAt,
+          sourceId,
+          synthetic,
+        }))
+      : [],
+    updatedAt: passport.updatedAt,
+    synthetic: true,
+  };
+}
+
+function canResetDemo(actor: PortalActor): boolean {
+  return process.env.ENABLE_DEMO_RESET === "true" && isDemoResetOperator(actor);
 }
 
 export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBootstrap> {
@@ -95,7 +228,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
       .limit(1);
     if (!owned) throw new Error("No Passport is linked to this account.");
     const passport = DigitalPassportSchema.parse(owned.profile);
-    const [grantRows, eventRows, guidanceRows] = await Promise.all([
+    const [grantRows, eventRows, guidanceRows, routineRows] = await Promise.all([
       db.select().from(accessGrants).where(eq(accessGrants.patientId, owned.id)),
       db
         .select()
@@ -116,6 +249,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
         )
         .orderBy(sql`${clinicalGuidance.createdAt} desc`)
         .limit(10),
+      listSavedRoutines(actor),
     ]);
     return {
       actor,
@@ -135,9 +269,12 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
         createdAt: guidance.createdAt.toISOString(),
         expiresAt: guidance.expiresAt.toISOString(),
       })),
+      savedRoutines: routineRows,
+      demoResetEnabled: canResetDemo(actor),
     };
   }
 
+  const now = new Date();
   const rows = await db
     .select({ patient: patients, grant: accessGrants })
     .from(accessGrants)
@@ -151,26 +288,52 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
         eq(accessGrants.granteeUserId, actor.id),
         eq(accessGrants.status, "active"),
         isNull(accessGrants.revokedAt),
-        gt(accessGrants.expiresAt, new Date()),
+        gt(accessGrants.expiresAt, now),
         eq(doctorPatientRelationships.doctorUserId, actor.id),
+        eq(doctorPatientRelationships.patientId, accessGrants.patientId),
         eq(doctorPatientRelationships.status, "active"),
         isNull(doctorPatientRelationships.revokedAt),
         or(
           isNull(doctorPatientRelationships.expiresAt),
-          gt(doctorPatientRelationships.expiresAt, new Date()),
+          gt(doctorPatientRelationships.expiresAt, now),
         ),
-        sql`${accessGrants.scopes} @> '["passport.summary.read"]'::jsonb`,
       ),
     );
 
+  const grouped = new Map<
+    string,
+    {
+      passport: DigitalPassport;
+      grants: Array<typeof accessGrants.$inferSelect>;
+      scopes: Set<string>;
+    }
+  >();
+  for (const { patient, grant } of rows) {
+    const passport = DigitalPassportSchema.parse(patient.profile);
+    const existing = grouped.get(passport.id) ?? {
+      passport,
+      grants: [],
+      scopes: new Set<string>(),
+    };
+    existing.grants.push(grant);
+    for (const scope of grant.scopes) existing.scopes.add(scope);
+    grouped.set(passport.id, existing);
+  }
+  const authorized = [...grouped.values()].filter(({ scopes }) =>
+    scopes.has("passport.summary.read"),
+  );
+
   return {
     actor,
-    passports: rows.map(({ patient }) => DigitalPassportSchema.parse(patient.profile)),
-    grants: rows.map(({ patient, grant }) => {
-      const passport = DigitalPassportSchema.parse(patient.profile);
-      return mapGrant(grant, passport.id);
-    }),
+    passports: authorized.map(({ passport, scopes }) =>
+      projectDoctorPassport(passport, scopes, now),
+    ),
+    grants: authorized.flatMap(({ passport, grants }) =>
+      grants.map((grant) => mapGrant(grant, passport.id)),
+    ),
     auditEvents: [],
     guidance: [],
+    savedRoutines: [],
+    demoResetEnabled: canResetDemo(actor),
   };
 }

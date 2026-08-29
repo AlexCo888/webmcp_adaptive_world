@@ -1,7 +1,9 @@
 # WebMCP Hackathon Patch Plan
 
-Status: implementation-ready plan; no production code changed by this document  
-Baseline: `main` at `ce5451b24433ab5db5b878db187a0f30d09cf906`  
+Status: historical source plan; payment/product details are superseded by
+[`FIXES_AND_PAYMENT.md`](./FIXES_AND_PAYMENT.md), while its P0/P1 correction
+requirements remain mandatory.
+Baseline: `main` at `ce5451b24433ab5db5b878db187a0f30d09cf906`.
 Primary objective: maximize judging quality and submission reliability without adding UI/UX noise
 
 ## 1. Product decision
@@ -31,7 +33,7 @@ UI work is allowed only when it is necessary to prove WebMCP value or prevent a 
 
 - Reuse the existing catalog controls and cards when an agent invokes `search_equipment`.
 - Reuse the existing equipment detail route when an agent invokes `get_equipment`.
-- Reuse the existing Session Planner result canvas when an agent invokes `create_session_draft`.
+- Reuse the existing Session Planner result canvas when an agent invokes `create_personalized_routine`.
 - Reuse the existing modal pattern for human confirmation and demo reset.
 - Add a small demo-reset control only inside the existing `/tools` developer/inspection surface.
 - Add transient focus/highlight and a visually hidden `aria-live` status after an agent action.
@@ -58,18 +60,18 @@ After the patch, a normal visitor who never uses WebMCP should see essentially t
 
 ## 3. Priority stack
 
-| Priority | Patch                                               | Why it matters                                               |
-| -------- | --------------------------------------------------- | ------------------------------------------------------------ |
-| P0       | License and submission compliance                   | Eligibility blocker                                          |
-| P0       | Server-authoritative Passport/doctor reads          | Revocation and scope changes must take effect without reload |
-| P0       | Fix Gym grant expiry contract                       | Current tool response can disagree with persisted expiry     |
-| P0       | Remove the simulated `get_patient_changes` behavior | Trust is more valuable than tool count                       |
-| P0       | Add deterministic demo reset                        | Shared judge accounts must not break later evaluations       |
-| P1       | Synchronize WebMCP results with existing Gym UI     | Strongest improvement to WebMCP Leverage and Execution       |
-| P1       | Add full WebMCP browser tests                       | Prevent demo-only integration failures                       |
-| P1       | Publish actual eval results                         | Distinguish fixture validation from behavioral evidence      |
-| P1       | Rewrite the demo path to under three minutes        | Submission and judging requirement                           |
-| P2       | Activate a non-owner Neon runtime role              | Valuable hardening, but only ship if fully tested            |
+| Priority | Patch                                           | Why it matters                                               |
+| -------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| P0       | License and submission compliance               | Eligibility blocker                                          |
+| P0       | Server-authoritative Passport/doctor reads      | Revocation and scope changes must take effect without reload |
+| P0       | Fix Gym grant expiry contract                   | Current tool response can disagree with persisted expiry     |
+| P0       | Remove simulated clinician-delta behavior       | Trust is more valuable than tool count                       |
+| P0       | Add deterministic demo reset                    | Shared judge accounts must not break later evaluations       |
+| P1       | Synchronize WebMCP results with existing Gym UI | Strongest improvement to WebMCP Leverage and Execution       |
+| P1       | Add full WebMCP browser tests                   | Prevent demo-only integration failures                       |
+| P1       | Publish actual eval results                     | Distinguish fixture validation from behavioral evidence      |
+| P1       | Rewrite the demo path to under three minutes    | Submission and judging requirement                           |
+| P2       | Activate a non-owner Neon runtime role          | Valuable hardening, but only ship if fully tested            |
 
 P0 items are release blockers. P1 items are required for the strongest submission. P2 must not destabilize the working demo.
 
@@ -262,7 +264,7 @@ The confirmation UI, server row, tool result, and handoff all describe the same 
 
 ### Decision
 
-Remove `get_patient_changes` from the hackathon MVP rather than expose a hardcoded delta. The clinician story remains compelling with search, overview, progressive section access, source opening, and confirmed guidance.
+Remove the hardcoded clinician-delta behavior from the hackathon MVP. The clinician story remains compelling with search, overview, progressive section access, source opening, and confirmed guidance.
 
 ### Updated files
 
@@ -295,7 +297,7 @@ Expected behavior:
 
 - Clinician catalog exposes five truthful tools.
 - Documentation and UI counts match the exact catalog.
-- No prompt or demo instruction references `get_patient_changes`.
+- No prompt or demo instruction references a simulated clinician change query.
 - The replacement eval proves the product's central consent claim.
 
 ---
@@ -387,7 +389,7 @@ Do not add a permanent result banner, separate agent result list, or extra cards
 
 After resolving a real catalog record, navigate to the existing `/equipment/[slug]` route. Do not create a new drawer or modal.
 
-### C. `create_session_draft`
+### C. `create_personalized_routine`
 
 After the server returns the persisted session:
 
@@ -631,7 +633,8 @@ If any part is incomplete, do not ship partial RLS activation. Accurate applicat
 
 - No OpenAI API chatbot inside the product.
 - No remote MCP server added just for breadth.
-- No payment system in this submission branch.
+- No payment surface beyond the single Routine Pro sandbox entitlement defined
+  by the integrated plan.
 - No additional medical recommendation logic.
 - No diagnosis, treatment, clearance, or emergency behavior.
 - No new authentication provider.
@@ -654,7 +657,7 @@ Do not submit until all items are true:
 - [ ] Passport and doctor reads reauthorize on every invocation.
 - [ ] Revocation is effective without reload.
 - [ ] Tool-reported context expiry equals persisted expiry.
-- [ ] `get_patient_changes` is removed from code, docs, schemas, and eval fixtures.
+- [ ] The simulated clinician-delta tool is removed from code, docs, schemas, and eval fixtures.
 - [ ] Agent catalog search updates the existing catalog UI.
 - [ ] Agent session creation updates the existing session canvas.
 - [ ] Mutations require visible confirmation and execute exactly once.

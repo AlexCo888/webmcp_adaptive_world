@@ -1,98 +1,55 @@
-import {
-  accessGrants,
-  auditEvents,
-  clinicalGuidance,
-  doctorPatientRelationships,
-  patients,
-} from "@adaptive-world/db/schema";
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
-import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/database";
-import { requireActor } from "@/lib/session";
+import { apiError, apiSuccess, readJson, requestId, requireApiActor } from "@/lib/api";
+import { commitClinicalGuidanceIfLive } from "@/lib/guidance-write";
 
-const InputSchema = z.object({
-  patientId: z.string().min(1).max(128),
-  guidance: z.string().min(1).max(2_000),
-  expiresAt: z.string().datetime().optional(),
-});
+const InputSchema = z
+  .object({
+    patientId: z.string().trim().min(1).max(128),
+    guidance: z.string().trim().min(1).max(2_000),
+    expiresAt: z.string().datetime().optional(),
+  })
+  .strict();
 
 export async function POST(request: Request) {
-  const actor = await requireActor("doctor");
-  const input = InputSchema.safeParse(await request.json());
-  if (!input.success) return NextResponse.json({ error: "Invalid guidance." }, { status: 400 });
+  const currentRequestId = requestId(request);
+  const authorization = await requireApiActor(request, "doctor", currentRequestId);
+  if (authorization.response) return authorization.response;
+  const actor = authorization.actor;
+  const input = await readJson(request, InputSchema);
+  if (!input.success) return apiError("VALIDATION", "Invalid guidance.", 400, currentRequestId);
   const expiresAt = input.data.expiresAt
     ? new Date(input.data.expiresAt)
     : new Date(Date.now() + 90 * 24 * 60 * 60 * 1_000);
   if (expiresAt <= new Date() || expiresAt > new Date(Date.now() + 365 * 24 * 60 * 60 * 1_000)) {
-    return NextResponse.json(
-      { error: "Guidance expiry must be within one year." },
-      { status: 400 },
+    return apiError(
+      "VALIDATION",
+      "Guidance expiry must be within one year.",
+      400,
+      currentRequestId,
     );
   }
-  const [authorized] = await db
-    .select({
-      patientId: patients.id,
-      grantId: accessGrants.id,
-      relationshipId: doctorPatientRelationships.id,
-    })
-    .from(accessGrants)
-    .innerJoin(patients, eq(accessGrants.patientId, patients.id))
-    .innerJoin(
-      doctorPatientRelationships,
-      eq(accessGrants.relationshipId, doctorPatientRelationships.id),
-    )
-    .where(
-      and(
-        eq(accessGrants.granteeUserId, actor.id),
-        eq(accessGrants.status, "active"),
-        isNull(accessGrants.revokedAt),
-        gt(accessGrants.expiresAt, new Date()),
-        eq(doctorPatientRelationships.doctorUserId, actor.id),
-        eq(doctorPatientRelationships.status, "active"),
-        isNull(doctorPatientRelationships.revokedAt),
-        or(
-          isNull(doctorPatientRelationships.expiresAt),
-          gt(doctorPatientRelationships.expiresAt, new Date()),
-        ),
-        sql`${accessGrants.scopes} @> '["passport.guidance.write"]'::jsonb`,
-        sql`${patients.profile}->>'id' = ${input.data.patientId}`,
-      ),
-    )
-    .limit(1);
-  if (!authorized) return NextResponse.json({ error: "Missing guidance scope." }, { status: 403 });
-
-  const [saved] = await db
-    .insert(clinicalGuidance)
-    .values({
-      patientId: authorized.patientId,
-      doctorUserId: actor.id,
-      relationshipId: authorized.relationshipId,
-      accessGrantId: authorized.grantId,
-      guidance: input.data.guidance,
-      expiresAt,
-    })
-    .returning({ id: clinicalGuidance.id });
-  if (!saved) return NextResponse.json({ error: "Guidance could not be saved." }, { status: 500 });
-
-  await db.insert(auditEvents).values({
-    actorUserId: actor.id,
-    patientId: authorized.patientId,
-    action: "clinical_guidance.confirmed",
-    resourceType: "clinical_guidance",
-    resourceId: saved.id,
-    outcome: "success",
-    metadata: {
-      guidanceSha256: createHash("sha256").update(input.data.guidance).digest("hex"),
-      characterCount: input.data.guidance.length,
+  const saved = await commitClinicalGuidanceIfLive({
+    doctorUserId: actor.id,
+    passportId: input.data.patientId,
+    guidance: input.data.guidance,
+    expiresAt,
+    requestId: currentRequestId,
+  });
+  if (!saved) {
+    return apiError(
+      "NOT_FOUND",
+      "No currently authorized patient matched the request.",
+      404,
+      currentRequestId,
+    );
+  }
+  return apiSuccess(
+    {
+      saved: true,
+      guidanceId: saved.id,
       expiresAt: expiresAt.toISOString(),
-      syntheticDemo: true,
     },
-  });
-  return NextResponse.json({
-    saved: true,
-    guidanceId: saved.id,
-    expiresAt: expiresAt.toISOString(),
-  });
+    currentRequestId,
+    201,
+  );
 }

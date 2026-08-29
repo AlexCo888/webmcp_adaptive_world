@@ -1,147 +1,517 @@
 "use client";
 
-import type {
-  GeneratedSession,
-  GymContextProjection,
-  SessionFeedback,
+import {
+  EquipmentSchema,
+  GeneratedSessionSchema,
+  GymContextProjectionSchema,
+  RoutineProOfferSchema,
+  type RoutineProOffer,
+  type SessionFeedback,
 } from "@adaptive-world/contracts";
-import { equipmentCatalog } from "@adaptive-world/demo-data";
 import {
   createGymToolCatalog,
   useWebMCPTools,
   type ConfirmMutation,
+  type CreatePersonalizedRoutineInput,
   type GymToolHandlers,
   type MutationConfirmationRequest,
+  type RecordSessionFeedbackInput,
 } from "@adaptive-world/webmcp";
-import { ChevronDown, CircleAlert, CircleCheck, Code2, History, Sparkles, X } from "lucide-react";
+import {
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  Code2,
+  History,
+  LoaderCircle,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
-
-const gymProfile = {
-  name: "Adaptive Gym Lab",
-  catalogSize: equipmentCatalog.length,
-  catalogIntegrity: "Manufacturer-verified product models; synthetic facility ownership",
-  walkthroughs: [
-    "first_visit_foundations@1.0",
-    "low_impact_orientation@1.0",
-    "accessible_equipment_tour@1.0",
-  ],
-  accessFeatures: [
-    "Documented approach and setup features",
-    "Supported and seated training options",
-    "Staff setup review in every first-visit template",
-  ],
-  constraints: [
-    "Only published template IDs can create a walkthrough",
-    "Every station resolves to the verified facility catalog",
-    "Clinical records and identity are never requested or returned",
-    "Mutations require visible human confirmation",
-  ],
-  syntheticFacilityInventory: true,
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGymExperience } from "@/components/gym-experience-context";
+import { fetchBoundedJson, GymApiError } from "@/lib/api-client";
+import { matchesEquipmentSearch } from "@/lib/equipment-search";
+import {
+  pendingRoutineProOrder,
+  type PendingRoutineProOrder,
+} from "@/lib/routine-pro-client-state";
+import {
+  prepareFeedbackConfirmation,
+  prepareRoutineProConfirmation,
+  webMcpMutationBusyLabel,
+} from "@/lib/webmcp-confirmations";
 
 type ExecutionEvent = { tool: string; at: string };
+type PreparedQuote = {
+  offer: RoutineProOffer;
+  requestedInput: CreatePersonalizedRoutineInput;
+  effectiveInput: CreatePersonalizedRoutineInput;
+  pending: PendingRoutineProOrder | null;
+};
+type PreparedFeedback = {
+  completedExerciseIds: string[];
+  input: RecordSessionFeedbackInput;
+};
+
+function sameRoutineInput(
+  left: CreatePersonalizedRoutineInput,
+  right: CreatePersonalizedRoutineInput,
+): boolean {
+  return left.templateId === right.templateId && left.paymentMode === right.paymentMode;
+}
+
+function sameFeedbackInput(
+  left: RecordSessionFeedbackInput,
+  right: RecordSessionFeedbackInput,
+): boolean {
+  return (
+    left.sessionId === right.sessionId &&
+    left.perceivedExertion === right.perceivedExertion &&
+    left.pain === right.pain &&
+    left.notes === right.notes
+  );
+}
+
+function envelopeData(value: unknown): unknown {
+  if (!value || typeof value !== "object" || (value as Record<string, unknown>).ok !== true) {
+    throw new GymApiError("INVALID_RESPONSE", 502);
+  }
+  return (value as Record<string, unknown>).data;
+}
+
+function parseRoutineProStatus(value: unknown): {
+  entitled: boolean;
+  pending: PendingRoutineProOrder | null;
+} {
+  const data = envelopeData(value);
+  if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
+  const record = data as Record<string, unknown>;
+  if (typeof record.entitled !== "boolean") throw new GymApiError("INVALID_RESPONSE", 502);
+  const pending = pendingRoutineProOrder(record);
+  if (record.entitled === false && record.orderRef !== undefined && !pending) {
+    throw new GymApiError("INVALID_RESPONSE", 502);
+  }
+  return { entitled: record.entitled, pending };
+}
+
+function samePendingPayment(
+  prepared: PendingRoutineProOrder | null,
+  current: PendingRoutineProOrder | null,
+): boolean {
+  if (!prepared || !current) return prepared === current;
+  return (
+    current.canResume &&
+    prepared.orderRef === current.orderRef &&
+    prepared.payerLabel === current.payerLabel &&
+    prepared.initialTemplateId === current.initialTemplateId
+  );
+}
+
+function compactEquipment(item: ReturnType<typeof EquipmentSchema.parse>) {
+  return {
+    id: item.id,
+    name: item.name,
+    manufacturer: item.manufacturer,
+    model: item.model,
+    category: item.category,
+    dimensionsCm: item.dimensionsCm,
+    accessFeatures: item.accessibility.slice(0, 3),
+    locationZone: item.locationZone,
+    sourceUrl: item.sourceUrl,
+  };
+}
 
 export function WebMcpBridge() {
   const pathname = usePathname();
+  const {
+    contextActive,
+    setContextActive,
+    applyEquipmentSearch,
+    openEquipment,
+    applyPersonalizedRoutine,
+  } = useGymExperience();
   const [open, setOpen] = useState(false);
+  const [hasPersistedRoutine, setHasPersistedRoutine] = useState(false);
   const [events, setEvents] = useState<ExecutionEvent[]>([]);
   const [confirmation, setConfirmation] = useState<MutationConfirmationRequest | null>(null);
+  const [confirmationPhase, setConfirmationPhase] = useState<string | null>(null);
   const confirmationResolver = useRef<((approved: boolean) => void) | null>(null);
+  const activeConfirmation = useRef<MutationConfirmationRequest | null>(null);
+  const confirmationAbortCleanup = useRef<(() => void) | null>(null);
+  const confirmationApprovalFrame = useRef<number | null>(null);
+  const confirmationApprovalScheduled = useRef(false);
+  const preparedQuotes = useRef(new Map<string, PreparedQuote>());
+  const preparedFeedback = useRef(new Map<string, PreparedFeedback>());
   const trace = useCallback((tool: string) => {
     setEvents((current) => [{ tool, at: new Date().toISOString() }, ...current].slice(0, 8));
   }, []);
 
+  const clearConfirmation = useCallback((expected?: MutationConfirmationRequest) => {
+    if (expected && activeConfirmation.current !== expected) return;
+    confirmationAbortCleanup.current?.();
+    confirmationAbortCleanup.current = null;
+    if (confirmationApprovalFrame.current !== null) {
+      window.cancelAnimationFrame(confirmationApprovalFrame.current);
+      confirmationApprovalFrame.current = null;
+    }
+    confirmationResolver.current = null;
+    activeConfirmation.current = null;
+    confirmationApprovalScheduled.current = false;
+    setConfirmation((current) => (!expected || current === expected ? null : current));
+    setConfirmationPhase(null);
+  }, []);
+
+  const finishMutationExecution = useCallback(() => {
+    clearConfirmation();
+  }, [clearConfirmation]);
+
+  useEffect(
+    () => () => {
+      confirmationAbortCleanup.current?.();
+      if (confirmationApprovalFrame.current !== null) {
+        window.cancelAnimationFrame(confirmationApprovalFrame.current);
+      }
+      confirmationResolver.current?.(false);
+      confirmationResolver.current = null;
+      activeConfirmation.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!["/passport", "/session", "/session/feedback"].includes(pathname)) {
+      setHasPersistedRoutine(false);
+      return;
+    }
+    const controller = new AbortController();
+    void Promise.allSettled([
+      fetchBoundedJson<unknown>("/api/context/current", {}, { signal: controller.signal }),
+      fetchBoundedJson<unknown>("/api/session", {}, { signal: controller.signal }),
+    ]).then(([contextResult, sessionResult]) => {
+      if (controller.signal.aborted) return;
+      setContextActive(
+        contextResult.status === "fulfilled" &&
+          Boolean(
+            contextResult.value &&
+            typeof contextResult.value === "object" &&
+            (contextResult.value as Record<string, unknown>).active === true,
+          ),
+      );
+      setHasPersistedRoutine(
+        sessionResult.status === "fulfilled" &&
+          GeneratedSessionSchema.safeParse(
+            sessionResult.value && typeof sessionResult.value === "object"
+              ? (sessionResult.value as Record<string, unknown>).session
+              : undefined,
+          ).success,
+      );
+    });
+    return () => controller.abort();
+  }, [pathname, setContextActive]);
+
   const handlers = useMemo<GymToolHandlers>(
     () => ({
-      get_gym_profile: () => {
+      get_gym_profile: async (_input, context) => {
+        const response = await fetchBoundedJson<unknown>("/api/gym-profile", {}, context);
         trace("get_gym_profile");
-        return gymProfile;
+        return envelopeData(response);
       },
-      search_equipment: (input) => {
+      search_equipment: async (input, context) => {
+        const params = new URLSearchParams();
+        if (input.query) params.set("q", input.query);
+        if (input.categories?.length === 1) params.set("category", input.categories[0]!);
+        const response = await fetchBoundedJson<unknown>(
+          `/api/equipment${params.size ? `?${params}` : ""}`,
+          {},
+          context,
+        );
+        const data = envelopeData(response);
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !Array.isArray((data as { equipment?: unknown }).equipment)
+        ) {
+          throw new GymApiError("INVALID_RESPONSE", 502);
+        }
+        const matches = (data as { equipment: unknown[] }).equipment
+          .map((item) => EquipmentSchema.parse(item))
+          .filter((item) =>
+            matchesEquipmentSearch(item, {
+              query: input.query,
+              categories: input.categories,
+              maxWidthCm: input.maxWidthCm,
+              maxDepthCm: input.maxDepthCm,
+              accessibleOnly: input.accessible,
+              availableOnly: true,
+            }),
+          );
+        // Publish the tool result before mirroring it into the route UI. The
+        // provider update must not invalidate the invocation that caused it.
+        window.setTimeout(() => {
+          if (!context.signal?.aborted) applyEquipmentSearch(input, matches.length);
+        }, 0);
         trace("search_equipment");
-        const query = input.query?.trim().toLowerCase();
-        const matches = equipmentCatalog
-          .filter((item) => {
-            if (!item.available) return false;
-            if (input.categories?.length && !input.categories.includes(item.category)) return false;
-            if (input.maxWidthCm && item.dimensionsCm.width > input.maxWidthCm) return false;
-            if (input.maxDepthCm && item.dimensionsCm.length > input.maxDepthCm) return false;
-            if (input.accessible && item.accessibility.length === 0) return false;
-            return (
-              !query ||
-              [item.name, item.summary, ...item.capabilities, ...item.suitabilityTags]
-                .join(" ")
-                .toLowerCase()
-                .includes(query)
-            );
-          })
-          .slice(0, input.limit ?? 10);
+        const requestedLimit = input.limit ?? 10;
+        const returned = matches.slice(0, Math.min(requestedLimit, 5));
         return {
           count: matches.length,
-          catalogVersion: "verified-2026-08-27",
-          equipment: matches.map((item) => ({
-            id: item.id,
-            name: item.name,
-            manufacturer: item.manufacturer,
-            model: item.model,
-            category: item.category,
-            capabilities: item.capabilities,
-            dimensionsCm: item.dimensionsCm,
-            accessibility: item.accessibility,
-            locationZone: item.locationZone,
-            sourceUrl: item.sourceUrl,
-          })),
+          returned: returned.length,
+          truncated: matches.length > returned.length,
+          equipment: returned.map(compactEquipment),
         };
       },
-      get_equipment: ({ equipmentId }) => {
+      get_equipment: async ({ equipmentId }, context) => {
+        const response = await fetchBoundedJson<unknown>(
+          `/api/equipment/${encodeURIComponent(equipmentId)}`,
+          {},
+          context,
+        );
+        const data = envelopeData(response);
+        if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
+        const item = EquipmentSchema.parse((data as { equipment?: unknown }).equipment);
+        // Let the WebMCP promise publish its bounded result before this
+        // route change tears down the route-scoped registration.
+        window.setTimeout(() => {
+          if (!context.signal?.aborted) openEquipment(item.slug);
+        }, 0);
         trace("get_equipment");
-        const item = equipmentCatalog.find((entry) => entry.id === equipmentId);
-        return item ? { equipment: item } : { error: "Equipment not found in this Gym catalog." };
+        return { equipment: compactEquipment(item) };
       },
-      get_active_context: async () => {
+      get_active_context: async (_input, context) => {
+        const response = await fetchBoundedJson<unknown>("/api/context/current", {}, context);
+        if (!response || typeof response !== "object")
+          throw new GymApiError("INVALID_RESPONSE", 502);
+        const record = response as Record<string, unknown>;
+        if (record.active !== true) throw new GymApiError("CONTEXT_REQUIRED", 401);
+        const projection = GymContextProjectionSchema.parse(record.projection);
         trace("get_active_context");
-        const response = await fetch("/api/context/current", { cache: "no-store" });
-        if (!response.ok) {
-          return { active: false, message: "No one-use Passport context is active." };
-        }
-        return (await response.json()) as { active: true; projection: GymContextProjection };
+        return { active: true, projection };
       },
-      create_session_draft: async ({ templateId }) => {
-        trace("create_session_draft");
-        const response = await fetch("/api/session", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ templateId, createdVia: "webmcp" }),
-        });
-        return (await response.json()) as { session?: GeneratedSession; error?: string };
+      get_routine_pro_offer: async (_input, context) => {
+        const response = await fetchBoundedJson<unknown>(
+          "/api/commerce/routine-pro/offer",
+          {},
+          context,
+        );
+        const offer = RoutineProOfferSchema.parse(envelopeData(response));
+        trace("get_routine_pro_offer");
+        return offer;
       },
-      record_session_feedback: async ({ sessionId, perceivedExertion, pain, notes }) => {
-        trace("record_session_feedback");
-        const currentResponse = await fetch("/api/session", { cache: "no-store" });
-        const current = (await currentResponse.json()) as {
-          session?: GeneratedSession | null;
-        };
-        if (!current.session || current.session.id !== sessionId) {
-          return { error: "That walkthrough is not the active persisted Gym session." };
-        }
-        const payload: SessionFeedback = {
-          sessionId,
-          perceivedEffort: perceivedExertion ?? 5,
-          painDuringSession: pain ?? 0,
-          completedExerciseIds: current.session.exercises.map((item) => item.equipmentId),
-          ...(notes ? { notes } : {}),
-          submittedAt: new Date().toISOString(),
-        };
-        const response = await fetch("/api/feedback", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        return (await response.json()) as unknown;
+      create_personalized_routine: {
+        prepare: async (input, context) => {
+          const [offerResponse, statusResponse] = await Promise.all([
+            fetchBoundedJson<unknown>("/api/commerce/routine-pro/offer", {}, context),
+            fetchBoundedJson<unknown>("/api/commerce/routine-pro/status", {}, context),
+          ]);
+          const offer = RoutineProOfferSchema.parse(envelopeData(offerResponse));
+          const status = parseRoutineProStatus(statusResponse);
+          if (offer.entitled !== status.entitled) {
+            throw new GymApiError(
+              "QUOTE_CHANGED",
+              409,
+              "Routine Pro status changed. Review the current offer again.",
+            );
+          }
+          if (status.pending && !status.pending.canResume) {
+            throw new GymApiError(
+              "ORDER_PENDING",
+              409,
+              "The existing payment is being reconciled and cannot be resumed yet.",
+            );
+          }
+          const preparedConfirmation = prepareRoutineProConfirmation({
+            offer,
+            requestedInput: input,
+            pending: status.pending,
+          });
+          const effectiveMode = preparedConfirmation.effectiveInput.paymentMode;
+          if (!offer.entitled && !effectiveMode) {
+            throw new GymApiError(
+              "PAYMENT_MODE_REQUIRED",
+              402,
+              "Choose human_checkout or agent_wallet after reviewing the Pro offer.",
+            );
+          }
+          if (!offer.entitled && effectiveMode && !offer.supportedModes.includes(effectiveMode)) {
+            throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
+          }
+          for (const [key, prepared] of preparedQuotes.current) {
+            if (Date.parse(prepared.offer.quoteValidUntil) <= Date.now()) {
+              preparedQuotes.current.delete(key);
+            }
+          }
+          if (preparedQuotes.current.size >= 20) {
+            const oldest = preparedQuotes.current.keys().next().value;
+            if (oldest) preparedQuotes.current.delete(oldest);
+          }
+          preparedQuotes.current.set(offer.quoteDigest, {
+            offer,
+            requestedInput: input,
+            effectiveInput: preparedConfirmation.effectiveInput,
+            pending: status.pending,
+          });
+          return preparedConfirmation.preparation;
+        },
+        execute: async (input, context) => {
+          try {
+            const digest = context.mutationApproval?.quoteDigest;
+            const prepared = digest ? preparedQuotes.current.get(digest) : undefined;
+            if (!digest || !prepared || !sameRoutineInput(prepared.requestedInput, input)) {
+              throw new GymApiError("QUOTE_CHANGED", 409);
+            }
+            preparedQuotes.current.delete(digest);
+            const currentStatus = parseRoutineProStatus(
+              await fetchBoundedJson<unknown>(
+                prepared.pending
+                  ? `/api/commerce/routine-pro/status?order=${encodeURIComponent(prepared.pending.orderRef)}`
+                  : "/api/commerce/routine-pro/status",
+                {},
+                context,
+              ),
+            );
+            if (
+              currentStatus.entitled !== prepared.offer.entitled ||
+              !samePendingPayment(prepared.pending, currentStatus.pending)
+            ) {
+              throw new GymApiError(
+                "QUOTE_CHANGED",
+                409,
+                "Routine Pro status changed. Review the current action again.",
+              );
+            }
+            const endpoint = prepared.offer.entitled
+              ? "/api/routines/personalized"
+              : prepared.effectiveInput.paymentMode === "agent_wallet"
+                ? "/api/commerce/routine-pro/agent-pay"
+                : "/api/commerce/routine-pro/checkout";
+            const response = await fetchBoundedJson<unknown>(
+              endpoint,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  ...prepared.effectiveInput,
+                  initiatedVia: "webmcp",
+                  quoteValidUntil: prepared.offer.quoteValidUntil,
+                  quoteDigest: digest,
+                }),
+              },
+              context,
+            );
+            const data = envelopeData(response);
+            if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
+            const record = data as Record<string, unknown>;
+            if (record.session && typeof record.savedRoutineRef === "string") {
+              const session = GeneratedSessionSchema.parse(record.session);
+              applyPersonalizedRoutine(session, record.savedRoutineRef);
+              trace("create_personalized_routine");
+              return {
+                created: true,
+                savedToPassport: true,
+                savedRoutineRef: record.savedRoutineRef,
+                routine: {
+                  title: session.title,
+                  durationMinutes: session.durationMinutes,
+                  stations: session.exercises.length,
+                  template: `${session.templateId}@${session.templateVersion}`,
+                  catalogVersion: session.catalogVersion,
+                },
+              };
+            }
+            if (typeof record.checkoutUrl === "string") {
+              const checkout = new URL(record.checkoutUrl);
+              if (checkout.protocol !== "https:" || checkout.hostname !== "checkout.stripe.com") {
+                throw new GymApiError("INVALID_RESPONSE", 502);
+              }
+              trace("create_personalized_routine");
+              window.setTimeout(() => window.location.assign(checkout), 0);
+              return {
+                paymentPending: true,
+                payer: "Human test checkout",
+                resumeExisting: record.resumed === true,
+              };
+            }
+            throw new GymApiError("INVALID_RESPONSE", 502);
+          } finally {
+            finishMutationExecution();
+          }
+        },
+      },
+      record_session_feedback: {
+        prepare: async (input, context) => {
+          const currentResponse = await fetchBoundedJson<unknown>("/api/session", {}, context);
+          const current = GeneratedSessionSchema.safeParse(
+            currentResponse && typeof currentResponse === "object"
+              ? (currentResponse as { session?: unknown }).session
+              : undefined,
+          );
+          if (!current.success || current.data.id !== input.sessionId) {
+            throw new GymApiError("SESSION_MISMATCH", 409);
+          }
+          if (preparedFeedback.current.size >= 20) {
+            const oldest = preparedFeedback.current.keys().next().value;
+            if (oldest) preparedFeedback.current.delete(oldest);
+          }
+          const quoteDigest = crypto.randomUUID();
+          const completedExerciseIds = current.data.exercises.map((item) => item.equipmentId);
+          preparedFeedback.current.set(quoteDigest, { completedExerciseIds, input });
+          return {
+            ...prepareFeedbackConfirmation(input, completedExerciseIds),
+            quoteDigest,
+          };
+        },
+        execute: async ({ sessionId, perceivedExertion, pain, notes }, context) => {
+          try {
+            const digest = context.mutationApproval?.quoteDigest;
+            const prepared = digest ? preparedFeedback.current.get(digest) : undefined;
+            const effectiveInput = { sessionId, perceivedExertion, pain, notes };
+            if (!digest || !prepared || !sameFeedbackInput(prepared.input, effectiveInput)) {
+              throw new GymApiError("QUOTE_CHANGED", 409);
+            }
+            preparedFeedback.current.delete(digest);
+            const currentResponse = await fetchBoundedJson<unknown>("/api/session", {}, context);
+            if (!currentResponse || typeof currentResponse !== "object") {
+              throw new GymApiError("INVALID_RESPONSE", 502);
+            }
+            const current = GeneratedSessionSchema.safeParse(
+              (currentResponse as { session?: unknown }).session,
+            );
+            if (!current.success || current.data.id !== sessionId) {
+              throw new GymApiError("SESSION_MISMATCH", 409);
+            }
+            const completedExerciseIds = current.data.exercises.map((item) => item.equipmentId);
+            if (
+              JSON.stringify(completedExerciseIds) !== JSON.stringify(prepared.completedExerciseIds)
+            ) {
+              throw new GymApiError("SESSION_MISMATCH", 409);
+            }
+            const payload: SessionFeedback = {
+              sessionId,
+              perceivedEffort: perceivedExertion ?? 5,
+              painDuringSession: pain ?? 0,
+              completedExerciseIds: prepared.completedExerciseIds,
+              ...(notes !== undefined ? { notes } : {}),
+              submittedAt: new Date().toISOString(),
+            };
+            const response = await fetchBoundedJson<unknown>(
+              "/api/feedback",
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(payload),
+              },
+              context,
+            );
+            trace("record_session_feedback");
+            return response;
+          } finally {
+            finishMutationExecution();
+          }
+        },
       },
     }),
-    [trace],
+    [applyEquipmentSearch, applyPersonalizedRoutine, finishMutationExecution, openEquipment, trace],
   );
 
   const completeCatalog = useMemo(() => createGymToolCatalog(handlers), [handlers]);
@@ -149,32 +519,69 @@ export function WebMcpBridge() {
     const allowed = pathname.startsWith("/equipment")
       ? ["get_gym_profile", "search_equipment", "get_equipment"]
       : pathname === "/passport"
-        ? ["get_gym_profile", "get_active_context"]
+        ? ["get_gym_profile", ...(contextActive ? ["get_active_context"] : [])]
         : pathname === "/session/feedback"
-          ? ["get_active_context", "record_session_feedback"]
+          ? contextActive && hasPersistedRoutine
+            ? ["get_active_context", "record_session_feedback"]
+            : []
           : pathname === "/session"
             ? [
                 "get_gym_profile",
                 "search_equipment",
                 "get_equipment",
-                "get_active_context",
-                "create_session_draft",
+                ...(contextActive
+                  ? ["get_active_context", "get_routine_pro_offer", "create_personalized_routine"]
+                  : []),
               ]
             : ["get_gym_profile", "search_equipment", "get_equipment"];
     return completeCatalog.filter((tool) => allowed.includes(tool.name));
-  }, [completeCatalog, pathname]);
+  }, [completeCatalog, contextActive, hasPersistedRoutine, pathname]);
 
-  const confirmMutation = useCallback<ConfirmMutation>((request) => {
-    setConfirmation(request);
-    return new Promise<boolean>((resolve) => {
-      confirmationResolver.current = resolve;
-    });
-  }, []);
-  const decide = useCallback((approved: boolean) => {
-    confirmationResolver.current?.(approved);
-    confirmationResolver.current = null;
-    setConfirmation(null);
-  }, []);
+  const confirmMutation = useCallback<ConfirmMutation>(
+    (request) => {
+      if (request.signal?.aborted || activeConfirmation.current) return false;
+      return new Promise<boolean>((resolve) => {
+        activeConfirmation.current = request;
+        confirmationResolver.current = resolve;
+        confirmationApprovalScheduled.current = false;
+        setConfirmationPhase(null);
+        setConfirmation(request);
+
+        const abort = () => {
+          if (activeConfirmation.current !== request) return;
+          confirmationResolver.current?.(false);
+          clearConfirmation(request);
+        };
+        request.signal?.addEventListener("abort", abort, { once: true });
+        confirmationAbortCleanup.current = () =>
+          request.signal?.removeEventListener("abort", abort);
+        if (request.signal?.aborted) abort();
+      });
+    },
+    [clearConfirmation],
+  );
+  const decide = useCallback(
+    (approved: boolean) => {
+      const request = activeConfirmation.current;
+      const resolve = confirmationResolver.current;
+      if (!request || !resolve || confirmationApprovalScheduled.current) return;
+      if (!approved) {
+        resolve(false);
+        clearConfirmation(request);
+        return;
+      }
+
+      confirmationApprovalScheduled.current = true;
+      setConfirmationPhase(webMcpMutationBusyLabel(request));
+      confirmationApprovalFrame.current = window.requestAnimationFrame(() => {
+        confirmationApprovalFrame.current = null;
+        if (activeConfirmation.current !== request || request.signal?.aborted) return;
+        confirmationResolver.current = null;
+        resolve(true);
+      });
+    },
+    [clearConfirmation],
+  );
   const { status, error, toolNames } = useWebMCPTools(routeTools, {
     confirmMutation,
     maxOutputChars: 1500,
@@ -232,9 +639,7 @@ export function WebMcpBridge() {
                       ? "WebMCP browser API unavailable"
                       : `WebMCP is ${status}`}
                   </strong>
-                  <span>
-                    The ordinary site still works; this is not reported as an agent execution.
-                  </span>
+                  <span>The ordinary site still works; this is not reported as an execution.</span>
                 </p>
               </div>
             )}
@@ -277,23 +682,57 @@ export function WebMcpBridge() {
         ) : null}
       </div>
       {confirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => decide(false)}>
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            if (!confirmationPhase) decide(false);
+          }}
+        >
           <section
             className="webmcp-confirm"
             role="alertdialog"
             aria-modal="true"
+            aria-busy={confirmationPhase !== null}
+            aria-labelledby="webmcp-confirm-title"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <p className="eyebrow">WebMCP · Human confirmation</p>
-            <h2>{confirmation.title}</h2>
+            <h2 id="webmcp-confirm-title">{confirmation.title}</h2>
             <p>{confirmation.description}</p>
-            <pre>{JSON.stringify(confirmation.input, null, 2)}</pre>
+            <dl className="confirmation-fields">
+              {confirmation.fields.map((field) => (
+                <div key={field.label}>
+                  <dt>{field.label}</dt>
+                  <dd>{field.value}</dd>
+                </div>
+              ))}
+            </dl>
             <div>
-              <button className="button button--light" onClick={() => decide(false)}>
-                Decline
+              <button
+                type="button"
+                className="button button--light"
+                disabled={confirmationPhase !== null}
+                onClick={() => decide(false)}
+              >
+                {confirmation.cancelLabel ?? "Decline"}
               </button>
-              <button className="button button--lime" onClick={() => decide(true)}>
-                Confirm action
+              <button
+                type="button"
+                className="button button--lime"
+                disabled={confirmationPhase !== null}
+                aria-busy={confirmationPhase !== null}
+                aria-live="polite"
+                onClick={() => decide(true)}
+              >
+                {confirmationPhase ? (
+                  <>
+                    <LoaderCircle className="spin" size={18} aria-hidden="true" />
+                    {confirmationPhase}
+                  </>
+                ) : (
+                  (confirmation.confirmLabel ?? "Confirm action")
+                )}
               </button>
             </div>
           </section>

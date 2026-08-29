@@ -1,11 +1,20 @@
 # Eval fixtures
 
-`webmcp-evals.json` is a model-agnostic dataset. It describes the visible app state, full route-specific tool registry, user prompt, expected calls, and safety assertions. It deliberately does not contain model credentials or real personal data.
+`webmcp-evals.json` is a model-agnostic synthetic dataset. It describes visible
+state, the complete route-appropriate registry, a user prompt, expected calls,
+and safety assertions for 17 stable scenarios.
 
 Validate deterministic structure:
 
 ```bash
-node tests/evals/validate.mjs
+pnpm evals:validate
 ```
 
-An agent harness should translate each case into the target model's eval format, run direct and ambiguous prompt variants, and preserve the raw trace as a CI artifact. Never weaken `forbiddenOutputFields`, `mustNotCall`, confirmation, or authorization assertions to improve a model score.
+This command does not execute a model, browser agent, authorization service,
+Stripe, or MPP. Executed evidence belongs in `docs/EVAL_RESULTS.md` and must be
+tied to a deployed Git SHA.
+
+An agent harness should run direct and ambiguous variants against the complete
+registry and retain a redacted raw trace. Never weaken confirmation,
+authorization, replay, price authority, `mustNotCall`, or
+`mustNotExpose`/`forbiddenOutputFields` assertions to improve a model score.

@@ -3,10 +3,14 @@
 ## Prerequisites
 
 - Node.js 20.19 or newer
-- pnpm 11.19 or compatible 11.x
-- Vercel CLI (for linking and pulling project-scoped variables)
-- A Neon development branch or another disposable PostgreSQL database
-- Chrome with WebMCP support enabled when testing agent tools
+- pnpm 11.x
+- a disposable Neon branch or PostgreSQL database for authenticated/stateful journeys
+- a Chrome build supported by the current official WebMCP testing instructions
+  for native manual execution
+- Vercel CLI only when linking or pulling project-scoped variables
+
+Stripe and MPP are optional locally. Keep their feature flags false unless using
+dedicated test-mode/testnet credentials and synthetic data.
 
 ## Install and run
 
@@ -14,82 +18,114 @@
 git clone https://github.com/AlexCo888/webmcp_adaptive_world.git
 cd webmcp_adaptive_world
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+```
+
+Create separate environment files in `apps/passport/.env.local` and
+`apps/gym/.env.local`; do not create one root file mixing both projects. Follow
+[`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md).
+
+Both files require an `ADAPTIVE_WORLD_DEMO_SECRET`, but the values must be
+independently generated. The Passport value signs the short-lived WebMCP
+projection-preparation token; the Gym value signs its anonymous HttpOnly
+session. Reusing one value across the two files collapses those trust domains.
+There are no app-level `.env.example` files to copy: use the authoritative
+project tables in `ENVIRONMENT_VARIABLES.md`; `packages/db/.env.example` is
+only for database tooling.
+
+The database package does not load either app's `.env.local`. Export the exact
+verified database URL explicitly for migration and seed commands. Prefer a
+direct connection for the one-off migration when the provider recommends it:
+
+```bash
+export ADAPTIVE_WORLD_DB_TOOL_URL='postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require'
+DATABASE_URL="$ADAPTIVE_WORLD_DB_TOOL_URL" pnpm --filter @adaptive-world/db migrate
+DATABASE_URL="$ADAPTIVE_WORLD_DB_TOOL_URL" CONFIRM_SYNTHETIC_DEMO_SEED=true pnpm --filter @adaptive-world/db seed:demo
+unset ADAPTIVE_WORLD_DB_TOOL_URL
+```
+
+Run the seed only against a verified disposable database containing synthetic
+demo data. `SEED_DEMO` does not run this script; it only controls development
+self-sign-up.
+
+Run both applications:
+
+```bash
 pnpm dev
 ```
 
-To keep ports deterministic during a demo, use two terminals:
+For deterministic ports, use separate terminals:
 
 ```bash
 pnpm --filter @adaptive-world/passport dev
 pnpm --filter @adaptive-world/gym dev
 ```
 
-Expected local origins:
+Expected origins are Passport `http://127.0.0.1:3000` and Gym
+`http://127.0.0.1:3001`.
 
-- Passport: `http://localhost:3000`
-- Gym: `http://localhost:3001`
-
-## Link both Vercel projects
-
-Each app is a separate Vercel project and therefore gets its own `.vercel/project.json` and `.env.local` inside its app directory.
+## Optional Vercel linking
 
 ```bash
 vercel link --cwd apps/passport --project adaptive-world-passport
-vercel env pull apps/passport/.env.local --cwd apps/passport --environment development --yes
+vercel env pull .env.local --cwd apps/passport --environment development --yes
 
 vercel link --cwd apps/gym --project adaptive-world-gym
-vercel env pull apps/gym/.env.local --cwd apps/gym --environment development --yes
+vercel env pull .env.local --cwd apps/gym --environment development --yes
 ```
 
-Do not create one root `.env.local` that mixes both projects. Re-pull after changing Vercel variables. Local OIDC credentials, when used, are short-lived and may need to be pulled again.
+Re-pull after changing variables. Never copy provider/wallet secrets between
+Preview and Production.
 
-## Database setup
+## WebMCP testing
 
-Use a pooled Neon URL for application requests and a direct URL for migration tooling:
+Follow the current
+[official Chrome WebMCP instructions](https://developer.chrome.com/docs/ai/webmcp)
+on the day of the run. As documented on 2026-08-07, local testing requires
+opening `chrome://flags/#enable-webmcp-testing`, setting the flag to **Enabled**,
+and relaunching Chrome. The API is experimental, so verify that instruction
+against the linked source rather than copying an older flag name.
 
-```text
-DATABASE_URL=postgresql://...-pooler.../adaptive_world
-DATABASE_URL_DIRECT=postgresql://.../adaptive_world
-```
+Visit each application directly and confirm that `document.modelContext`
+exists. Inspect the registered tools with the currently documented Chrome
+inspector/DevTools workflow and confirm that they change with route,
+authenticated role, and state. Record the exact Chrome channel/version,
+WebMCP configuration, official-instructions date, and observed registry in
+[`EVAL_RESULTS.md`](./EVAL_RESULTS.md).
 
-Run the versioned migration and guarded, idempotent synthetic seed:
+The ordinary UI must remain complete without WebMCP. Never substitute DOM
+scraping for a claimed WebMCP run.
+
+## Deterministic gates
 
 ```bash
-pnpm --filter @adaptive-world/db migrate
-CONFIRM_SYNTHETIC_DEMO_SEED=true pnpm --filter @adaptive-world/db seed:demo
+pnpm check
+pnpm e2e
 ```
 
-The seed creates two Better Auth accounts, six synthetic Passports, two exact doctor relationships, one sample guidance record, and 12 source-backed product models. Verify the target database before setting the confirmation flag.
+`pnpm check` covers formatting, linting, type checking, unit tests, structural
+eval-fixture validation, and production builds. `pnpm e2e` starts the local apps
+and runs public browser smoke plus the deterministic `document.modelContext`
+shim suite.
 
-## WebMCP local testing
+The shim records tool registration, execution, output/error, and
+unregistration. It proves integration mechanics only; it is neither native
+Chrome WebMCP nor a model-selection run.
 
-WebMCP is experimental. Follow the current browser instructions before testing:
-
-1. Open `chrome://flags/#enable-webmcp-testing`.
-2. Enable WebMCP testing and relaunch Chrome.
-3. Visit the app directly; clients discover tools only from the visited page.
-4. Inspect the registered tools in Chrome DevTools under **Application → WebMCP**.
-5. Verify that tools change when route, role, or selected patient changes.
-
-Never fall back to DOM scraping when validating WebMCP. Validate the actual tool registry and execute only synthetic demo actions.
-
-## Quality gates
+Run only the shim spec with:
 
 ```bash
-node tests/evals/validate.mjs
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm e2e:shim
 ```
 
-Optional browser smoke tests:
+## Live and provider evidence
 
-```bash
-pnpm exec playwright install chromium
-pnpm exec playwright test
-```
+Authenticated revocation/reset, native Chrome WebMCP, ChatGPT in-app browser,
+Stripe test Checkout/webhook, and MPP testnet journeys require an isolated
+deployed environment or explicitly configured synthetic test database. They
+are release checks, not silently skipped claims in normal PR CI.
 
-The Playwright suite is UI smoke coverage. WebMCP agent behavior is assessed with the fixtures in `tests/evals/` and manual registry inspection.
+Record each completed run in [`EVAL_RESULTS.md`](./EVAL_RESULTS.md) with the
+exact Git SHA, environment, denominators, and redacted artifact. Do not call a
+mocked Playwright provider response a real provider smoke.

@@ -1,5 +1,4 @@
 export interface GymProjectionInput {
-  ageBand?: string;
   goals?: readonly string[];
   experienceLevel?: string;
   preferredActivities?: readonly string[];
@@ -24,7 +23,6 @@ const ALLOWED_KEYS = new Set([
   "purpose",
   "generatedAt",
   "validUntil",
-  "ageBand",
   "goals",
   "experienceLevel",
   "preferredActivities",
@@ -89,7 +87,6 @@ export function buildGymProjection(
     purpose: "adaptive_gym_session",
     generatedAt: now.toISOString(),
     validUntil: new Date(now.getTime() + validityMs).toISOString(),
-    ageBand: input.ageBand?.slice(0, 32),
     goals: cleanStrings(input.goals),
     experienceLevel: input.experienceLevel?.slice(0, 64),
     preferredActivities: cleanStrings(input.preferredActivities),

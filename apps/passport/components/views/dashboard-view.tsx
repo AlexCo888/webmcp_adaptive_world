@@ -16,7 +16,8 @@ function formatDate(value: string) {
 }
 
 export function DashboardView() {
-  const { patient, grants, guidance } = usePortal();
+  const { patient, grants, guidance, savedRoutines } = usePortal();
+  if (!patient) throw new Error("The owner Passport is unavailable.");
   const initials = patient.identity.displayName
     .split(" ")
     .slice(0, 2)
@@ -150,6 +151,36 @@ export function DashboardView() {
                   </div>
                 </div>
               ))}
+            </section>
+          ) : null}
+
+          {savedRoutines.length ? (
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <h2>Saved routines</h2>
+                  <p className="card-subtitle">Personalized Gym routines saved to this Passport</p>
+                </div>
+                <span className="pill neutral">Synthetic demo</span>
+              </div>
+              <div className="scope-list">
+                {savedRoutines.map((routine) => (
+                  <Link className="scope" href={`/routines/${routine.id}`} key={routine.id}>
+                    <div className="scope-main">
+                      <div className="scope-icon">
+                        <Icon name="activity" width="15" />
+                      </div>
+                      <div>
+                        <strong>{routine.title}</strong>
+                        <small>
+                          Saved {formatDate(routine.savedAt)} · Template {routine.templateVersion}
+                        </small>
+                      </div>
+                    </div>
+                    <span className="text-link">Open →</span>
+                  </Link>
+                ))}
+              </div>
             </section>
           ) : null}
 

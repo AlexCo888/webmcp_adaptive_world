@@ -21,10 +21,12 @@ void test("contains 12 verified product records with unique ids, slugs, and sour
   assert.equal(EquipmentCatalogSchema.safeParse(equipmentCatalog).success, true);
   assert.equal(new Set(equipmentCatalog.map(({ id }) => id)).size, 12);
   assert.equal(new Set(equipmentCatalog.map(({ slug }) => slug)).size, 12);
+  assert.equal(new Set(equipmentCatalog.map(({ imageUrl }) => imageUrl)).size, 12);
   for (const item of equipmentCatalog) {
     assert.equal(item.verifiedProduct, true);
     assert.match(item.sourceUrl, /^https:\/\//u);
-    assert.match(item.imageUrl, /^https:\/\//u);
+    assert.match(item.imageUrl, /^\/images\/equipment\/[a-z0-9-]+\.svg$/u);
+    assert.doesNotMatch(item.imageUrl, /^https?:\/\//u);
     assert.equal(item.syntheticFacilityInventory, true);
   }
 });

@@ -42,8 +42,10 @@ export default async function EquipmentDetailPage({ params }: Props) {
           />
           <span className="tag tag--green">{item.category.replaceAll("-", " ")}</span>
           <div className="detail-visual__caption">
-            <span>{item.manufacturer}</span>
-            <strong>{item.model}</strong>
+            <span>Original neutral illustration</span>
+            <strong>
+              {item.manufacturer} · {item.model} record
+            </strong>
           </div>
         </div>
         <div className="detail-copy">

@@ -4,7 +4,8 @@ import type {
   StoredContextGrant,
 } from "@adaptive-world/security";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import type { Database } from "./client";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import type * as schema from "./schema";
 import { contextGrants } from "./schema";
 
 function toStored(row: typeof contextGrants.$inferSelect): StoredContextGrant {
@@ -24,7 +25,9 @@ function toStored(row: typeof contextGrants.$inferSelect): StoredContextGrant {
   };
 }
 
-export function createContextGrantStore(db: Database): ContextGrantStore {
+export function createContextGrantStore<TQueryResult extends PgQueryResultHKT>(
+  db: Pick<PgDatabase<TQueryResult, typeof schema>, "insert" | "update">,
+): ContextGrantStore {
   return {
     async create(input: NewStoredContextGrant) {
       const [row] = await db
@@ -82,8 +85,8 @@ export function createContextGrantStore(db: Database): ContextGrantStore {
 }
 
 /** Set per-request identity only inside a transaction; SET LOCAL resets on commit. */
-export async function setRlsIdentity(
-  tx: Pick<Database, "execute">,
+export async function setRlsIdentity<TQueryResult extends PgQueryResultHKT>(
+  tx: Pick<PgDatabase<TQueryResult, typeof schema>, "execute">,
   userId: string,
   role: "patient" | "doctor" | "admin",
 ): Promise<void> {

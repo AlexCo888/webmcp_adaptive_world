@@ -37,9 +37,9 @@
             "recipient": { "const": "adaptive-gym" },
             "scopes": {
               "type": "array",
-              "items": { "const": "gym.context.read" },
-              "minItems": 1,
-              "maxItems": 1,
+              "items": { "enum": ["gym.context.read", "gym.feedback.write"] },
+              "minItems": 2,
+              "maxItems": 2,
               "uniqueItems": true
             },
             "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 15, "default": 5 }
@@ -84,15 +84,6 @@
           },
           "required": ["patientId", "section"]
         },
-        "get_patient_changes": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "patientId": { "$ref": "#/$defs/id" },
-            "since": { "type": "string", "format": "date-time" }
-          },
-          "required": ["patientId", "since"]
-        },
         "open_patient_source": {
           "type": "object",
           "additionalProperties": false,
@@ -117,7 +108,6 @@
         "search_my_patients",
         "get_patient_overview",
         "get_patient_section",
-        "get_patient_changes",
         "open_patient_source",
         "add_clinical_guidance"
       ]
@@ -151,7 +141,8 @@
           "required": ["equipmentId"]
         },
         "get_active_context": { "$ref": "#/$defs/emptyInput" },
-        "create_session_draft": {
+        "get_routine_pro_offer": { "$ref": "#/$defs/emptyInput" },
+        "create_personalized_routine": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -161,6 +152,10 @@
                 "low_impact_orientation",
                 "accessible_equipment_tour"
               ]
+            },
+            "paymentMode": {
+              "type": "string",
+              "enum": ["human_checkout", "agent_wallet"]
             }
           },
           "required": ["templateId"]
@@ -182,7 +177,8 @@
         "search_equipment",
         "get_equipment",
         "get_active_context",
-        "create_session_draft",
+        "get_routine_pro_offer",
+        "create_personalized_routine",
         "record_session_feedback"
       ]
     }

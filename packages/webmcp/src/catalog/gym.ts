@@ -4,7 +4,12 @@ import { useMemo } from "react";
 
 import { useWebMCPTools } from "../hooks";
 import type { UseWebMCPOptions, UseWebMCPResult, WebMCPToolDefinition } from "../types";
-import { EMPTY_OBJECT_SCHEMA, makeTool, type CatalogHandler } from "./shared";
+import {
+  EMPTY_OBJECT_SCHEMA,
+  makeTool,
+  type CatalogHandler,
+  type PreparedCatalogHandler,
+} from "./shared";
 
 export type EmptyInput = Record<string, never>;
 
@@ -21,9 +26,10 @@ export interface GetEquipmentInput {
   readonly equipmentId: string;
 }
 
-export interface CreateSessionDraftInput {
+export interface CreatePersonalizedRoutineInput {
   readonly templateId:
     "first_visit_foundations" | "low_impact_orientation" | "accessible_equipment_tour";
+  readonly paymentMode?: "human_checkout" | "agent_wallet";
 }
 
 export interface RecordSessionFeedbackInput {
@@ -38,8 +44,9 @@ export interface GymToolHandlers {
   readonly search_equipment: CatalogHandler<SearchEquipmentInput>;
   readonly get_equipment: CatalogHandler<GetEquipmentInput>;
   readonly get_active_context: CatalogHandler<EmptyInput>;
-  readonly create_session_draft: CatalogHandler<CreateSessionDraftInput>;
-  readonly record_session_feedback: CatalogHandler<RecordSessionFeedbackInput>;
+  readonly get_routine_pro_offer: CatalogHandler<EmptyInput>;
+  readonly create_personalized_routine: PreparedCatalogHandler<CreatePersonalizedRoutineInput>;
+  readonly record_session_feedback: PreparedCatalogHandler<RecordSessionFeedbackInput>;
 }
 
 export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCPToolDefinition[] {
@@ -143,12 +150,23 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
       },
       handlers.get_active_context,
     ),
-    makeTool<CreateSessionDraftInput>(
+    makeTool<EmptyInput>(
       {
-        name: "create_session_draft",
-        title: "Select a published walkthrough",
+        name: "get_routine_pro_offer",
+        title: "Get Adaptive Routine Pro offer",
         description:
-          "Match one versioned, staff-authored walkthrough to available equipment and active minimum context after confirmation.",
+          "Return the exact server-authoritative Adaptive Routine Pro offer for the active minimum Passport context.",
+        inputSchema: EMPTY_OBJECT_SCHEMA,
+        readOnly: true,
+      },
+      handlers.get_routine_pro_offer,
+    ),
+    makeTool<CreatePersonalizedRoutineInput>(
+      {
+        name: "create_personalized_routine",
+        title: "Create and save a personalized routine",
+        description:
+          "Create and save one grounded routine from a published template and the active minimum Passport context after exact confirmation.",
         inputSchema: {
           type: "object",
           properties: {
@@ -161,13 +179,21 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
                 "accessible_equipment_tour",
               ],
             },
+            paymentMode: {
+              type: "string",
+              description:
+                "Required only when the server reports no active entitlement; selects the approved sandbox payer flow.",
+              enum: ["human_checkout", "agent_wallet"],
+            },
           },
           required: ["templateId"],
           additionalProperties: false,
         },
         readOnly: false,
+        untrustedOutput: true,
       },
-      handlers.create_session_draft,
+      handlers.create_personalized_routine.execute,
+      handlers.create_personalized_routine.prepare,
     ),
     makeTool<RecordSessionFeedbackInput>(
       {
@@ -180,7 +206,7 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
           properties: {
             sessionId: {
               type: "string",
-              description: "Completed session identifier.",
+              description: "Opaque public routine reference returned by the active Gym session.",
               minLength: 1,
               maxLength: 128,
             },
@@ -208,7 +234,8 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
         readOnly: false,
         untrustedOutput: true,
       },
-      handlers.record_session_feedback,
+      handlers.record_session_feedback.execute,
+      handlers.record_session_feedback.prepare,
     ),
   ];
 }

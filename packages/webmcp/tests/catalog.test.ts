@@ -32,12 +32,11 @@ describe("Adaptive World tool catalogs", () => {
     expect(tools.filter(({ annotations }) => !annotations.readOnlyHint)).toHaveLength(2);
   });
 
-  it("publishes the exact 6 doctor tools without cross-origin exposure options", () => {
+  it("publishes the exact 5 truthful doctor tools without simulated change data", () => {
     const names = [
       "search_my_patients",
       "get_patient_overview",
       "get_patient_section",
-      "get_patient_changes",
       "open_patient_source",
       "add_clinical_guidance",
     ];
@@ -50,21 +49,43 @@ describe("Adaptive World tool catalogs", () => {
     ).toBe(false);
   });
 
-  it("publishes the exact 6 Gym tools", () => {
+  it("publishes the free Gym surface and one prepared Pro mutation", () => {
     const names = [
       "get_gym_profile",
       "search_equipment",
       "get_equipment",
       "get_active_context",
-      "create_session_draft",
+      "get_routine_pro_offer",
+      "create_personalized_routine",
       "record_session_feedback",
     ];
-    const tools = createGymToolCatalog(
-      Object.fromEntries(names.map((name) => [name, handler])) as unknown as GymToolHandlers,
-    );
+    const prepare = vi.fn(() => ({
+      confirmation: {
+        title: "Create and save your personalized routine",
+        description: "Review the exact action.",
+        fields: [{ label: "Product", value: "Adaptive Routine Pro" }],
+        riskClass: "payment" as const,
+      },
+      quoteDigest: "quote_digest",
+    }));
+    const tools = createGymToolCatalog({
+      get_gym_profile: handler,
+      search_equipment: handler,
+      get_equipment: handler,
+      get_active_context: handler,
+      get_routine_pro_offer: handler,
+      create_personalized_routine: { prepare, execute: handler },
+      record_session_feedback: { prepare, execute: handler },
+    } satisfies GymToolHandlers);
     expect(tools.map(({ name }) => name)).toEqual(names);
     expect(
       tools.filter(({ annotations }) => !annotations.readOnlyHint).map(({ name }) => name),
-    ).toEqual(["create_session_draft", "record_session_feedback"]);
+    ).toEqual(["create_personalized_routine", "record_session_feedback"]);
+    expect(tools.find(({ name }) => name === "create_personalized_routine")?.prepareMutation).toBe(
+      prepare,
+    );
+    expect(tools.find(({ name }) => name === "record_session_feedback")?.prepareMutation).toBe(
+      prepare,
+    );
   });
 });

@@ -30,6 +30,7 @@ function formatDate(value: string) {
 
 export function DocumentsView() {
   const { patient } = usePortal();
+  if (!patient) throw new Error("The owner Passport is unavailable.");
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<string>("all");
   const [selected, setSelected] = useState<Document | null>(null);

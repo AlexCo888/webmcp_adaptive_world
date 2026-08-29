@@ -2,6 +2,7 @@
   "name": "adaptive-world",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=20.19.0",
@@ -13,8 +14,10 @@
     "lint": "turbo run lint && eslint playwright.config.ts tests/e2e --max-warnings=0",
     "typecheck": "turbo run typecheck && tsc --noEmit -p tsconfig.json",
     "test": "turbo run test",
-    "evals": "node tests/evals/validate.mjs",
+    "evals": "pnpm evals:validate",
+    "evals:validate": "node tests/evals/validate.mjs",
     "e2e": "playwright test",
+    "e2e:shim": "playwright test tests/e2e/webmcp.spec.ts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm evals && pnpm build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

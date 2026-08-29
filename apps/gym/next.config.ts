@@ -10,13 +10,6 @@ const nextConfig: NextConfig = {
     "@adaptive-world/webmcp",
   ],
   poweredByHeader: false,
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "www.lifefitness.com" },
-      { protocol: "https", hostname: "assets.roguefitness.com" },
-      { protocol: "https", hostname: "media.eleiko.com" },
-    ],
-  },
 };
 
 export default nextConfig;

@@ -4,7 +4,9 @@ import type { Equipment } from "@adaptive-world/contracts";
 import { ArrowRight, Check, Grid2X2, List, Search, SlidersHorizontal, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useGymExperience } from "@/components/gym-experience-context";
+import { matchesEquipmentSearch } from "@/lib/equipment-search";
 
 const categoryLabels: Record<Equipment["category"], string> = {
   cardio: "Cardio",
@@ -19,33 +21,58 @@ const categoryLabels: Record<Equipment["category"], string> = {
 type Props = { equipment: Equipment[] };
 
 export function CatalogExplorer({ equipment }: Props) {
+  const { searchIntent, searchRevision } = useGymExperience();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Equipment["category"] | "all">("all");
   const [accessibleOnly, setAccessibleOnly] = useState(false);
   const [availableOnly, setAvailableOnly] = useState(true);
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [webMcpConstraints, setWebMcpConstraints] = useState<{
+    categories?: readonly string[];
+    maxWidthCm?: number;
+    maxDepthCm?: number;
+  }>({});
+  const [highlightMatches, setHighlightMatches] = useState(false);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+
+  useEffect(() => {
+    if (!searchIntent || searchRevision === 0) return;
+    setQuery(searchIntent.query ?? "");
+    const firstCategory = searchIntent.categories?.find((value) => value in categoryLabels);
+    setCategory((firstCategory as Equipment["category"] | undefined) ?? "all");
+    setAccessibleOnly(searchIntent.accessible === true);
+    setAvailableOnly(true);
+    setWebMcpConstraints({
+      categories: searchIntent.categories,
+      maxWidthCm: searchIntent.maxWidthCm,
+      maxDepthCm: searchIntent.maxDepthCm,
+    });
+    setHighlightMatches(true);
+    const scrollTimer = window.setTimeout(
+      () => document.querySelector(".catalog-results")?.scrollIntoView({ behavior: "smooth" }),
+      0,
+    );
+    const highlightTimer = window.setTimeout(() => setHighlightMatches(false), 2_500);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(highlightTimer);
+    };
+  }, [searchIntent, searchRevision]);
 
   const results = useMemo(
     () =>
-      equipment.filter((item) => {
-        if (category !== "all" && item.category !== category) return false;
-        if (accessibleOnly && item.accessibility.length === 0) return false;
-        if (availableOnly && !item.available) return false;
-        if (!deferredQuery) return true;
-        const haystack = [
-          item.name,
-          item.manufacturer,
-          item.model,
-          item.summary,
-          ...item.capabilities,
-          ...item.suitabilityTags,
-        ]
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(deferredQuery);
-      }),
-    [accessibleOnly, availableOnly, category, deferredQuery, equipment],
+      equipment.filter((item) =>
+        matchesEquipmentSearch(item, {
+          query: deferredQuery,
+          ...(category !== "all" ? { category } : {}),
+          categories: webMcpConstraints.categories,
+          maxWidthCm: webMcpConstraints.maxWidthCm,
+          maxDepthCm: webMcpConstraints.maxDepthCm,
+          accessibleOnly,
+          availableOnly,
+        }),
+      ),
+    [accessibleOnly, availableOnly, category, deferredQuery, equipment, webMcpConstraints],
   );
 
   const categories = Object.keys(categoryLabels) as Equipment["category"][];
@@ -104,8 +131,8 @@ export function CatalogExplorer({ equipment }: Props) {
           </label>
         </fieldset>
         <p className="fine-print">
-          Product models, specifications, images, and source links are manufacturer-backed. Only
-          this demo club&apos;s ownership and live availability are synthetic.
+          Product names and specifications link to manufacturer sources. The neutral illustrations
+          are original; this demo club&apos;s ownership and live availability are synthetic.
         </p>
       </aside>
 
@@ -153,7 +180,12 @@ export function CatalogExplorer({ equipment }: Props) {
             className={view === "grid" ? "equipment-grid" : "equipment-grid equipment-grid--list"}
           >
             {results.map((item, index) => (
-              <EquipmentCard item={item} key={item.id} featured={index === 0 && view === "grid"} />
+              <EquipmentCard
+                item={item}
+                key={item.id}
+                featured={index === 0 && view === "grid"}
+                highlighted={highlightMatches}
+              />
             ))}
           </div>
         ) : (
@@ -179,10 +211,21 @@ export function CatalogExplorer({ equipment }: Props) {
   );
 }
 
-function EquipmentCard({ item, featured }: { item: Equipment; featured: boolean }) {
+function EquipmentCard({
+  item,
+  featured,
+  highlighted,
+}: {
+  item: Equipment;
+  featured: boolean;
+  highlighted: boolean;
+}) {
   return (
     <article
-      className={featured ? "equipment-card equipment-card--featured card" : "equipment-card card"}
+      data-equipment-id={item.id}
+      className={`${
+        featured ? "equipment-card equipment-card--featured card" : "equipment-card card"
+      }${highlighted ? " is-webmcp-match" : ""}`}
     >
       <div className="equipment-card__visual equipment-card__visual--product">
         <Image

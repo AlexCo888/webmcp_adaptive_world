@@ -2,7 +2,6 @@ import { hashPassword } from "better-auth/crypto";
 import { eq, sql } from "drizzle-orm";
 import { demoPassports, equipmentCatalog } from "@adaptive-world/demo-data";
 import {
-  accessGrants,
   clinicalGuidance,
   doctorPatientRelationships,
   doctorProfiles,
@@ -11,6 +10,7 @@ import {
   users,
 } from "../src/schema";
 import { createDatabase } from "../src/client";
+import { buildCanonicalDemoGrantSeedStatement } from "./canonical-demo-grant";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required to seed the demo");
@@ -227,29 +227,21 @@ for (const relationship of relationships) {
       set: { status: "active", revokedAt: null, expiresAt: grantExpiry },
     });
   const ownerId = ownerIdFor(relationship.patientId);
-  await db
-    .insert(accessGrants)
-    .values({
-      id: relationship.grantId,
+  const seededGrant = await db.execute<{ id: string }>(
+    buildCanonicalDemoGrantSeedStatement({
+      grantId: relationship.grantId,
       patientId: relationship.patientId,
       granteeUserId: doctorId,
       relationshipId: relationship.id,
       createdByUserId: ownerId,
       purpose: "Synthetic continuity-of-care demonstration",
-      status: "active",
-      scopes: [...relationship.scopes],
+      scopes: relationship.scopes,
       expiresAt: grantExpiry,
-    })
-    .onConflictDoUpdate({
-      target: accessGrants.id,
-      set: {
-        status: "active",
-        scopes: [...relationship.scopes],
-        expiresAt: grantExpiry,
-        revokedAt: null,
-        revokedByUserId: null,
-      },
-    });
+    }),
+  );
+  if (!seededGrant.rows[0]) {
+    throw new Error(`Failed to restore canonical demo grant ${relationship.grantId}`);
+  }
 }
 
 await db

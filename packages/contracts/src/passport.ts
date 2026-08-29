@@ -65,6 +65,7 @@ export const AllergySchema = z.object({
 });
 
 export const FunctionalProfileSchema = z.object({
+  sourceCategory: z.enum(["self_reported", "clinician_guidance"]),
   experienceLevel: z.enum(["beginner", "intermediate", "advanced"]),
   weeklyActivityMinutes: z.number().int().min(0).max(2000),
   preferredSessionMinutes: z.number().int().min(10).max(180),
@@ -134,14 +135,17 @@ export const DigitalPassportSchema = z
 export const GymContextProjectionSchema = z.object({
   projectionId: IdSchema,
   subjectAlias: z.string().min(1).max(80),
-  ageBand: z.enum(["18-29", "30-44", "45-64", "65+"]),
+  purpose: z.literal("adaptive_gym_session"),
   goals: z.array(z.string().min(2).max(100)).min(1).max(8),
   experienceLevel: FunctionalProfileSchema.shape.experienceLevel,
   preferredSessionMinutes: FunctionalProfileSchema.shape.preferredSessionMinutes,
   preferredActivities: z.array(z.string().min(2).max(100)).max(12),
+  functionalCapabilities: z.array(z.string().min(2).max(240)).max(30),
   movementConsiderations: z.array(z.string().min(2).max(180)).max(12),
+  avoid: z.array(z.string().min(2).max(240)).max(30),
   stopSignals: z.array(z.string().min(2).max(180)).max(10),
   accessibilityNeeds: z.array(z.string().min(2).max(180)).max(10),
+  sourceCategories: z.array(z.enum(["self_reported", "clinician_guidance"])).max(2),
   issuedAt: IsoDateTimeSchema,
   expiresAt: IsoDateTimeSchema,
   synthetic: z.literal(true),

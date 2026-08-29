@@ -2,7 +2,7 @@ import { EquipmentCatalogSchema } from "@adaptive-world/contracts";
 
 const checkedAt = "2026-08-27";
 
-/** Product specs and media resolve to manufacturers. Only facility ownership is synthetic. */
+/** Product specs resolve to cited manufacturers; artwork and facility ownership are original/synthetic. */
 export const equipmentCatalog = EquipmentCatalogSchema.parse([
   {
     id: "lf_integrity_plus_treadmill",
@@ -28,9 +28,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     sourceUrl: "https://www.lifefitness.com/en-us/catalog/cardio/treadmills/integrity-plus",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/Equipment/Cardio/Integrity%20Plus/Integrity-Treadmill-with-SE4-console-24-inch-in-Black-Onyx.png?h=630&w=1200",
-    imageAlt: "Life Fitness Integrity+ commercial treadmill in Black Onyx",
+    imageUrl: "/images/equipment/treadmill.svg",
+    imageAlt: "Neutral line illustration of a commercial treadmill",
   },
   {
     id: "lf_integrity_plus_elliptical",
@@ -57,9 +56,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/cardio/ellipticals/integrity-cardio-elliptical-cross-trainer",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/Equipment/Cardio/Integrity%20Plus/Crosstrainer/INTEGRITY-PLUS_Crosstrainer_SE4-24inch_Black-Onyx_3000-x-3000.png?h=630&w=1200",
-    imageAlt: "Life Fitness Integrity+ Elliptical Cross-Trainer",
+    imageUrl: "/images/equipment/elliptical.svg",
+    imageAlt: "Neutral line illustration of an elliptical cross-trainer",
   },
   {
     id: "lf_heat_row",
@@ -85,9 +83,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     sourceUrl: "https://www.lifefitness.com/en-us/catalog/cardio/rowers/heat-row",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/MediaSync/149-966-life-fitness-heat-row-three-quarter.png?h=630&w=1200",
-    imageAlt: "Life Fitness Heat Row rowing ergometer",
+    imageUrl: "/images/equipment/rower.svg",
+    imageAlt: "Neutral line illustration of a rowing ergometer",
   },
   {
     id: "lf_integrity_recumbent",
@@ -114,9 +111,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/cardio/bikes-indoor-cycles/integrity-lifecycle-recumbent-bike",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/MediaSync/256-562-life-fitness-integrity-series-recumbent-bike-with-24-inch-se4-in-black-onyx.png?h=630&w=1200",
-    imageAlt: "Life Fitness Integrity+ Lifecycle Recumbent Bike",
+    imageUrl: "/images/equipment/recumbent-bike.svg",
+    imageAlt: "Neutral line illustration of a step-through recumbent cycle",
   },
   {
     id: "scifit_pro2_total_body",
@@ -143,9 +139,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/cardio/bikes-indoor-cycles/pro2-total-body",
     sourceLabel: "SCIFIT / Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/Equipment/Cardio/SciFit/Pro2-TotalBody/SciFit-PRO2-Total-Body-1.jpg?h=630&w=1200",
-    imageAlt: "SCIFIT PRO2 Total Body inclusive exercise station",
+    imageUrl: "/images/equipment/total-body-ergometer.svg",
+    imageAlt: "Neutral line illustration of an inclusive total-body ergometer",
   },
   {
     id: "lf_insignia_chest_press",
@@ -172,9 +167,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/strength-training/selectorized/insignia-series-chest-press",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/Equipment/Strength/Selectorised/Insignia%20Series/Insignia%20Chest%20Press/LF-INSIGNIA-Chest-Press-Black-Thumbnail.png?h=630&w=1200",
-    imageAlt: "Life Fitness Insignia Series Chest Press",
+    imageUrl: "/images/equipment/chest-press.svg",
+    imageAlt: "Neutral line illustration of a supported chest press station",
   },
   {
     id: "lf_insignia_row",
@@ -200,9 +194,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/strength-training/selectorized/insignia-series-row",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/MediaSync/405-232-row.png?h=630&w=1200",
-    imageAlt: "Life Fitness Insignia Series Row",
+    imageUrl: "/images/equipment/seated-row.svg",
+    imageAlt: "Neutral line illustration of a supported seated row station",
   },
   {
     id: "lf_insignia_pec_rear_delt",
@@ -229,9 +222,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/strength-training/selectorized/insignia-series-pectoral-fly-rear-deltoid",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/Equipment/Strength/Selectorised/Insignia%20Series/Insignia%20Pectoral%20Fly%20Read%20Deltoid/LF-INSIGNIA-Pectoral-Fly-Rear-Deltoid-Black-Thumbnail.png?h=630&w=1200",
-    imageAlt: "Life Fitness Insignia Pectoral Fly and Rear Deltoid station",
+    imageUrl: "/images/equipment/fly-rear-delt.svg",
+    imageAlt: "Neutral line illustration of a fly and rear-deltoid station",
   },
   {
     id: "lf_insignia_back_extension",
@@ -256,9 +248,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/strength-training/selectorized/insignia-series-back-extension",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/MediaSync/42-118-insignia-series-back-extension-1-.jpg?h=630&w=1200",
-    imageAlt: "Life Fitness Insignia Series Back Extension",
+    imageUrl: "/images/equipment/back-extension.svg",
+    imageAlt: "Neutral line illustration of a supported back extension station",
   },
   {
     id: "lf_dual_adjustable_pulley",
@@ -284,9 +275,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://www.lifefitness.com/en-us/catalog/strength-training/cable-machines-functional-trainers/life-fitness-dual-adjustable-pulley",
     sourceLabel: "Life Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://www.lifefitness.com/Kentico13CoreBase/media/LFMedia/LifeFitnessImages/MediaSync/315-975-signature-series-dap.png?h=630&w=1200",
-    imageAlt: "Life Fitness Dual Adjustable Pulley cable station",
+    imageUrl: "/images/equipment/dual-pulley.svg",
+    imageAlt: "Neutral line illustration of a dual adjustable cable station",
   },
   {
     id: "rogue_manta_ray_bench",
@@ -311,9 +301,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     sourceUrl: "https://www.roguefitness.com/rogue-manta-ray-adjustable-bench",
     sourceLabel: "Rogue Fitness product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl:
-      "https://assets.roguefitness.com/f_auto,q_auto,c_limit,w_1600,b_rgb:ffffff/catalog/Strength%20Equipment/Strength%20Training/Weight%20Benches/Adjustable%20:%20Incline%20Benches/RF0983-BLACK-MG/2024%20MG%20colors/RF0983-BLACK-MG-Red-H_yetdt4.png",
-    imageAlt: "Rogue Fitness Manta Ray Adjustable Bench",
+    imageUrl: "/images/equipment/adjustable-bench.svg",
+    imageAlt: "Neutral line illustration of an adjustable training bench",
   },
   {
     id: "eleiko_prestera_half_rack",
@@ -339,8 +328,8 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
       "https://eleiko.com/en-us/equipment/racksandrigs/racks/3085609-03-eleiko-prestera-half-rack-black",
     sourceLabel: "Eleiko product specifications",
     sourceCheckedAt: checkedAt,
-    imageUrl: "https://media.eleiko.com/images/upload/4x5/3085609-03_10.jpg",
-    imageAlt: "Eleiko Prestera Half Rack in black",
+    imageUrl: "/images/equipment/half-rack.svg",
+    imageAlt: "Neutral line illustration of a generic barbell half rack",
   },
 ]);
 

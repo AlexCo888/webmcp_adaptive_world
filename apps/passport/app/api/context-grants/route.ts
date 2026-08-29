@@ -1,78 +1,94 @@
 import { createContextGrantStore } from "@adaptive-world/db";
-import { auditEvents, patients } from "@adaptive-world/db/schema";
-import { buildGymProjection, issueContextGrant } from "@adaptive-world/security";
-import { DigitalPassportSchema } from "@adaptive-world/contracts";
-import { eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
+import { auditEvents } from "@adaptive-world/db/schema";
+import { issueContextGrant } from "@adaptive-world/security";
 import { z } from "zod";
-import { db } from "@/lib/database";
-import { requireActor } from "@/lib/session";
+import { apiError, apiSuccess, readJson, requestId, requireApiActor } from "@/lib/api";
+import { prepareLockedGymContextGrant } from "@/lib/context-grant-preparation";
+import { transactionalDb } from "@/lib/database";
+import { GYM_CONTEXT_PURPOSE, GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 
-const InputSchema = z.object({ expiresInMinutes: z.number().int().min(1).max(15).default(5) });
+export const ContextGrantInputSchema = z
+  .object({
+    expiresInMinutes: z.number().int().min(1).max(15).default(5),
+    preparationToken: z.string().min(80).max(2_048).optional(),
+  })
+  .strict();
 
-function ageBand(dateOfBirth: string) {
-  const years = Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / 31_557_600_000);
-  if (years < 30) return "18-29";
-  if (years < 45) return "30-44";
-  if (years < 65) return "45-64";
-  return "65+";
-}
+export { resolveContextGrantTiming } from "@/lib/context-grant-preparation";
 
 export async function POST(request: Request) {
-  const actor = await requireActor("owner");
-  const input = InputSchema.safeParse(await request.json());
-  if (!input.success)
-    return NextResponse.json({ error: "Invalid exchange lifetime." }, { status: 400 });
-  const [patientRow] = await db
-    .select()
-    .from(patients)
-    .where(eq(patients.ownerUserId, actor.id))
-    .limit(1);
-  if (!patientRow) return NextResponse.json({ error: "Passport not found." }, { status: 404 });
-  const passport = DigitalPassportSchema.parse(patientRow.profile);
-  const profile = buildGymProjection({
-    ageBand: ageBand(passport.identity.dateOfBirth),
-    goals: passport.functional.goals,
-    experienceLevel: passport.functional.experienceLevel,
-    preferredActivities: passport.functional.preferredActivities,
-    preferredSessionMinutes: {
-      min: Math.max(15, passport.functional.preferredSessionMinutes - 10),
-      max: passport.functional.preferredSessionMinutes + 10,
-    },
-    functionalCapabilities: [
-      `${passport.functional.weeklyActivityMinutes} weekly activity minutes reported`,
-    ],
-    movementConsiderations: passport.functional.movementConsiderations,
-    stopSignals: passport.functional.stopSignals,
-    accessibilityNeeds: passport.functional.accessibilityNeeds,
-    sourceCategories: ["self_reported", "clinician_guidance"],
-  });
-  const issued = await issueContextGrant(createContextGrantStore(db), {
-    patientId: patientRow.id,
-    createdByUserId: actor.id,
-    audience: "adaptive-gym",
-    purpose: "Match a staff-authored Gym walkthrough to approved movement context",
-    scopes: ["gym.context.read"],
-    projection: { version: 1, profile, validUntil: profile.validUntil },
-    ttlMs: input.data.expiresInMinutes * 60_000,
-  });
+  const currentRequestId = requestId(request);
+  const authorization = await requireApiActor(request, "owner", currentRequestId);
+  if (authorization.response) return authorization.response;
+  const actor = authorization.actor;
+  const input = await readJson(request, ContextGrantInputSchema);
+  if (!input.success) {
+    return apiError("VALIDATION", "Invalid exchange lifetime.", 400, currentRequestId);
+  }
+  const issuance = await transactionalDb.transaction(async (tx) => {
+    const preparation = await prepareLockedGymContextGrant(
+      {
+        actorId: actor.id,
+        expiresInMinutes: input.data.expiresInMinutes,
+        preparationToken: input.data.preparationToken,
+      },
+      async (query) => tx.execute(query),
+    );
+    if (preparation.kind !== "ready") return preparation;
 
-  await db.insert(auditEvents).values({
-    actorUserId: actor.id,
-    patientId: patientRow.id,
-    action: "gym.context_grant.created",
-    resourceType: "context_grant",
-    resourceId: issued.id,
-    outcome: "success",
-    metadata: { audience: "adaptive-gym", expiresAt: issued.expiresAt.toISOString() },
+    const { patientId, timing, profile } = preparation;
+    const created = await issueContextGrant(createContextGrantStore(tx), {
+      patientId,
+      createdByUserId: actor.id,
+      audience: "adaptive-gym",
+      purpose: GYM_CONTEXT_PURPOSE,
+      scopes: [...GYM_CONTEXT_SCOPES],
+      projection: { version: 1, profile, validUntil: profile.validUntil },
+      ttlMs: timing.ttlMs,
+      now: timing.issuedAt,
+    });
+    if (
+      created.expiresAt.getTime() !== timing.expiresAt.getTime() ||
+      created.expiresAt.toISOString() !== profile.validUntil
+    ) {
+      throw new Error("Context grant expiry invariant failed");
+    }
+
+    await tx.insert(auditEvents).values({
+      actorUserId: actor.id,
+      patientId,
+      action: "gym.context_grant.created",
+      resourceType: "context_grant",
+      resourceId: created.id,
+      outcome: "success",
+      metadata: { audience: "adaptive-gym", expiresAt: created.expiresAt.toISOString() },
+    });
+    return { kind: "issued" as const, issued: created };
   });
+  if (issuance.kind === "not_found") {
+    return apiError("NOT_FOUND", "Passport not found.", 404, currentRequestId);
+  }
+  if (issuance.kind === "invalid_preparation") {
+    return apiError(
+      "CONFLICT",
+      "The Gym projection changed or its confirmation expired. Review it again.",
+      409,
+      currentRequestId,
+    );
+  }
+  const issued = issuance.issued;
 
   const gymUrl = process.env.NEXT_PUBLIC_GYM_URL ?? "http://127.0.0.1:3001";
-  const response = NextResponse.json({
-    exchangeUrl: `${gymUrl}/passport#code=${encodeURIComponent(issued.token)}`,
-    expiresAt: issued.expiresAt.toISOString(),
-  });
-  response.headers.set("cache-control", "no-store");
+  const response = apiSuccess(
+    {
+      exchangeUrl: `${gymUrl}/passport#code=${encodeURIComponent(issued.token)}`,
+      expiresAt: issued.expiresAt.toISOString(),
+      audience: "adaptive-gym" as const,
+      scopes: GYM_CONTEXT_SCOPES,
+    },
+    currentRequestId,
+    201,
+  );
   response.headers.set("referrer-policy", "no-referrer");
   return response;
 }

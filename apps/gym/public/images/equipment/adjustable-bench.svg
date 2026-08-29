@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Adjustable bench illustration</title>
+  <desc id="description">An original neutral line illustration of an adjustable training bench.</desc>
+  <rect width="1200" height="800" rx="48" fill="#edf4ef"/>
+  <ellipse cx="600" cy="663" rx="385" ry="53" fill="#d6e3da"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M355 514h320l204-223 75 61-235 278H355Z" stroke-width="34"/>
+    <path d="M467 631v48m348-112 72 112M416 679h104m322 0h105" stroke-width="31"/>
+    <path d="M668 514 816 638" stroke-width="24"/>
+    <circle cx="455" cy="675" r="35" stroke-width="19"/>
+  </g>
+  <path d="M720 481 880 307" stroke="#d8ff77" stroke-width="16" stroke-linecap="round"/>
+</svg>

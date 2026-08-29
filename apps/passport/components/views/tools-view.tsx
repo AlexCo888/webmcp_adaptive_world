@@ -1,11 +1,28 @@
 "use client";
 
+import { useState } from "react";
+import { z } from "zod";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
+import { readPassportApiResponse } from "@/lib/api-client";
 import { usePortal } from "@/lib/portal-context";
 
+const DemoResetResponseSchema = z
+  .object({
+    restored: z.literal(true),
+    restoredRelationships: z.number().int().nonnegative(),
+    removedSavedRoutines: z.number().int().nonnegative(),
+    removedGymSessions: z.number().int().nonnegative(),
+    removedContextGrants: z.number().int().nonnegative(),
+    revokedEntitlements: z.number().int().nonnegative(),
+  })
+  .strict();
+
 export function ToolsView() {
-  const { role, toolCatalog, webmcp, toolEvents } = usePortal();
+  const { role, toolCatalog, webmcp, toolEvents, demoResetEnabled } = usePortal();
+  const [showReset, setShowReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const active = webmcp.status === "active";
   const label = active
     ? "Active"
@@ -128,6 +145,21 @@ export function ToolsView() {
               </div>
             </div>
           </section>
+          {demoResetEnabled ? (
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <h2>Demo maintenance</h2>
+                  <p className="card-subtitle">
+                    Clinician demo operator: return shared synthetic accounts to canonical state
+                  </p>
+                </div>
+              </div>
+              <button className="button small" type="button" onClick={() => setShowReset(true)}>
+                <Icon name="settings" width="14" /> Restore synthetic demo
+              </button>
+            </section>
+          ) : null}
           <section className="card">
             <div className="card-header">
               <div>
@@ -161,6 +193,68 @@ export function ToolsView() {
           </section>
         </aside>
       </div>
+      {showReset ? (
+        <div className="modal-backdrop" onMouseDown={() => !resetting && setShowReset(false)}>
+          <section
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="demo-reset-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-head">
+              <div>
+                <p className="eyebrow">Synthetic demo maintenance</p>
+                <h2 id="demo-reset-title">Restore synthetic demo</h2>
+                <p>
+                  This clinician-operator action restores the canonical doctor grants and guidance,
+                  removes transient Gym context and routines, and returns Routine Pro to its free
+                  state. Immutable payment evidence is preserved. Ambiguous payment state blocks the
+                  reset.
+                </p>
+              </div>
+            </div>
+            {resetError ? (
+              <p className="form-error" role="alert">
+                {resetError}
+              </p>
+            ) : null}
+            <div className="modal-actions">
+              <button className="button" disabled={resetting} onClick={() => setShowReset(false)}>
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                disabled={resetting}
+                onClick={async () => {
+                  setResetting(true);
+                  setResetError(null);
+                  try {
+                    const response = await fetch("/api/demo/reset", {
+                      method: "POST",
+                      headers: { "content-type": "application/json", accept: "application/json" },
+                      body: "{}",
+                    });
+                    await readPassportApiResponse(
+                      response,
+                      DemoResetResponseSchema,
+                      "The demo could not be restored.",
+                    );
+                    window.location.reload();
+                  } catch (error) {
+                    setResetError(
+                      error instanceof Error ? error.message : "The demo could not be restored.",
+                    );
+                    setResetting(false);
+                  }
+                }}
+              >
+                {resetting ? "Restoring…" : "Restore demo"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </PortalShell>
   );
 }

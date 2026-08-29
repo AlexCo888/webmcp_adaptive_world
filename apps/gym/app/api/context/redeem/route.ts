@@ -1,6 +1,6 @@
-import { auditEvents } from "@adaptive-world/db/schema";
+import { auditEvents, contextGrants } from "@adaptive-world/db/schema";
 import { hashOpaqueToken, type GymProjection } from "@adaptive-world/security";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/database";
@@ -46,8 +46,17 @@ export async function POST(request: Request) {
     outcome: "success",
     metadata: { audience: "adaptive-gym", anonymousSession: true },
   });
+  const [grant] = await db
+    .select({ scopes: contextGrants.scopes })
+    .from(contextGrants)
+    .where(eq(contextGrants.id, redeemed.grant_id))
+    .limit(1);
   const publicContext = toPublicGymContext(redeemed.projection, redeemed.gym_session_id);
-  const response = NextResponse.json({ projection: publicContext, redeemed: true });
+  const response = NextResponse.json({
+    projection: publicContext,
+    scopes: grant?.scopes ?? [],
+    redeemed: true,
+  });
   response.cookies.set(
     GYM_SESSION_COOKIE,
     await createGymCookieToken(redeemed.gym_session_id, subjectId),

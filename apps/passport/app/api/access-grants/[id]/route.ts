@@ -1,38 +1,26 @@
-import { accessGrants, auditEvents, patients } from "@adaptive-world/db/schema";
-import { and, eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
-import { db } from "@/lib/database";
-import { requireActor } from "@/lib/session";
+import { z } from "zod";
+import { revokeCanonicalDoctorGrant } from "@/lib/access-grant-write";
+import { apiError, apiSuccess, requestId, requireApiActor } from "@/lib/api";
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const actor = await requireActor("owner");
-  const { id } = await context.params;
-  const [ownedGrant] = await db
-    .select({ id: accessGrants.id, patientId: accessGrants.patientId })
-    .from(accessGrants)
-    .innerJoin(patients, eq(accessGrants.patientId, patients.id))
-    .where(
-      and(
-        eq(accessGrants.id, id),
-        eq(patients.ownerUserId, actor.id),
-        eq(accessGrants.status, "active"),
-      ),
-    )
-    .limit(1);
-  if (!ownedGrant)
-    return NextResponse.json({ error: "Active permission not found." }, { status: 404 });
+const GrantIdSchema = z.string().uuid();
 
-  await db
-    .update(accessGrants)
-    .set({ status: "revoked", revokedAt: new Date(), revokedByUserId: actor.id })
-    .where(eq(accessGrants.id, ownedGrant.id));
-  await db.insert(auditEvents).values({
-    actorUserId: actor.id,
-    patientId: ownedGrant.patientId,
-    action: "doctor.access_grant.revoked",
-    resourceType: "access_grant",
-    resourceId: ownedGrant.id,
-    outcome: "success",
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const currentRequestId = requestId(request);
+  const authorization = await requireApiActor(request, "owner", currentRequestId);
+  if (authorization.response) return authorization.response;
+  const actor = authorization.actor;
+  const parsedId = GrantIdSchema.safeParse((await context.params).id);
+  if (!parsedId.success) {
+    return apiError("VALIDATION", "Invalid permission identifier.", 400, currentRequestId);
+  }
+  const id = parsedId.data;
+  const revoked = await revokeCanonicalDoctorGrant({
+    ownerUserId: actor.id,
+    grantId: id,
+    requestId: currentRequestId,
   });
-  return NextResponse.json({ revoked: true });
+  if (!revoked) {
+    return apiError("NOT_FOUND", "Active permission not found.", 404, currentRequestId);
+  }
+  return apiSuccess({ revoked: true as const, grantId: revoked.grantId }, currentRequestId);
 }

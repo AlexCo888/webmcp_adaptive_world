@@ -1,6 +1,7 @@
 import type {
   JsonSchema,
   WebMCPExecutionContext,
+  WebMCPMutationPreparer,
   WebMCPToolDefinition,
   WebMCPToolHandler,
 } from "../types";
@@ -9,6 +10,11 @@ export type CatalogHandler<TInput extends object> = (
   input: TInput,
   context: WebMCPExecutionContext,
 ) => unknown;
+
+export interface PreparedCatalogHandler<TInput extends object> {
+  readonly prepare: WebMCPMutationPreparer<TInput>;
+  readonly execute: CatalogHandler<TInput>;
+}
 
 export const EMPTY_OBJECT_SCHEMA = {
   type: "object",
@@ -28,6 +34,7 @@ interface ToolMetadata {
 export function makeTool<TInput extends object>(
   metadata: ToolMetadata,
   handler: CatalogHandler<TInput>,
+  prepareMutation?: WebMCPMutationPreparer<TInput>,
 ): WebMCPToolDefinition {
   return {
     name: metadata.name,
@@ -38,6 +45,11 @@ export function makeTool<TInput extends object>(
       readOnlyHint: metadata.readOnly,
       untrustedContentHint: metadata.untrustedOutput ?? false,
     },
+    ...(prepareMutation
+      ? {
+          prepareMutation: prepareMutation as unknown as WebMCPMutationPreparer,
+        }
+      : {}),
     execute: handler as unknown as WebMCPToolHandler,
   };
 }

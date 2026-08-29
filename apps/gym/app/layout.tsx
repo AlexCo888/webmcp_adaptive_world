@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { WebMcpBridge } from "@/components/webmcp-bridge";
+import { GymExperienceProvider } from "@/components/gym-experience-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,8 +32,10 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
-        <AppShell>{children}</AppShell>
-        <WebMcpBridge />
+        <GymExperienceProvider>
+          <AppShell>{children}</AppShell>
+          <WebMcpBridge />
+        </GymExperienceProvider>
       </body>
     </html>
   );

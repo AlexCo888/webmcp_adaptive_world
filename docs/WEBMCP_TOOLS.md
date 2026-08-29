@@ -1,88 +1,145 @@
-# WebMCP tool strategy
+# WebMCP tool contract
 
-WebMCP enhances the visible first-party UI. It does not replace APIs, server authorization, consent, or human confirmation.
+WebMCP enhances the visible first-party UI. It does not replace semantic HTML,
+server APIs, authorization, consent, or confirmation. Registration is a
+discoverability surface and never grants permission.
 
 ## Registration rules
 
-- Register tools only after authentication and role state resolve.
-- Register only tools useful on the current page; unregister on navigation or state change.
-- Use imperative tools for authenticated, asynchronous, and state-dependent flows.
-- Use declarative annotations only for simple, visible, non-sensitive forms.
-- Never add `exposedTo` to Passport or clinician tools. Keep Gym tools same-origin for the MVP.
-- Keep a fully functional standard UI for browsers without WebMCP.
+- Register tools only after route, authentication, role, and relevant state resolve.
+- Unregister the previous route's tools on navigation or state loss.
+- Keep Passport and clinician tools same-origin; never add broad `exposedTo` access.
+- Keep all public Gym facts available through the ordinary accessible UI.
+- Never register a paid mutation on a route where its first-party confirmation and result canvas are absent.
+- A model-context shim may test mechanics; it must not be described as a model-selection evaluation.
 
-## Patient Passport
+## Passport owner: four tools
 
-| Tool                      | Type  | Available when               | Result/side effect                                |
-| ------------------------- | ----- | ---------------------------- | ------------------------------------------------- |
-| `get_my_passport_summary` | Read  | Owner is on own Passport     | Small synthetic profile summary; no source bodies |
-| `list_my_shares`          | Read  | Owner views sharing          | Active/revoked shares and scopes                  |
-| `create_context_grant`    | Write | Owner reviews Gym projection | Confirmation, one-time exchange code, audit event |
-| `revoke_access_grant`     | Write | Owner selects active grant   | Confirmation, revocation, audit event             |
+| Tool                      | Type            | Available when                    | Result or effect                               |
+| ------------------------- | --------------- | --------------------------------- | ---------------------------------------------- |
+| `get_my_passport_summary` | Read            | Owner is viewing the own Passport | Bounded synthetic summary; no source bodies    |
+| `list_my_shares`          | Read            | Owner views sharing               | Current owner grants and scopes                |
+| `create_context_grant`    | Confirmed write | Owner reviews Gym projection      | One-use, 1–15 minute minimum-context handoff   |
+| `revoke_access_grant`     | Confirmed write | Owner selects an active grant     | Idempotent revocation and redacted audit event |
 
-## Clinician portal
+## Clinician: exactly five tools
 
-| Tool                    | Type           | Available when                       | Result/side effect                                 |
-| ----------------------- | -------------- | ------------------------------------ | -------------------------------------------------- |
-| `search_my_patients`    | Read           | Authenticated clinician              | Searches only patients with an active relationship |
-| `get_patient_overview`  | Read           | Patient selected and overview scoped | Minimal overview plus available section handles    |
-| `get_patient_section`   | Read           | Requested section is scoped          | One bounded section, not a full dump               |
-| `get_patient_changes`   | Read           | Timeline scope active                | Changes since a valid timestamp                    |
-| `open_patient_source`   | Read/untrusted | Source handle is scoped              | One synthetic source or signed, expiring view      |
-| `add_clinical_guidance` | Write          | Guidance scope and patient selected  | First-party review, idempotent write, audit event  |
+| Tool                    | Type                       | Available when                          | Result or effect                                   |
+| ----------------------- | -------------------------- | --------------------------------------- | -------------------------------------------------- |
+| `search_my_patients`    | Read                       | Authenticated clinician                 | Searches only current active relationships         |
+| `get_patient_overview`  | Read                       | Authorized patient selected             | Minimal overview and scoped section handles        |
+| `get_patient_section`   | Read                       | Exact section is granted                | One bounded section, not a full Passport           |
+| `open_patient_source`   | Read, untrusted            | Exact source and patient are authorized | One bounded synthetic source                       |
+| `add_clinical_guidance` | Confirmed write, untrusted | Guidance scope is current               | Idempotent guidance write and redacted audit event |
 
-There is intentionally no global `search_patients` tool.
+There is no global patient search and no simulated timeline/change tool.
 
-## Adaptive Gym
+Clinician reads call `POST /api/webmcp`; confirmed guidance calls the protected
+`POST /api/guidance` route. Both paths resolve the current Better Auth session
+and application actor, re-query the active relationship, and recheck exact
+scope, expiry, and revocation. Unauthorized IDs use an indistinguishable
+`FORBIDDEN` or `NOT_FOUND` response.
 
-| Tool                      | Type             | Available when                              | Result/side effect                                     |
-| ------------------------- | ---------------- | ------------------------------------------- | ------------------------------------------------------ |
-| `get_gym_profile`         | Read             | Public Gym route                            | Services, accessibility, hours/status needed by agent  |
-| `search_equipment`        | Read/untrusted   | Catalog route                               | Bounded matches from the real catalog                  |
-| `get_equipment`           | Read/untrusted   | Valid catalog item                          | One specification record                               |
-| `get_active_context`      | Read             | Context has been redeemed and remains valid | Minimum projection only                                |
-| `create_session_draft`    | Write-like draft | Active context and published template ID    | Persisted walkthrough with template/catalog provenance |
-| `record_session_feedback` | Write            | Session complete                            | Confirmation and bounded feedback event                |
+## Adaptive Gym: seven tools total
 
-## Server call sequence
+| Tool                          | Type                       | Payment                                        | Route/state behavior                                              |
+| ----------------------------- | -------------------------- | ---------------------------------------------- | ----------------------------------------------------------------- |
+| `get_gym_profile`             | Public read                | Never                                          | Public home, catalog, and routine surfaces                        |
+| `search_equipment`            | Public read, untrusted     | Never                                          | Updates the existing catalog controls/cards                       |
+| `get_equipment`               | Public read, untrusted     | Never                                          | Opens an existing `/equipment/[slug]` record                      |
+| `get_active_context`          | Read                       | Never                                          | Only after a valid one-use Passport handoff                       |
+| `get_routine_pro_offer`       | Read                       | Never                                          | Active context; returns bounded server-authoritative display data |
+| `create_personalized_routine` | Confirmed mutation         | Existing entitlement or approved sandbox payer | Existing Session Planner route/canvas only                        |
+| `record_session_feedback`     | Confirmed write, untrusted | No new purchase                                | Active completed-session feedback route                           |
 
-Every tool handler uses the same sequence:
+Public profile and equipment access must continue to work when every payment
+feature flag is false. Connecting and inspecting the minimum context is free.
 
-1. Parse input with a strict schema and reject unknown properties.
-2. Resolve the server session; never accept actor or role from the tool input.
-3. Resolve resource through the actor's authorized relationship set.
-4. Re-check scope, grant status, purpose, expiry, and revocation.
-5. Execute a bounded query or purpose-specific mutation.
-6. Write a redacted audit event.
-7. Return the minimum structured result and a stable error code on failure.
+`create_personalized_routine` accepts only a published `templateId` and, when no
+entitlement exists, `paymentMode: "human_checkout" | "agent_wallet"`. It never
+accepts patient, owner, price, currency, entitlement, provider, merchant,
+wallet, destination, chain, token, RPC, or capability as tool input.
 
-## Result envelope
+## Server-authoritative preparation
+
+Consequential tools may define a read-only preparation phase:
+
+```ts
+prepareMutation(input, context) => {
+  confirmation: {
+    title: string;
+    description: string;
+    fields: Array<{ label: string; value: string }>;
+    riskClass: "payment" | "account-write";
+  };
+  quoteDigest?: string;
+}
+```
+
+The sequence is:
+
+```text
+validate input
+→ read current authority, entitlement, order, and offer
+→ render first-party confirmation
+→ person approves
+→ server recomputes and compares quote
+→ execute at most one write/provider attempt
+```
+
+Preparation performs no write. Decline creates no order, provider setup, budget
+reservation, entitlement, or routine. A changed quote requires a fresh review.
+An entitled owner sees an `account-write` confirmation without a payment.
+
+The no-entitlement confirmation shows product, **$4.99 test USD**, payer,
+sandbox status, effect, and unchanged data scope. Human mode ends with
+**Continue to secure test checkout**. Agent mode ends with
+**Approve agent payment**.
+
+## Protected server envelope
+
+Passport responses use a bounded no-store envelope:
 
 ```json
 {
   "ok": true,
   "data": {},
   "meta": {
-    "requestId": "req_demo",
-    "asOf": "2026-08-26T00:00:00Z",
-    "synthetic": true
+    "synthetic": true,
+    "asOf": "2026-08-29T00:00:00.000Z",
+    "requestId": "req_opaque"
   }
 }
 ```
 
-Errors use `ok: false`, a stable `error.code`, and a human-readable message that does not reveal unauthorized resource existence. Tool results avoid HTML and source instructions.
+Errors use `ok: false`, a stable safe code, and a request ID. Core codes are
+`UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION`, `EXPIRED`,
+`CONFLICT`, and `UNAVAILABLE`. Commerce may additionally return
+`PAYMENT_REQUIRED`, `ORDER_PENDING`, `QUOTE_CHANGED`, `PAYMENT_REPLAY`,
+`BUDGET_EXCEEDED`, `PROVIDER_SETUP_PENDING`,
+`PROVIDER_SETUP_RECONCILIATION_REQUIRED`, `RECONCILIATION_REQUIRED`,
+`FULFILLMENT_PENDING`, or `PAYMENT_FAILED`.
 
-## Confirmation contract
+No structured WebMCP output, log, or execution trace may contain a raw context
+code, capability, credential, receipt, provider request snapshot, Checkout
+Session ID, Stripe signature, private key, cookie, authorization header,
+database URL, or health projection outside the approved minimum. The
+first-party human Checkout path may receive an allowlisted Stripe-hosted HTTPS
+redirect URL; treat it as sensitive navigation data and never include it in a
+tool result or log.
 
-Mutating WebMCP calls prepare an action and bring the first-party UI to a review state. The user sees target, fields, purpose, expiry, and effect. Execution occurs only after an explicit click/tap in that UI. Cancel returns `CANCELLED` without mutation. The server rechecks the active relationship or session immediately before the write and records the exact persisted resource.
+## Fetch and output requirements
 
-## Character budgets
+Every handler that calls a server route must:
 
-Chrome's current security guidance recommends these working limits:
+1. pass strict input validation;
+2. use `cache: "no-store"` where applicable;
+3. pass the execution `AbortSignal`;
+4. require an expected content type and bounded schema-valid envelope;
+5. reject non-2xx responses as stable errors;
+6. stop dependent calls after any error;
+7. cap the serialized result at 1,500 characters.
 
-- tool name and parameter name: 30 characters
-- tool description: 500 characters
-- parameter description: 150 characters
-- individual tool output: 1,500 characters
-
-These are QA budgets rather than assumptions that the browser enforces them.
+Manufacturer data, source text, and user-authored notes retain the
+`untrustedContentHint`. Tool names stay within 30 characters, descriptions
+within 500, and parameter descriptions within 150.
