@@ -263,7 +263,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     model: "CMDAP",
     category: "functional-training",
     summary:
-      "Commercial dual cable station with independently adjustable carriages and weight stacks.",
+      "Commercial dual-cable functional trainer with independently adjustable carriages and weight stacks.",
     dimensionsCm: { length: 112, width: 158, height: 242 },
     requiredClearanceCm: 122,
     power: "none",

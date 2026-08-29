@@ -66,4 +66,16 @@ describe("shared equipment search", () => {
       }),
     ).toBe(true);
   });
+
+  it("returns cable trainers, not the push sled, for functional-trainer searches", () => {
+    const matches = equipmentCatalog.filter((item) =>
+      matchesEquipmentSearch(item, {
+        query: "functional trainers",
+        maxWidthCm: 200,
+        maxDepthCm: 220,
+      }),
+    );
+
+    expect(matches.map((item) => item.id)).toEqual(["lf_dual_adjustable_pulley"]);
+  });
 });

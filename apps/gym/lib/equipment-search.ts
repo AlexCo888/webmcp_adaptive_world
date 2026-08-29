@@ -15,6 +15,7 @@ const ACCESSIBILITY_TERMS = new Set(["accessible", "accessibility"]);
 const EQUIPMENT_TERM_ALIASES: Readonly<Record<string, readonly string[]>> = {
   rower: ["rowing"],
   rowers: ["rowing"],
+  trainers: ["trainer"],
 };
 
 function matchesSearchTerm(searchableText: string, term: string): boolean {
@@ -24,10 +25,7 @@ function matchesSearchTerm(searchableText: string, term: string): boolean {
 }
 
 function searchableEquipmentText(item: Equipment): string {
-  const categoryText =
-    item.category === "functional-training"
-      ? "functional training functional trainer"
-      : item.category.replaceAll("-", " ");
+  const categoryText = item.category.replaceAll("-", " ");
   return [
     item.name,
     item.manufacturer,
