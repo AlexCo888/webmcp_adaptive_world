@@ -43,11 +43,21 @@ function searchableEquipmentText(item: Equipment): string {
     .toLowerCase();
 }
 
+export function getEquipmentOperatingDimensions(item: Equipment) {
+  return (
+    item.operatingDimensionsCm ?? {
+      length: item.dimensionsCm.length + item.requiredClearanceCm * 2,
+      width: item.dimensionsCm.width + item.requiredClearanceCm * 2,
+      height: item.dimensionsCm.height,
+    }
+  );
+}
+
 export function matchesEquipmentSearch(
   item: Equipment,
   criteria: EquipmentSearchCriteria,
 ): boolean {
-  const spaceDimensions = item.operatingDimensionsCm ?? item.dimensionsCm;
+  const spaceDimensions = getEquipmentOperatingDimensions(item);
   const queryTerms = criteria.query?.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const requiresAccessibility = queryTerms.some((term) => ACCESSIBILITY_TERMS.has(term));
   const meaningfulQueryTerms = queryTerms.filter(
@@ -72,7 +82,7 @@ export function compactEquipmentForTool(item: Equipment) {
     model: item.model,
     category: item.category,
     dimensionsCm: item.dimensionsCm,
-    ...(item.operatingDimensionsCm ? { operatingDimensionsCm: item.operatingDimensionsCm } : {}),
+    operatingDimensionsCm: getEquipmentOperatingDimensions(item),
     accessFeatures: item.accessibility.slice(0, 3),
     locationZone: item.locationZone,
     sourceUrl: item.sourceUrl,

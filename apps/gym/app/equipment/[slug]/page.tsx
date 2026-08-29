@@ -62,7 +62,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
             </div>
             <div>
               <MapPin size={18} />
-              <span>{item.operatingDimensionsCm ? "Operating area" : "Planning clearance"}</span>
+              <span>{item.operatingDimensionsCm ? "Operating area" : "Clearance per side"}</span>
               <strong>
                 {item.operatingDimensionsCm
                   ? `${item.operatingDimensionsCm.length} × ${item.operatingDimensionsCm.width} cm`

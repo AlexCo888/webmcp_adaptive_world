@@ -1,6 +1,11 @@
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { describe, expect, it } from "vitest";
-import { createEquipmentSearchToolResult, matchesEquipmentSearch } from "./equipment-search";
+import {
+  compactEquipmentForTool,
+  createEquipmentSearchToolResult,
+  getEquipmentOperatingDimensions,
+  matchesEquipmentSearch,
+} from "./equipment-search";
 
 describe("shared equipment search", () => {
   it("returns the same manufacturer matches used by the API, WebMCP result, and catalog UI", () => {
@@ -71,16 +76,47 @@ describe("shared equipment search", () => {
     ).toBe(true);
   });
 
-  it("returns cable trainers, not the push sled, for functional-trainer searches", () => {
+  it("returns cable trainers, not the push sled, for unconstrained trainer searches", () => {
     const matches = equipmentCatalog.filter((item) =>
       matchesEquipmentSearch(item, {
         query: "functional trainers",
-        maxWidthCm: 200,
-        maxDepthCm: 220,
       }),
     );
 
-    expect(matches.map((item) => item.id)).toEqual(["lf_dual_adjustable_pulley"]);
+    expect(matches.map((item) => item.id)).toEqual([
+      "lf_dual_adjustable_pulley",
+      "torque_f9_functional_trainer",
+    ]);
+  });
+
+  it("derives legacy operating areas from each record's per-side clearance", () => {
+    const pulley = equipmentCatalog.find((item) => item.id === "lf_dual_adjustable_pulley");
+    if (!pulley) throw new Error("Expected the pulley fixture in the equipment catalog");
+
+    expect(getEquipmentOperatingDimensions(pulley)).toEqual({
+      length: 356,
+      width: 402,
+      height: 242,
+    });
+    expect(compactEquipmentForTool(pulley).operatingDimensionsCm).toEqual({
+      length: 356,
+      width: 402,
+      height: 242,
+    });
+    expect(
+      matchesEquipmentSearch(pulley, {
+        query: "functional trainer",
+        maxWidthCm: 200,
+        maxDepthCm: 220,
+      }),
+    ).toBe(false);
+    expect(
+      matchesEquipmentSearch(pulley, {
+        query: "functional trainer",
+        maxWidthCm: 402,
+        maxDepthCm: 356,
+      }),
+    ).toBe(true);
   });
 
   it("uses the push sled's travel lane instead of its stationary footprint", () => {
