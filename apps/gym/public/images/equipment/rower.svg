@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Rowing ergometer illustration</title>
+  <desc id="description">An original neutral line illustration of a rowing ergometer.</desc>
+  <rect width="1200" height="800" rx="48" fill="#edf4ef"/>
+  <ellipse cx="596" cy="660" rx="432" ry="54" fill="#d6e3da"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M218 609h691M286 610l-35 63m573-64 50 64" stroke-width="31"/>
+    <path d="M706 603 886 292h107l-59 317" stroke-width="35"/>
+    <circle cx="901" cy="399" r="77" stroke-width="27"/>
+    <path d="M514 550h145v70H514zM578 550l-20-83" stroke-width="25"/>
+    <path d="m558 466 214-128m-25-18 51 36" stroke-width="19"/>
+  </g>
+  <circle cx="901" cy="399" r="25" fill="#d8ff77"/>
+</svg>

@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { DigitalPassport } from "@adaptive-world/contracts";
 import { Icon, type IconName } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
 import { usePortal } from "@/lib/portal-context";
+import type { DoctorPassportView } from "@/lib/session";
 
 type Section = "overview" | "clinical" | "movement" | "documents";
-
-function age(dateOfBirth: string) {
-  return Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / 31_557_600_000);
-}
 
 function initials(name: string) {
   return name
@@ -25,28 +21,32 @@ function PatientCard({
   selected,
   onSelect,
 }: {
-  patient: DigitalPassport;
+  patient: DoctorPassportView;
   selected: boolean;
   onSelect: () => void;
 }) {
   return (
     <button className={`patient-card ${selected ? "selected" : ""}`} onClick={onSelect}>
       <div className="person">
-        <div className="avatar">{initials(patient.identity.displayName)}</div>
+        <div className="avatar">{initials(patient.displayName)}</div>
         <div>
-          <strong>{patient.identity.displayName}</strong>
-          <small>{age(patient.identity.dateOfBirth)} years · Updated Aug 20</small>
+          <strong>{patient.displayName}</strong>
+          <small>
+            {patient.ageYears} years · Updated {new Date(patient.updatedAt).toLocaleDateString()}
+          </small>
         </div>
       </div>
       <div className="patient-summary">
-        {patient.conditions.length ? (
-          patient.conditions.slice(0, 2).map((condition) => (
+        {patient.clinical?.conditions.length ? (
+          patient.clinical.conditions.slice(0, 2).map((condition) => (
             <span className="pill neutral" key={condition.id}>
               {condition.label}
             </span>
           ))
-        ) : (
+        ) : patient.clinical ? (
           <span className="pill">No active conditions</span>
+        ) : (
+          <span className="pill neutral">Summary scope</span>
         )}
       </div>
       <div className="patient-footer">
@@ -66,8 +66,17 @@ function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function PatientDetail({ patient, section }: { patient: DigitalPassport; section: Section }) {
-  if (section === "clinical")
+function PatientDetail({ patient, section }: { patient: DoctorPassportView; section: Section }) {
+  if (section === "clinical") {
+    const clinical = patient.clinical;
+    if (!clinical) {
+      return (
+        <div className="progressive-note">
+          <Icon name="lock" width="17" />
+          <span>Clinical details are not present in this scope-projected response.</span>
+        </div>
+      );
+    }
     return (
       <>
         <div className="progressive-note">
@@ -80,8 +89,8 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
         <div className="data-block">
           <h3>Conditions</h3>
           <div className="data-list">
-            {patient.conditions.length ? (
-              patient.conditions.map((item) => (
+            {clinical.conditions.length ? (
+              clinical.conditions.map((item) => (
                 <DataRow
                   key={item.id}
                   label={item.label}
@@ -103,16 +112,16 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
             <DataRow
               label="Active medications"
               value={
-                patient.medications.length
-                  ? patient.medications.map((item) => `${item.name} ${item.dose}`).join(", ")
+                clinical.medications.length
+                  ? clinical.medications.map((item) => `${item.name} ${item.dose}`).join(", ")
                   : "None"
               }
             />
             <DataRow
               label="Known allergies"
               value={
-                patient.allergies.length
-                  ? patient.allergies
+                clinical.allergies.length
+                  ? clinical.allergies
                       .map((item) => `${item.substance} (${item.reaction})`)
                       .join(", ")
                   : "None known"
@@ -123,7 +132,7 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
         <div className="data-block">
           <h3>Notable observations</h3>
           <div className="data-list">
-            {patient.notableResults.map((result) => (
+            {clinical.notableResults.map((result) => (
               <DataRow
                 key={result.code}
                 label={result.label}
@@ -144,6 +153,7 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
         </div>
       </>
     );
+  }
 
   if (section === "movement")
     return (
@@ -231,8 +241,8 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
       </>
     );
 
-  const bpS = patient.vitalSigns.find((item) => item.code === "systolic_bp")?.value;
-  const bpD = patient.vitalSigns.find((item) => item.code === "diastolic_bp")?.value;
+  const bpS = patient.clinical?.vitalSigns.find((item) => item.code === "systolic_bp")?.value;
+  const bpD = patient.clinical?.vitalSigns.find((item) => item.code === "diastolic_bp")?.value;
   return (
     <>
       <div className="progressive-note">
@@ -245,38 +255,42 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
       <div className="data-block">
         <h3>Patient overview</h3>
         <div className="data-list">
-          <DataRow
-            label="Age / sex"
-            value={`${age(patient.identity.dateOfBirth)} · ${patient.identity.biologicalSex}`}
-          />
-          <DataRow label="Blood pressure" value={`${bpS}/${bpD} mmHg`} />
-          <DataRow
-            label="Height / weight"
-            value={`${patient.heightCm} cm · ${patient.weightKg} kg`}
-          />
+          <DataRow label="Age" value={`${patient.ageYears} years`} />
+          {patient.clinical ? (
+            <>
+              <DataRow label="Sex" value={patient.clinical.biologicalSex} />
+              <DataRow label="Blood pressure" value={`${bpS}/${bpD} mmHg`} />
+              <DataRow
+                label="Height / weight"
+                value={`${patient.clinical.heightCm} cm · ${patient.clinical.weightKg} kg`}
+              />
+            </>
+          ) : null}
           <DataRow
             label="Activity"
             value={`${patient.functional.weeklyActivityMinutes} min/week`}
           />
         </div>
       </div>
-      <div className="data-block">
-        <h3>Current picture</h3>
-        <div className="scope-tags">
-          {patient.conditions.map((condition) => (
-            <span key={condition.id} className="pill neutral">
-              {condition.label} · {condition.status}
-            </span>
-          ))}
-          {patient.notableResults
-            .filter((result) => result.interpretation !== "normal")
-            .map((result) => (
-              <span key={result.code} className="pill warning">
-                {result.label} · {result.value} {result.unit}
+      {patient.clinical ? (
+        <div className="data-block">
+          <h3>Current picture</h3>
+          <div className="scope-tags">
+            {patient.clinical.conditions.map((condition) => (
+              <span key={condition.id} className="pill neutral">
+                {condition.label} · {condition.status}
               </span>
             ))}
+            {patient.clinical.notableResults
+              .filter((result) => result.interpretation !== "normal")
+              .map((result) => (
+                <span key={result.code} className="pill warning">
+                  {result.label} · {result.value} {result.unit}
+                </span>
+              ))}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div className="data-block">
         <h3>Primary goals</h3>
         <div className="scope-list">
@@ -298,9 +312,17 @@ function PatientDetail({ patient, section }: { patient: DigitalPassport; section
 
 export function DoctorView() {
   const { actor, passports, grants, notify } = usePortal();
+  const doctorPassports = useMemo(
+    () =>
+      passports.filter(
+        (passport): passport is DoctorPassportView =>
+          "kind" in passport && passport.kind === "doctor-passport-view",
+      ),
+    [passports],
+  );
   const authorized = useMemo(
     () =>
-      passports.filter((passport) =>
+      doctorPassports.filter((passport) =>
         grants.some(
           (grant) =>
             grant.passportId === passport.id &&
@@ -309,7 +331,7 @@ export function DoctorView() {
             new Date(grant.expiresAt) > new Date(),
         ),
       ),
-    [grants, passports],
+    [doctorPassports, grants],
   );
   const [selectedId, setSelectedId] = useState(authorized[0]?.id ?? "");
   const [section, setSection] = useState<Section>("overview");
@@ -319,24 +341,30 @@ export function DoctorView() {
   const [savingGuidance, setSavingGuidance] = useState(false);
   const patient = authorized.find((item) => item.id === selectedId) ?? authorized[0];
   const filtered = authorized.filter((item) =>
-    item.identity.displayName.toLowerCase().includes(query.toLowerCase()),
+    item.displayName.toLowerCase().includes(query.toLowerCase()),
   );
   useEffect(() => {
     if (!patient && authorized[0]) setSelectedId(authorized[0].id);
   }, [authorized, patient]);
-  const patientGrant = grants.find(
+  const patientGrants = grants.filter(
     (grant) =>
       grant.passportId === patient?.id &&
       grant.granteeType === "clinician" &&
-      grant.status === "active",
+      grant.status === "active" &&
+      new Date(grant.expiresAt) > new Date(),
+  );
+  const patientScopes = new Set(patientGrants.flatMap((grant) => grant.scopes));
+  const authorizationExpiry = patientGrants.reduce(
+    (latest, grant) => (grant.expiresAt > latest ? grant.expiresAt : latest),
+    "",
   );
   const sections: Array<{ id: Section; label: string; icon: IconName }> = [
     { id: "overview", label: "Overview", icon: "user" },
-    ...(patientGrant?.scopes.includes("passport.clinical.read")
+    ...(patientScopes.has("passport.clinical.read")
       ? ([{ id: "clinical", label: "Clinical", icon: "heart" }] as const)
       : []),
     { id: "movement", label: "Movement", icon: "activity" },
-    ...(patientGrant?.scopes.includes("passport.documents.read")
+    ...(patientScopes.has("passport.documents.read")
       ? ([{ id: "documents", label: "Sources", icon: "file" }] as const)
       : []),
   ];
@@ -405,24 +433,16 @@ export function DoctorView() {
           <div className="card-header">
             <div className="person">
               <div className="avatar" style={{ width: 42, height: 42 }}>
-                {initials(patient.identity.displayName)}
+                {initials(patient.displayName)}
               </div>
               <div>
-                <h2>{patient.identity.displayName}</h2>
+                <h2>{patient.displayName}</h2>
                 <p className="card-subtitle">
-                  Authorized through{" "}
-                  {new Date(
-                    grants.find(
-                      (grant) =>
-                        grant.passportId === patient.id &&
-                        grant.granteeType === "clinician" &&
-                        grant.status === "active",
-                    )?.expiresAt ?? "",
-                  ).toLocaleDateString()}
+                  Authorized through {new Date(authorizationExpiry).toLocaleDateString()}
                 </p>
               </div>
             </div>
-            {patientGrant?.scopes.includes("passport.guidance.write") ? (
+            {patientScopes.has("passport.guidance.write") ? (
               <button className="button primary" onClick={() => setShowGuidance(true)}>
                 <Icon name="plus" width="14" /> Add guidance
               </button>
@@ -472,7 +492,7 @@ export function DoctorView() {
               </button>
             </div>
             <div className="field">
-              <label htmlFor="guidance">Guidance for {patient.identity.displayName}</label>
+              <label htmlFor="guidance">Guidance for {patient.displayName}</label>
               <textarea
                 id="guidance"
                 rows={6}

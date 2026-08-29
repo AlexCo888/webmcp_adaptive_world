@@ -37,6 +37,13 @@ export interface WebMCPToolAnnotations {
 
 export interface WebMCPExecutionContext {
   readonly signal?: AbortSignal;
+  /**
+   * Correlates an approved, server-prepared quote with the consequential request.
+   * The receiving server must recompute and verify the digest; it is never authority.
+   */
+  readonly mutationApproval?: {
+    readonly quoteDigest?: string;
+  };
   readonly [key: string]: unknown;
 }
 
@@ -45,12 +52,41 @@ export type WebMCPToolHandler<
   TResult = unknown,
 > = (input: TInput, context: WebMCPExecutionContext) => TResult;
 
+export type WebMCPMutationRiskClass = "payment" | "account-write";
+
+export interface WebMCPMutationConfirmationField {
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface WebMCPPreparedConfirmation {
+  readonly title: string;
+  readonly description: string;
+  readonly fields: readonly WebMCPMutationConfirmationField[];
+  readonly riskClass: WebMCPMutationRiskClass;
+  readonly confirmLabel?: string;
+  readonly cancelLabel?: string;
+}
+
+export interface WebMCPMutationPreparation {
+  readonly confirmation: WebMCPPreparedConfirmation;
+  /** Display correlation only. The server must recompute it after approval. */
+  readonly quoteDigest?: string;
+}
+
+export type WebMCPMutationPreparer<TInput extends object = Record<string, unknown>> = (
+  input: TInput,
+  context: WebMCPExecutionContext,
+) => WebMCPMutationPreparation | Promise<WebMCPMutationPreparation>;
+
 export interface WebMCPToolDefinition {
   readonly name: string;
   readonly title: string;
   readonly description: string;
   readonly inputSchema: JsonSchema;
   readonly annotations: WebMCPToolAnnotations;
+  /** Optional read-only preparation for a server-authoritative confirmation. */
+  readonly prepareMutation?: WebMCPMutationPreparer;
   readonly execute: WebMCPToolHandler;
 }
 
@@ -80,7 +116,13 @@ export interface MutationConfirmationRequest {
   readonly toolName: string;
   readonly title: string;
   readonly description: string;
+  readonly fields: readonly WebMCPMutationConfirmationField[];
+  readonly riskClass: WebMCPMutationRiskClass;
+  readonly confirmLabel?: string;
+  readonly cancelLabel?: string;
   readonly input: Readonly<Record<string, unknown>>;
+  /** Abort when the browser cancels execution or the route unregisters. */
+  readonly signal?: AbortSignal;
 }
 
 /** Must render an application-owned confirmation UI and resolve with the user's explicit choice. */

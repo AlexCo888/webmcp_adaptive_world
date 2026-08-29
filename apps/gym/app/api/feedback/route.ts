@@ -1,16 +1,23 @@
 import { GeneratedSessionSchema, SessionFeedbackSchema } from "@adaptive-world/contracts";
-import { gymSessions, sessionFeedback } from "@adaptive-world/db/schema";
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/database";
+import { commitSessionFeedbackIfLive } from "@/lib/feedback-write";
 import { getGymSession } from "@/lib/gym-session";
+import { GYM_CONTEXT_READ_SCOPE, GYM_FEEDBACK_WRITE_SCOPE } from "@/lib/gym-scopes";
 
 export async function POST(request: Request) {
-  const active = await getGymSession();
-  if (!active) return NextResponse.json({ error: "The Gym session has expired." }, { status: 401 });
+  // Consume and validate untrusted input before taking an authority snapshot. The
+  // final write below still rechecks that authority atomically.
   const parsed = SessionFeedbackSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Feedback does not match the active walkthrough." },
+      { status: 400 },
+    );
+  }
+  const active = await getGymSession([GYM_CONTEXT_READ_SCOPE, GYM_FEEDBACK_WRITE_SCOPE]);
+  if (!active) return NextResponse.json({ error: "The Gym session has expired." }, { status: 401 });
   const plan = GeneratedSessionSchema.safeParse(active.row.plan);
-  if (!parsed.success || !plan.success || parsed.data.sessionId !== active.row.id) {
+  if (!plan.success || parsed.data.sessionId !== plan.data.id) {
     return NextResponse.json(
       { error: "Feedback does not match the active walkthrough." },
       { status: 400 },
@@ -24,39 +31,19 @@ export async function POST(request: Request) {
     );
   }
 
-  await db
-    .insert(sessionFeedback)
-    .values({
-      sessionId: active.row.id,
-      anonymousSubjectId: active.subjectId,
-      perceivedExertion: parsed.data.perceivedEffort,
-      painAfter: parsed.data.painDuringSession,
-      completed: parsed.data.completedExerciseIds.length === plan.data.exercises.length,
-      notes: parsed.data.notes,
-      exerciseFeedback: parsed.data.completedExerciseIds.map((equipmentId) => ({
-        equipmentId,
-        completed: true,
-      })),
-    })
-    .onConflictDoUpdate({
-      target: [sessionFeedback.sessionId, sessionFeedback.anonymousSubjectId],
-      set: {
-        perceivedExertion: parsed.data.perceivedEffort,
-        painAfter: parsed.data.painDuringSession,
-        completed: parsed.data.completedExerciseIds.length === plan.data.exercises.length,
-        notes: parsed.data.notes,
-        exerciseFeedback: parsed.data.completedExerciseIds.map((equipmentId) => ({
-          equipmentId,
-          completed: true,
-        })),
-      },
-    });
-  await db
-    .update(gymSessions)
-    .set({ status: "completed", completedAt: new Date() })
-    .where(
-      and(eq(gymSessions.id, active.row.id), eq(gymSessions.anonymousSubjectId, active.subjectId)),
+  const committed = await commitSessionFeedbackIfLive({
+    grantId: active.grant.id,
+    internalSessionId: active.row.id,
+    anonymousSubjectId: active.subjectId,
+    plan: plan.data,
+    feedback: parsed.data,
+  });
+  if (!committed) {
+    return NextResponse.json(
+      { error: "The Gym session has expired." },
+      { status: 401, headers: { "cache-control": "no-store" } },
     );
+  }
 
   const nextAdaptation =
     parsed.data.painDuringSession >= 4

@@ -1,95 +1,152 @@
 # Adaptive World architecture
 
-Status: implementation baseline for the WebMCP hackathon MVP.
+Status: implementation contract for the synthetic WebMCP hackathon MVP.
 
-## Outcome
+## Product and deployment boundary
 
-One monorepo produces two independently deployed, human-first web applications:
+One monorepo produces two independently deployed, human-first applications:
 
-| Vercel project            | Root directory  | Audience                                | Responsibility                                                                              |
-| ------------------------- | --------------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician | Identity, consent, shares, sources, audit history, and one-time context grants              |
-| `adaptive-world-gym`      | `apps/gym`      | Gym visitor                             | Product discovery, temporary minimum context, published walkthrough selection, and feedback |
+| Vercel project            | Root            | Audience                                     | Responsibility                                                                                                                      |
+| ------------------------- | --------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician      | Identity, consent, sources, grants, audit history, one-use Gym projection, and owner saved routines                                 |
+| `adaptive-world-gym`      | `apps/gym`      | Public visitor and connected synthetic owner | Free verified discovery, temporary minimum context, Routine Pro entitlement, sandbox payer adapters, routine creation, and feedback |
 
-The applications share contracts, authorization primitives, UI, demo fixtures, and database access through `packages/*`. They do not share browser cookies or place health context in URLs.
-
-## System boundaries
+They share typed contracts, security primitives, demo fixtures, and the same
+environment's Neon database. They do not share browser cookies. Passport health
+data never appears in a Gym URL, payment provider request, or provider metadata.
 
 ```mermaid
 flowchart TD
-    P["Passport owner"] --> PA["Passport app"]
-    D["Authorized clinician"] --> PA
-    PA --> DB["Neon Postgres"]
-    PA --> B["Private Blob"]
-    PA -->|"one-time opaque code"| GA["Gym app"]
-    GA --> DB
-    GA --> CAT["Equipment catalog"]
-    A["Browser agent"] -->|"WebMCP, visible page"| PA
-    A -->|"WebMCP, visible page"| GA
+    O["Passport owner"] --> P["Digital Passport"]
+    D["Authorized clinician"] --> P
+    P --> DB["Neon · synthetic data"]
+    P -->|"one-use minimum projection"| G["Adaptive Gym"]
+    A["Browser agent"] -->|"route-scoped WebMCP"| P
+    A -->|"free discovery + confirmed action"| G
+    G --> C["Routine Pro order"]
+    C --> S["Stripe test Checkout"]
+    C --> M["Bounded MPP testnet wallet"]
+    S --> E["One entitlement"]
+    M --> E
+    E --> R["Grounded saved routine"]
+    R --> DB
 ```
 
-### Trust boundaries
+## Trust boundaries
 
-1. The browser is untrusted input. WebMCP tool arguments receive the same validation and authorization as public HTTP requests.
-2. Authentication proves a session identity; authorization is evaluated again for every data access and mutation.
-3. Passport and Gym are separate origins and Vercel projects. A context grant is the only approved bridge.
-4. Documents and manufacturer content are untrusted payloads. Their text never becomes authority or policy.
-5. Database and Blob credentials remain server-only. No secret uses a `NEXT_PUBLIC_` prefix.
+1. Browser, WebMCP input, redirects, and tool registrations are untrusted.
+2. Authentication proves a session identity; protected authorization is
+   recomputed on every server invocation.
+3. Tool presence expresses availability, not authority.
+4. Manufacturer data, documents, and user-authored text are untrusted content.
+5. Price, currency, payer/provider, entitlement, merchant, wallet, chain,
+   destination, and patient identity are derived server-side.
+6. Provider success requires verified webhook/credential/receipt evidence, not
+   a redirect, URL, model statement, or browser flag.
+7. Database/provider/wallet/capability credentials remain server-only.
 
-## Context-grant protocol
+## Context handoff
 
-1. An authenticated owner selects **Use in Adaptive Gym** and reviews the minimum projection.
-2. Passport creates a random 256-bit code. Only a keyed digest or hash of the code is persisted.
-3. The code is returned once, expires within five minutes, and is sent to Gym without any health data in the URL.
-4. Gym redeems the code server-to-server. Redemption is atomic and single-use.
-5. Gym stores only the projected fields, their purpose, provenance, expiry, and revocation reference.
-6. Creation, redemption, denial, expiry, and revocation produce append-only audit events.
+1. The owner requests Adaptive Gym use and reviews an allowlisted projection.
+2. Passport creates a random 256-bit one-use code and stores only its digest.
+3. The code expires in the requested 1–15 minute window and appears only in a
+   URL fragment, which Gym removes immediately.
+4. Gym atomically consumes the code and creates an anonymous persisted session.
+5. Gym receives goals, preferences, capabilities, avoidances, stop signals,
+   purpose, provenance class, and expiry—never identity or clinical sources.
+6. Creation, redemption, denial, replay, expiry, and revocation generate
+   redacted audit metadata.
 
-The share's lifetime and the redemption code's lifetime are different. A code can expire in five minutes while the resulting projection remains valid for the user-approved session window.
+## Free and Pro boundary
 
-## Authorization invariants
+Free public APIs, semantic pages, and WebMCP tools expose the Gym profile and
+verified equipment catalog. A Passport is optional for discovery. Connecting
+and reading the minimum projection is free.
 
-- A clinician can enumerate only patients who granted that clinician an active relationship.
-- Knowing a patient, document, share, or grant identifier confers no access.
-- Scope checks occur at the repository/service layer, not only in UI or WebMCP registration.
-- Gym never receives names, birth dates, contacts, medications, raw labs, source documents, or clinician identity.
-- Mutating tools require an explicit review step and an idempotency key.
-- Every denial is safe to repeat and does not reveal whether an unauthorized resource exists.
+`adaptive_world.routine_pro.v1` is one Passport-linked entitlement. It permits
+personalized routine generation through either the existing human UI or
+`create_personalized_routine`, then saves the same result to Passport. It does
+not grant additional health scopes. The generic sample walkthrough remains
+staff-authored and non-personalized.
 
-## Authentication and actor separation
+## Confirmation and fulfillment
 
-- Better Auth owns password verification and server-side sessions in its own tables.
-- The application maps the authenticated subject to a server-stored role; role is never accepted from the browser.
-- Passport owners and doctors use distinct navigation and route boundaries. There is no role switch or patient-profile picker.
-- The doctor can enumerate only active relationships and then only sections covered by the associated grant.
-- Gym is a separate origin with no Passport cookie. After one-use redemption it receives only a signed, anonymous Gym session cookie.
+A consequential WebMCP mutation first performs a read-only server preparation.
+The first-party UI displays the current product, amount, payer, sandbox status,
+effect, and unchanged data scope. Decline performs no write. After approval, the
+server recomputes the quote and authority before creating or reusing one
+patient/product order.
 
-## WebMCP posture
+At most one payable order and one provider window/submitted attempt may exist
+for a patient and product, across templates, routes, sessions, and payer rails.
+Verified payment grants at most one entitlement. Routine generation is a
+separate idempotent operation, so paid-but-unfulfilled state can recover without
+another payment.
 
-WebMCP is progressive enhancement for the page a person is visiting. Standard controls and APIs remain complete without it. The imperative API is the default for authenticated and state-dependent tools; declarative tools are appropriate only for simple visible forms.
+Payment initiation is guarded by durable 10-minute counters whose database keys
+are HMAC hashes of the Gym session, public order, client IP, and—when
+applicable—the fixed demo-agent subject. Raw dimension values are not persisted.
 
-Tool registration follows route, role, and state. A tool is unregistered as soon as the user leaves the route or loses the required state. The browser registry is a discoverability surface, never an authorization boundary.
+## Provider durability
 
-See [WEBMCP_TOOLS.md](./WEBMCP_TOOLS.md) and [THREAT_MODEL.md](./THREAT_MODEL.md).
+### Stripe
 
-## Data ownership
+Before the first Checkout create call, Gym persists the exact normalized
+request, canonical bytes, fingerprint, idempotency key, requested expiry,
+first-request time, and conservative replay-safe cutoff. Retry before the cutoff
+uses the exact snapshot and key. An unattached retry at or after
+`idempotency_replay_until` sends no create request and moves to reconciliation;
+it cannot rotate the setup or payer rail without provider-definitive proof that
+no Session was created.
 
-| Data                                | Canonical owner         | Gym copy allowed?   | Retention                          |
-| ----------------------------------- | ----------------------- | ------------------- | ---------------------------------- |
-| Identity and contact                | Passport                | No                  | Until demo reset/account deletion  |
-| Clinical documents and observations | Passport/private Blob   | No                  | Synthetic demo only                |
-| Consent and clinician relationships | Passport                | Reference only      | Until revoked plus audit record    |
-| Minimum gym projection              | Passport                | Yes                 | Until projection expiry/revocation |
-| Equipment catalog                   | Gym                     | Yes                 | Product data lifecycle             |
-| Session draft and feedback          | Gym                     | Yes                 | Demo lifecycle                     |
-| Audit events                        | Shared security service | Event metadata only | Append-only demo history           |
+### MPP
 
-## Runtime and persistence
+The server-held demo wallet reserves its daily budget atomically before any
+external attempt. The order capability is an HMAC over the public order
+reference, product key, amount minor, currency, capability version, and
+immutable `capability_expires_at`, all persisted before the first challenge.
+Submitted or ambiguous spend remains reserved until a definitive
+provider/chain result. Reset never releases it merely because local time passed.
 
-- Next.js 16 App Router; Route Handlers are treated as public endpoints.
-- Node.js runtime by default for authentication, database, cryptography, and Blob access.
-- Neon pooled connection string for request traffic; direct connection only for migrations.
-- Private Vercel Blob for synthetic source documents.
-- Zod/JSON Schema at trust boundaries; Drizzle migrations are the database history.
+## Authorization posture and RLS
 
-This MVP uses synthetic data and is not a clinical system, medical device, emergency service, or claim of HIPAA compliance.
+Application-level authorization is the required deployed boundary. Owner and
+clinician reads resolve the current Better Auth session, application actor,
+relationship, scope, expiry, and revocation for every invocation. Unauthorized
+object IDs receive non-enumerating errors.
+
+The repository includes PostgreSQL RLS policies as defense-in-depth design.
+Runtime RLS is **not claimed as active** unless both Vercel applications use a
+non-owner, non-`BYPASSRLS` role, set per-request identity within the same
+transaction as protected queries, keep migrations on a separate owner
+connection, and pass the complete preview regression suite. Partial activation
+is not a release strategy.
+
+## Data ownership and retention
+
+| Data                                 | Canonical owner               | Gym/payment copy                         | Retention rule                          |
+| ------------------------------------ | ----------------------------- | ---------------------------------------- | --------------------------------------- |
+| Identity, contacts, clinical sources | Passport                      | Never                                    | Synthetic demo lifecycle                |
+| Consent and clinician relationships  | Passport                      | Reference only                           | Current state plus audit history        |
+| Minimum Gym projection               | Passport-issued / Gym session | Allowlisted projection only              | Expiry/revocation policy                |
+| Equipment catalog                    | Gym                           | Public                                   | Product-data lifecycle                  |
+| Order/setup/event/receipt digests    | Gym commerce service          | Provider-minimum metadata only           | Preserve replay/reconciliation evidence |
+| Entitlement and saved routine        | Passport owner                | Gym generates; Passport reads owner-only | Synthetic demo lifecycle                |
+| Budget ledger                        | Gym commerce service          | No browser/model copy                    | Preserve settled/submitted history      |
+| Audit events                         | Shared database               | Redacted metadata only                   | Append-only demo evidence               |
+
+Synthetic reset may restore user-visible demo state, but it must not erase
+successful payment references, receipt digests, immutable provider snapshots,
+settled budget, or unresolved submitted state.
+
+## Runtime
+
+- Next.js 16 App Router and Node.js route handlers.
+- Better Auth server-side sessions.
+- Neon/Drizzle persistence with versioned migrations.
+- Strict Zod/JSON Schema at trust boundaries.
+- Stripe test mode and MPP testnet only for the judged payment proof.
+- Standard accessible UI remains authoritative when WebMCP is absent.
+
+This MVP is not a clinical system, medical device, emergency service, payment
+institution, money transmitter, custody product, or compliance certification.

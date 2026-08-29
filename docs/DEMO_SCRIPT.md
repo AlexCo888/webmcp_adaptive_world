@@ -1,76 +1,81 @@
 # Hackathon demo script
 
-Target length: 4–6 minutes. Run entirely with synthetic data.
+Target length: **2:58**. Use only synthetic data and sandbox/test payment rails.
+The primary story is Digital Passport → Adaptive Gym; the clinician workspace
+is a secondary authorization proof, not part of the timed path.
 
 ## Preflight
 
-- Open the exact production URLs for Passport and Gym in separate tabs.
-- Confirm both show **Synthetic demo — not for clinical use**.
-- Sign in as the prepared patient and clinician demo users in separate browser profiles.
-- Confirm Chrome exposes WebMCP and DevTools lists the expected tools for each page.
-- Reset the selected context grant and session fixture.
-- Keep a standard-UI fallback ready; do not represent DOM automation as WebMCP.
+- Record the exact Git SHA deployed to both production aliases.
+- Open both aliases from a clean Chrome profile without Vercel deployment protection.
+- Confirm `document.modelContext` is available and the WebMCP panel shows the expected route tools.
+- Sign in as the clinician demo operator, `elena.vargas@adaptiveworld.test`, and use
+  **Tools → Restore synthetic demo**.
+- Confirm the reset did not report unresolved payment reconciliation.
+- Sign out, then sign in as the Passport owner, `mateo.demo@adaptiveworld.test`, for the
+  primary journey.
+- Verify the free Gym catalog works with every payment feature flag disabled.
+- Complete and record one Stripe test-mode and one bounded MPP testnet smoke before filming.
+- Keep the ordinary UI fallback ready. Never describe UI clicks or DOM automation as WebMCP calls.
 
-## 1. The problem (30 seconds)
+## Timed path
 
-Show the Passport and explain: people repeatedly copy sensitive context into prompts, while websites know their capabilities but not the user's relevant constraints. Adaptive World joins those sides with permission and minimum disclosure.
+| Time      | Scene and proof                                                                                                                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:18 | Explain the problem: agents either guess from pages or receive too much personal context. State the boundary—public Gym understanding is free; personal action is permissioned.                               |
+| 0:18–0:45 | At Gym, invoke `get_gym_profile` and `search_equipment`. The existing catalog controls and cards visibly update before any Passport or payment.                                                               |
+| 0:45–1:08 | At Passport, ask for a five-minute Adaptive Gym handoff. Pause on the first-party review, approve it, and show what is excluded. Redeem the one-use fragment at Gym.                                          |
+| 1:08–1:28 | Invoke `get_active_context`, `get_routine_pro_offer`, then request `create_personalized_routine`. Show the exact $4.99 test USD confirmation: product, payer, sandbox mode, effect, and unchanged data scope. |
+| 1:28–1:48 | Approve **Adaptive World demo agent** payment. Show only a redacted 402 → credential → verified receipt state; never reveal capability, credential, key, receipt, wallet address, or provider payload.        |
+| 1:48–2:18 | The existing Session Planner canvas fills with the grounded routine and displays **Saved to Passport ✓**. No second agent-results UI appears.                                                                 |
+| 2:18–2:38 | Show template/catalog versions, decision trace, safety notes, and manufacturer provenance. Explain that a published template was selected; no diagnosis or treatment was generated.                           |
+| 2:38–2:52 | Open Passport → **Saved routines** and show the same owner-authorized record.                                                                                                                                 |
+| 2:52–2:58 | Close: free public understanding, minimum context, explicit approval, one sandbox entitlement, and no broader health access.                                                                                  |
 
-## 2. Owner-controlled Passport (60 seconds)
+Expected primary chain:
 
-On Mateo's Passport, ask the agent:
+```text
+get_gym_profile
+→ search_equipment
+→ get_active_context
+→ get_routine_pro_offer
+→ create_personalized_routine
+```
 
-> Summarize my current goals and tell me what I am sharing.
+The first two tools require neither payment nor Passport. The final mutation
+must pause on the application-owned confirmation. Declining must create no
+order, provider setup, budget reservation, entitlement, or routine.
 
-Verify calls to `get_my_passport_summary` and `list_my_shares`. Show that the ordinary UI reflects the same state.
+## Backup human-payer proof
 
-Then choose **Use in Adaptive Gym**. Pause on the first-party review and point out what is included and excluded. Confirm to create the one-time grant.
+Keep a screenshot or short backup clip—not a second primary demo—showing
+**Continue to secure test checkout**, Stripe Checkout in test mode, redirect
+without unlock, verified webhook fulfillment, and automatic routine retry.
 
-## 3. Minimum context exchange (45 seconds)
+## Optional clinician proof
 
-Open Gym and redeem the context. Explain that the exchange code is one-time and short-lived; Gym receives a temporary projection rather than a medical record.
-
-Ask:
-
-> What relevant context do you have for this session?
-
-Verify `get_active_context`. Highlight the absence of name, documents, medication, and lab values.
-
-## 4. Real environment matching (75 seconds)
-
-Ask:
-
-> Use my connected context to select the low-impact club orientation.
-
-Expected sequence:
-
-1. `get_active_context`
-2. `create_session_draft` with `low_impact_orientation`
-
-Pause on the application-owned confirmation. Then show the fixed template ID/version, `createdVia: webmcp`, catalog version, decision trace, and manufacturer source for every station. Explain that WebMCP selected a published walkthrough; it did not invent a treatment or routine.
-
-## 5. Progressive clinical access (60 seconds)
-
-In the clinician profile, search:
-
-> Find my patient Mateo and show what changed since the last visit. Open only the source supporting the vitamin D finding.
-
-Expected sequence: `search_my_patients`, `get_patient_changes`, then one `open_patient_source`. Explain that a clinician cannot search the global Passport population, and source text is untrusted.
-
-Optionally prepare a guidance note and cancel at the confirmation screen to demonstrate that the agent cannot silently write.
-
-## 6. Security proof (45 seconds)
-
-- Attempt to redeem the same Gym code again: it must fail.
-- Show the access log containing creation, redemption, denial, and revocation metadata without sensitive payloads.
-- In DevTools, show route-specific registration: medical tools do not appear on Gym.
-
-## Closing (20 seconds)
-
-Adaptive World turns static data into consented, purpose-bound context: **Understand → Match → Act → Measure → Adapt**, while the user remains in control.
+If asked, sign in as `elena.vargas@adaptiveworld.test` and show exactly five
+clinician tools. Demonstrate that an already-open clinician page loses access on
+its next server-authoritative invocation after the owner revokes the grant. Do
+not reload and do not use a simulated change query.
 
 ## Recovery lines
 
-- If WebMCP is unavailable: state that the browser did not expose the registry and use the standard UI; never claim a WebMCP call occurred.
-- If a tool returns `UNAVAILABLE`: show the structured error and stop the dependent chain.
-- If a demo account drifts: use the reset fixture rather than editing production data live.
-- If an agent proposes unavailable equipment: reject the draft and run AW-EVAL-013 after the demo.
+- **WebMCP unavailable:** “This browser did not expose the WebMCP registry. The standard accessible UI still works; no WebMCP execution is being claimed.”
+- **Provider disabled:** “Free public discovery remains available. The sandbox payment adapter is intentionally fail-closed.”
+- **Order pending:** resume the existing payer state; never open another rail.
+- **Ambiguous Stripe setup:** stop with `PROVIDER_SETUP_RECONCILIATION_REQUIRED`; never rotate a stale idempotency key.
+- **Ambiguous MPP payment:** retain the submitted budget reservation and stop with `RECONCILIATION_REQUIRED`.
+- **Reset conflict:** do not delete evidence or improvise database edits. Reconcile the synthetic provider state first.
+- **Account drift:** use the authenticated synthetic reset, not live manual edits.
+
+## Submission wording
+
+Use:
+
+> WebMCP exposes purpose-appropriate tools inside each website. Adaptive World's
+> one-use consent protocol carries the minimal projection between Passport and
+> Gym.
+
+Do not say WebMCP transfers the Passport, that payment expands medical access,
+or that fixture validation proves model behavior.

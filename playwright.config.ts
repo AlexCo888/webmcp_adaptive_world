@@ -23,14 +23,14 @@ export default defineConfig({
     : [
         {
           command:
-            "pnpm --filter @adaptive-world/passport exec next dev --turbopack --hostname 127.0.0.1 --port 3000",
+            "CI=true pnpm --filter @adaptive-world/passport exec next dev --turbopack --hostname 127.0.0.1 --port 3000",
           url: passportBaseUrl,
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
         },
         {
           command:
-            "pnpm --filter @adaptive-world/gym exec next dev --turbopack --hostname 127.0.0.1 --port 3001",
+            "CI=true pnpm --filter @adaptive-world/gym exec next dev --turbopack --hostname 127.0.0.1 --port 3001",
           url: gymBaseUrl,
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,

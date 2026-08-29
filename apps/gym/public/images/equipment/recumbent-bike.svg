@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Recumbent cycle illustration</title>
+  <desc id="description">An original neutral line illustration of a step-through recumbent cycle.</desc>
+  <rect width="1200" height="800" rx="48" fill="#f1f3e8"/>
+  <ellipse cx="608" cy="669" rx="397" ry="54" fill="#dee2d3"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="722" cy="562" r="94" stroke-width="27"/>
+    <path d="M722 562 879 383h106M879 383l55 180M795 646H451l-52-97" stroke-width="29"/>
+    <path d="M444 527h185v72H444zM455 524l-58-146M373 359h99" stroke-width="27"/>
+    <rect x="891" y="310" width="117" height="91" rx="17" stroke-width="21"/>
+    <path d="m718 560 92 25m-181-25-74 24" stroke-width="17"/>
+  </g>
+  <circle cx="722" cy="562" r="22" fill="#d8ff77"/>
+</svg>

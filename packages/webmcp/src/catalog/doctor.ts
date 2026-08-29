@@ -19,10 +19,6 @@ export interface GetPatientSectionInput extends PatientInput {
   readonly section: "summary" | "medications" | "allergies" | "labs" | "mobility" | "documents";
 }
 
-export interface GetPatientChangesInput extends PatientInput {
-  readonly since: string;
-}
-
 export interface OpenPatientSourceInput extends PatientInput {
   readonly sourceId: string;
 }
@@ -36,7 +32,6 @@ export interface DoctorToolHandlers {
   readonly search_my_patients: CatalogHandler<SearchMyPatientsInput>;
   readonly get_patient_overview: CatalogHandler<PatientInput>;
   readonly get_patient_section: CatalogHandler<GetPatientSectionInput>;
-  readonly get_patient_changes: CatalogHandler<GetPatientChangesInput>;
   readonly open_patient_source: CatalogHandler<OpenPatientSourceInput>;
   readonly add_clinical_guidance: CatalogHandler<AddClinicalGuidanceInput>;
 }
@@ -114,30 +109,6 @@ export function createDoctorToolCatalog(
         untrustedOutput: true,
       },
       handlers.get_patient_section,
-    ),
-    makeTool<GetPatientChangesInput>(
-      {
-        name: "get_patient_changes",
-        title: "Get patient changes",
-        description:
-          "Return authorized changes to a patient's Passport since an ISO 8601 timestamp.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            patientId: patientIdProperty,
-            since: {
-              type: "string",
-              format: "date-time",
-              description: "ISO 8601 lower bound for changes.",
-            },
-          },
-          required: ["patientId", "since"],
-          additionalProperties: false,
-        },
-        readOnly: true,
-        untrustedOutput: true,
-      },
-      handlers.get_patient_changes,
     ),
     makeTool<OpenPatientSourceInput>(
       {

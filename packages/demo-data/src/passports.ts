@@ -216,6 +216,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "intermediate",
       weeklyActivityMinutes: 165,
       preferredSessionMinutes: 55,
@@ -294,6 +295,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "beginner",
       weeklyActivityMinutes: 65,
       preferredSessionMinutes: 45,
@@ -380,6 +382,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "advanced",
       weeklyActivityMinutes: 310,
       preferredSessionMinutes: 60,
@@ -469,6 +472,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "beginner",
       weeklyActivityMinutes: 120,
       preferredSessionMinutes: 40,
@@ -559,6 +563,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "intermediate",
       weeklyActivityMinutes: 140,
       preferredSessionMinutes: 50,
@@ -660,6 +665,7 @@ const seeds: Seed[] = [
       },
     ],
     functional: {
+      sourceCategory: "self_reported",
       experienceLevel: "advanced",
       weeklyActivityMinutes: 230,
       preferredSessionMinutes: 55,
@@ -701,29 +707,25 @@ const seeds: Seed[] = [
 
 export const demoPassports = seeds.map(buildPassport);
 
-const ageBandByPassportId = {
-  passport_mateo: "18-29",
-  passport_daniel: "45-64",
-  passport_maya: "30-44",
-  passport_evelyn: "65+",
-  passport_michael: "30-44",
-  passport_amina: "30-44",
-} as const;
-
 export const demoGymProfiles = GymContextProjectionSchema.array()
   .length(6)
   .parse(
     demoPassports.map((passport, index) => ({
       projectionId: `gym_${passport.id}`,
       subjectAlias: `Participant ${String(index + 1).padStart(2, "0")}`,
-      ageBand: ageBandByPassportId[passport.id as keyof typeof ageBandByPassportId],
+      purpose: "adaptive_gym_session",
       goals: passport.functional.goals,
       experienceLevel: passport.functional.experienceLevel,
       preferredSessionMinutes: passport.functional.preferredSessionMinutes,
       preferredActivities: passport.functional.preferredActivities,
+      functionalCapabilities: [
+        `${passport.functional.weeklyActivityMinutes} weekly activity minutes reported`,
+      ],
       movementConsiderations: passport.functional.movementConsiderations,
+      avoid: [],
       stopSignals: passport.functional.stopSignals,
       accessibilityNeeds: passport.functional.accessibilityNeeds,
+      sourceCategories: [passport.functional.sourceCategory],
       issuedAt: "2026-08-20T18:00:00.000Z",
       expiresAt: "2026-11-20T18:00:00.000Z",
       synthetic: true,

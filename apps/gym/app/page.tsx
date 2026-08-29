@@ -1,24 +1,34 @@
+import { equipmentCatalog } from "@adaptive-world/demo-data";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Accessibility,
   ArrowRight,
   Boxes,
   CheckCircle2,
+  ClipboardCheck,
+  Clock3,
+  Dumbbell,
   Fingerprint,
   MapPin,
   ShieldCheck,
   Sparkles,
   UsersRound,
 } from "lucide-react";
+import { gymProfile } from "@/lib/gym-profile";
+import { facilityTemplates } from "@/lib/session-planner";
 
 export default function HomePage() {
+  const sample = facilityTemplates[0]!;
+  const equipmentById = new Map(equipmentCatalog.map((item) => [item.id, item]));
+
   return (
     <div className="page-wrap home-page">
       <section className="club-hero" aria-labelledby="hero-title">
         <div className="club-hero__media">
           <Image
-            src="/images/adaptive-gym-floor-1600.webp"
-            alt="Bright modern Adaptive Gym training floor with cardio and strength zones"
+            src="/images/adaptive-gym-floor.svg"
+            alt="Illustrated Adaptive Gym floor with cardio, cable, and free-weight zones"
             fill
             priority
             sizes="(max-width: 900px) 100vw, 58vw"
@@ -26,7 +36,7 @@ export default function HomePage() {
           <div className="club-hero__overlay" />
           <div className="club-status">
             <span className="status-dot is-active" />
-            Demo club open · 06:00–22:00
+            Demo club open · {gymProfile.hours}
           </div>
           <div className="club-hero__caption">
             <span>
@@ -98,6 +108,90 @@ export default function HomePage() {
             <p>WebMCP uses the same visible confirmation and server checks as the UI.</p>
           </div>
         </div>
+      </section>
+
+      <section className="section public-profile" aria-labelledby="public-profile-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Free public Gym profile</p>
+            <h2 className="section-title" id="public-profile-heading">
+              Plan a visit without an account.
+            </h2>
+          </div>
+          <p className="page-intro">
+            These are the same public operating facts exposed through WebMCP. No Passport or payment
+            is required.
+          </p>
+        </div>
+        <div className="public-profile-grid">
+          <article className="public-profile-card card">
+            <Clock3 size={22} aria-hidden="true" />
+            <h3>Hours & services</h3>
+            <p>{gymProfile.hours}</p>
+            <ul>
+              {gymProfile.services.map((service) => (
+                <li key={service}>{service}</li>
+              ))}
+            </ul>
+          </article>
+          <article className="public-profile-card card">
+            <Accessibility size={22} aria-hidden="true" />
+            <h3>Accessibility</h3>
+            <ul>
+              {gymProfile.accessFeatures.map((feature) => (
+                <li key={feature}>{feature}</li>
+              ))}
+            </ul>
+          </article>
+          <article className="public-profile-card card">
+            <ClipboardCheck size={22} aria-hidden="true" />
+            <h3>Ground rules</h3>
+            <ul>
+              {gymProfile.rules.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section className="section sample-walkthrough" aria-labelledby="sample-heading">
+        <div className="sample-walkthrough__intro">
+          <p className="eyebrow">Generic sample · Free</p>
+          <h2 className="section-title" id="sample-heading">
+            {sample.name}
+          </h2>
+          <p>
+            This non-personalized sample is published by Gym staff and available without a Passport
+            or payment. Connecting context only happens if you later request a personalized Routine
+            Pro result.
+          </p>
+          <span>
+            <Clock3 size={15} aria-hidden="true" /> {sample.durationMinutes} minutes · Template v
+            {sample.version}
+          </span>
+        </div>
+        <ol className="sample-stations" aria-label="Generic sample stations">
+          {sample.stations.map((station, index) => {
+            const item = equipmentById.get(station.equipmentId);
+            return (
+              <li key={station.equipmentId}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <h3>{item?.name ?? station.equipmentId}</h3>
+                  <p>
+                    {station.minutes} minutes · {station.reason}
+                  </p>
+                </div>
+                {item ? (
+                  <Link href={`/equipment/${item.slug}`} aria-label={`View ${item.name}`}>
+                    <Dumbbell size={16} aria-hidden="true" /> View equipment
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
       </section>
 
       <section className="section club-experience" aria-labelledby="experience-heading">

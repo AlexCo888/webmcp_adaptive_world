@@ -1,6 +1,8 @@
 # Official sources and design traceability
 
-Checked 2026-08-26. WebMCP is experimental and under active development; re-check these sources before submission and production use.
+Checked 2026-08-29. WebMCP, Stripe, MPP, and testnet behavior can change;
+re-check primary sources and pinned SDK versions before submission or any
+production use.
 
 ## WebMCP
 
@@ -22,6 +24,26 @@ Checked 2026-08-26. WebMCP is experimental and under active development; re-chec
 - [Vercel: Deployments](https://vercel.com/docs/deployments) — Preview, Production, inspect, promote, and rollback lifecycle.
 - [Vercel: Storage](https://vercel.com/docs/storage) and [Blob](https://vercel.com/docs/vercel-blob) — public/private object storage; this project requires private storage for synthetic clinical documents.
 
+## Stripe test-mode commerce
+
+- [Stripe: Idempotent requests](https://docs.stripe.com/api/idempotent_requests) — saved response behavior, identical-parameter requirement, and the fact that a pruned key can create a new request after it is at least 24 hours old. Adaptive World therefore persists a conservative replay cutoff and stops unattached create retries at/after it.
+- [Stripe: Create a Checkout Session](https://docs.stripe.com/api/checkout/sessions/create) — server-created Checkout contract, line items, metadata, redirects, and provider expiry requirements.
+- [Stripe: Checkout fulfillment](https://docs.stripe.com/checkout/fulfillment) — fulfillment must use verified asynchronous events rather than relying on the landing page.
+- [Stripe: Webhook signatures](https://docs.stripe.com/webhooks/signature) — raw request-body signature verification.
+- [stripe-node](https://github.com/stripe/stripe-node) — pinned server SDK source and license.
+
+Stripe references support a sandbox integration design; they do not make a
+browser redirect proof of payment or establish real-money production readiness.
+
+## MPP and testnet agent payer
+
+- [mppx](https://github.com/wevm/mppx) — pinned TypeScript implementation used for the server-held demo-agent and merchant flow.
+- [mppx package](https://www.npmjs.com/package/mppx) — published version and package metadata.
+
+The judged flow is a bounded first-party demo wallet on testnet. No standalone
+public capability-issuance endpoint, general-purpose wallet, real asset custody,
+or ChatGPT/OpenAI wallet is claimed.
+
 ## Next.js
 
 - [Next.js: App Router](https://nextjs.org/docs/app) — application and server routing model.
@@ -40,6 +62,17 @@ Checked 2026-08-26. WebMCP is experimental and under active development; re-chec
 
 - [HL7 FHIR R4: DiagnosticReport](https://hl7.org/fhir/R4/diagnosticreport.html) and [Observation](https://hl7.org/fhir/R4/observation.html) — structural reference only; the demo does not claim conformance certification.
 - [LOINC](https://loinc.org/) and [UCUM](https://ucum.org/) — codes and units in synthetic fixtures.
+
+## Equipment and image provenance
+
+The exact Life Fitness, SCIFIT, Rogue Fitness, and Eleiko manufacturer
+product-page URLs remain stored beside each record in
+`packages/demo-data/src/equipment.ts`. They support specification provenance;
+they do not imply ownership, permission, affiliation, or endorsement. The Gym
+renders only local, logo-free SVG illustrations created for Adaptive World—no
+manufacturer product photography. The root
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) inventories the original
+artwork and applicable third-party notices.
 
 ## Non-claims
 

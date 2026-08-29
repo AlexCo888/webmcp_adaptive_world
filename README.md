@@ -1,100 +1,187 @@
 # Adaptive World
 
-Adaptive World is a two-site, WebMCP-native MVP showing how a person can carry purpose-bound context into a real service without handing that service a complete identity or medical record.
+Adaptive World is a two-site, WebMCP-native MVP showing how a person can carry
+purpose-bound context into a real service without handing that service a
+complete identity or medical record. Public Gym understanding is free;
+personalized routine creation is one explicit, low-cost sandbox Pro action.
 
-- **Digital Passport** gives a person one private Passport, consent controls, an append-only access log, and a one-use Gym handoff.
-- **Doctor workspace** is a separate authenticated experience. A clinician can search only active relationships and can open only sections covered by current scopes.
-- **Adaptive Gym** behaves like a public club site. It presents 12 real commercial product models with manufacturer sources and images, then matches connected context to one of three versioned, staff-authored walkthroughs.
+All people, clinical records, club ownership, availability, visits, and
+application records are synthetic. Product models and cited manufacturer pages
+are real. Provider integrations are designed only for Stripe test mode and MPP
+testnet. When exercised, the MPP path creates a real testnet transaction and
+spends test assets, but no real-world funds. This is a hackathon demo, not
+medical advice, a clinical system, a payment service, or a claim of regulatory
+compliance.
 
-All people, clinical records, club ownership, availability, and visits are synthetic. The product models and cited manufacturer pages are real. This is a hackathon demo, not a clinical system or medical advice.
+## Intended release judge path
 
-## Try the professional demo
+The production aliases below are the intended release targets. The current
+[`EVAL_RESULTS.md`](docs/EVAL_RESULTS.md) has no recorded release deployment or
+external browser/provider smoke. Do not present these URLs as the final judged
+build until both deployments, their exact Git SHA, and the required evidence
+are recorded there.
 
-Passport: [passport-eosin.vercel.app](https://passport-eosin.vercel.app)
+1. Confirm that the evidence ledger names the exact deployed Git SHA for both
+   aliases. Open [Digital Passport](https://passport-eosin.vercel.app) in the
+   Chrome version/configuration recorded for that run, with WebMCP enabled.
+2. Sign in as the clinician demo operator,
+   `elena.vargas@adaptiveworld.test` / `AdaptiveWorld2026!`. Open **Tools** and
+   use **Restore synthetic demo** if a previous judge changed the shared
+   fixture. If reset reports an unresolved payment conflict, stop and reconcile
+   it; do not erase provider state. Sign out.
+3. Sign in as the Passport owner,
+   `mateo.demo@adaptiveworld.test` / `AdaptiveWorld2026!`. In **Sharing**,
+   approve a five-minute, one-use Adaptive Gym projection.
+4. Open [Adaptive Gym](https://gym-alpha-amber-89.vercel.app), redeem the
+   handoff, and use the free public tools to inspect the profile and verified
+   equipment. Confirm that the visible catalog changes with the tool result.
+5. Request a personalized routine. Review the exact **$4.99 test USD**
+   confirmation, including payer, sandbox status, effect, and unchanged data
+   scope. Use the single payer enabled and recorded for the release; the primary
+   script uses the Adaptive World demo agent. Declining writes nothing;
+   approving starts only that selected sandbox payer.
+6. After verified provider fulfillment—not a redirect alone—confirm that the
+   routine fills the existing Session Planner canvas and shows **Saved to
+   Passport**.
+7. Return to Passport and open the saved routine, including its template,
+   equipment provenance, safety notes, and synthetic/non-clinical disclaimer.
 
-Gym: [gym-alpha-amber-89.vercel.app](https://gym-alpha-amber-89.vercel.app)
+WebMCP is progressive enhancement. If the browser does not expose
+`document.modelContext`, use the same standard interface and do not represent
+ordinary UI interaction as a WebMCP execution. The planned timing in
+[`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) is not release evidence; record the
+final public video's observed duration before claiming the path is below three
+minutes.
 
-| Workspace         | Email                             | Password             | What it proves                                                        |
-| ----------------- | --------------------------------- | -------------------- | --------------------------------------------------------------------- |
-| Passport owner    | `mateo.demo@adaptiveworld.test`   | `AdaptiveWorld2026!` | One owner, one private Passport, explicit sharing                     |
-| Authorized doctor | `elena.vargas@adaptiveworld.test` | `AdaptiveWorld2026!` | Separate role, only two granted patients, scope-gated sections        |
-| Gym visitor       | No account required               | —                    | Public catalog; anonymous session only after one-use Passport handoff |
+The Elena account above is also used for the optional secondary clinician
+authorization proof; reset remains a narrowly scoped operator action.
 
-Self-registration is disabled. Better Auth verifies the password, creates the server-side session, and issues an HttpOnly cookie. Application roles come from Neon—not from a client-side selector or cookie claim.
+## Product boundary
+
+### Free public Gym intelligence
+
+No account, Passport, or payment is required to read the Gym profile, browse
+the semantic equipment catalog, inspect manufacturer provenance, or use the
+public Gym WebMCP tools. Connecting and inspecting the minimum Gym projection is
+also free.
+
+### Adaptive Routine Pro
+
+`adaptive_world.routine_pro.v1` is a one-time Passport entitlement represented
+in the demo as **$4.99 test USD**. It unlocks personalized, staff-template-based
+routine creation and Passport saving through either the existing UI or a
+route-scoped WebMCP mutation. It does not unlock additional medical fields,
+clinician access, or hidden catalog facts.
+
+Human payment is designed for Stripe Checkout in test mode. Agent payment is
+designed for a bounded, server-held Adaptive World demo wallet and an MPP
+testnet 402 flow. The wallet is not a ChatGPT, OpenAI, browser, or model wallet.
+An MPP testnet payment is a real testnet transaction that spends test assets,
+but no real-world funds are requested. Provider execution remains subject to
+the documented release smoke tests; results are not inferred from fixture
+validation.
 
 ## What is real versus synthetic
 
-| Element                                                                       | Status                                                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Better Auth password/session flow                                             | Real                                                                     |
-| Neon persistence, relationships, grants, audit events, Gym sessions, feedback | Real                                                                     |
-| One-use 256-bit context token, SHA-256-at-rest, atomic redemption             | Real                                                                     |
-| WebMCP registration and handler execution                                     | Real when the browser exposes `document.modelContext`                    |
-| Life Fitness, SCIFIT, Rogue, and Eleiko product models/sources/images         | Real and source-linked                                                   |
-| Patient identities and clinical records                                       | Synthetic                                                                |
-| Adaptive Gym address, hours, ownership, inventory, and availability           | Synthetic demo scenario                                                  |
-| Walkthrough content                                                           | Fixed, versioned, staff-authored demo content—not AI-generated treatment |
+| Element                                                                            | Status                                                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Better Auth password/session flow                                                  | Real implementation; demo identities are synthetic                       |
+| Neon persistence, grants, audit events, sessions, entitlements, and saved routines | Real implementation; data is synthetic                                   |
+| One-use 256-bit context token, digest at rest, and atomic redemption               | Real implementation                                                      |
+| WebMCP registration and handler execution                                          | Real only when the browser exposes `document.modelContext`               |
+| Life Fitness, SCIFIT, Rogue, and Eleiko models and cited sources                   | Real public product references; no endorsement claimed                   |
+| Passport identities and clinical records                                           | Synthetic                                                                |
+| Gym ownership, inventory, availability, and visits                                 | Synthetic                                                                |
+| Routine templates                                                                  | Fixed, versioned, staff-authored demo content—not diagnosis or treatment |
+| Stripe and MPP activity                                                            | Designed for test mode/testnet; external smoke is not yet recorded       |
 
-## Core flow
+## Consent and fulfillment flow
 
-1. Mateo signs in and reviews the exact Gym projection.
-2. Passport stores a random one-use code only as a SHA-256 hash; the plaintext appears once in the URL fragment.
-3. Gym atomically redeems the code and creates an anonymous, persisted Gym session.
-4. Gym receives goals, movement considerations, access needs, stop signals, and expiry—never identity, medications, labs, documents, Passport ID, or clinician identity.
-5. Site UI or WebMCP selects a published walkthrough. The server reads context from the HttpOnly session, verifies every station against the current catalog, persists the plan, and returns template/catalog provenance.
-6. Feedback is written against that exact anonymous session.
+1. The owner reviews the exact minimum Gym projection.
+2. Passport stores a random one-use code only as a digest; plaintext appears
+   once in the URL fragment and is removed immediately at the Gym.
+3. Gym atomically redeems the code and creates an anonymous persisted session.
+4. Public discovery remains free. Personalized generation requires the one
+   shared Routine Pro entitlement.
+5. A consequential WebMCP action is prepared without a write and shown in a
+   first-party confirmation. The server rechecks the quote and authority after
+   approval.
+6. Verified sandbox fulfillment activates one entitlement. Routine generation
+   is idempotent and separately retryable; the result appears in the existing
+   Gym canvas and the owner's Passport.
 
-## WebMCP implementation
+Payment never expands the projection. Gym does not receive identity,
+medications, labs, documents, diagnoses, or clinician identity.
 
-The normal UI is complete without WebMCP. When supported, each visible route registers only its relevant imperative tools through `document.modelContext.registerTool`.
+## WebMCP surface
 
-| Surface          | Tools | Important behavior                                                           |
-| ---------------- | ----: | ---------------------------------------------------------------------------- |
-| Passport owner   |     4 | Summary, shares, one-use context grant, revocation                           |
-| Doctor workspace |     6 | My Patients search, progressive sections, source opening, confirmed guidance |
-| Adaptive Gym     |     6 | Real catalog search, active context, published template selection, feedback  |
+Tools are registered by route, role, and current state. Registration is
+discoverability—not authorization. Protected Passport and clinician reads
+resolve the current server session, relationship, scopes, expiry, and
+revocation on every invocation.
 
-Every handler calls the same protected server APIs as the visible UI. Mutations use an application-owned confirmation dialog; results are capped at 1,500 characters; untrusted source/product content is annotated; handler executions appear in the in-product trace.
+| Surface        |       Catalog | Route behavior                                                                        |
+| -------------- | ------------: | ------------------------------------------------------------------------------------- |
+| Passport owner |       4 tools | Summary, shares, one-use context grant, revocation                                    |
+| Clinician      |       5 tools | My Patients search, overview, progressive section, source, confirmed guidance         |
+| Adaptive Gym   | 7 tools total | Public discovery; active context/offer/routine; feedback, exposed only where relevant |
 
-## Architecture
+Every tool uses a closed schema and bounded safe output. Mutations require an
+application-owned confirmation. The full registry is documented in
+[`docs/WEBMCP_TOOLS.md`](docs/WEBMCP_TOOLS.md).
+
+## Authorization posture
+
+The deployed minimum boundary is application-level authorization on every
+protected server request. The repository includes PostgreSQL RLS policy design,
+but runtime RLS must not be described as active unless both apps use a tested
+non-owner, non-`BYPASSRLS` role with per-request identity set in the same
+transaction.
+
+## Repository
 
 ```text
-apps/
-  passport/       Better Auth, owner workspace, doctor workspace, grants and audit
-  gym/            Public club, verified products, anonymous context/session flow
-packages/
-  contracts/      Shared Zod and TypeScript contracts
-  db/             Neon/Drizzle schema, migrations, atomic redemption, demo seed
-  demo-data/      Six synthetic Passports and 12 source-backed product records
-  security/       Projection minimization, opaque grants, signed Gym cookie
-  webmcp/         Browser adapter, route tool catalogs, confirmation and tests
-  ui/             Shared primitives
-docs/             Architecture, threat model, deployment, evals and demo script
-tests/            17 WebMCP eval fixtures and two-site Playwright smoke tests
+apps/passport/   Better Auth, owner/clinician workspaces, consent, saved routines
+apps/gym/        Public Gym, verified catalog, entitlement and sandbox payment flows
+packages/        Contracts, database, fixtures, security, UI, and WebMCP adapter
+tests/e2e/       Public smoke and deterministic model-context integration tests
+tests/evals/     Versioned model-agnostic scenarios plus structural validation
+docs/            Architecture, security, deployment, eval, and demo evidence
 ```
 
-The monorepo deploys as two Vercel projects with root directories `apps/passport` and `apps/gym`. They do not share browser cookies. Neon is the common persistence boundary; authorization is repeated on every request.
+The monorepo is configured for two Vercel projects with root directories
+`apps/passport` and `apps/gym`. They do not share browser cookies; Neon is the
+shared persistence boundary.
 
-## Local setup
+## Local setup and verification
 
-Requirements: Node.js 20.19+, pnpm 11+, and a disposable PostgreSQL/Neon database.
+Requirements: Node.js 20.19+, pnpm 11+, and a disposable PostgreSQL/Neon
+database for authenticated or stateful journeys.
 
 ```bash
-pnpm install
-pnpm --filter @adaptive-world/db migrate
-CONFIRM_SYNTHETIC_DEMO_SEED=true pnpm --filter @adaptive-world/db seed:demo
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+export ADAPTIVE_WORLD_DB_TOOL_URL='postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require'
+DATABASE_URL="$ADAPTIVE_WORLD_DB_TOOL_URL" pnpm --filter @adaptive-world/db migrate
+DATABASE_URL="$ADAPTIVE_WORLD_DB_TOOL_URL" CONFIRM_SYNTHETIC_DEMO_SEED=true pnpm --filter @adaptive-world/db seed:demo
+unset ADAPTIVE_WORLD_DB_TOOL_URL
 pnpm dev
 ```
 
-Add the variables documented in [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) to each app's `.env.local`. Local origins are Passport `http://127.0.0.1:3000` and Gym `http://127.0.0.1:3001`.
-
-## Verification
+Configure each app from
+[`docs/ENVIRONMENT_VARIABLES.md`](docs/ENVIRONMENT_VARIABLES.md). Run the
+deterministic repository gates with:
 
 ```bash
 pnpm check
 pnpm e2e
 ```
 
-The suite validates six Passports, 12 unique source-backed products, minimum disclosure, one-use redemption primitives, route-scoped WebMCP catalogs, human confirmation, schema integrity, 17 WebMCP selection/authorization/provenance fixtures, production builds, and public browser flows.
+`pnpm evals:validate` validates fixture structure and schema consistency only;
+it does not run a model. Browser/model/provider evidence is reported separately
+in [`docs/EVAL_RESULTS.md`](docs/EVAL_RESULTS.md). No percentage or external
+smoke is claimed until a recorded run exists against the deployed Git SHA.
 
-See [Architecture](docs/ARCHITECTURE.md), [Threat model](docs/THREAT_MODEL.md), [WebMCP tools](docs/WEBMCP_TOOLS.md), [Evals](docs/EVALS.md), [Demo script](docs/DEMO_SCRIPT.md), and [Deployment](docs/DEPLOYMENT.md).
+See [Architecture](docs/ARCHITECTURE.md), [Threat model](docs/THREAT_MODEL.md),
+[Evals](docs/EVALS.md), [Demo script](docs/DEMO_SCRIPT.md), [Deployment](docs/DEPLOYMENT.md),
+and [Third-party notices](THIRD_PARTY_NOTICES.md).

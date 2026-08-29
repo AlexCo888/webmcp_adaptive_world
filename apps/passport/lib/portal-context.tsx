@@ -4,14 +4,23 @@ import {
   createDoctorToolCatalog,
   createPassportToolCatalog,
   useWebMCPTools,
+  WebMCPToolError,
   type ConfirmMutation,
+  type CreateContextGrantInput,
   type DoctorToolHandlers,
   type MutationConfirmationRequest,
   type PassportToolHandlers,
   type WebMCPAvailability,
+  type WebMCPExecutionContext,
   type WebMCPToolDefinition,
 } from "@adaptive-world/webmcp";
-import type { AccessGrant, DigitalPassport, PassportScope } from "@adaptive-world/contracts";
+import {
+  AccessGrantSchema,
+  DigitalPassportSchema,
+  type AccessGrant,
+  type DigitalPassport,
+  type PassportScope,
+} from "@adaptive-world/contracts";
 import { usePathname } from "next/navigation";
 import {
   createContext,
@@ -23,23 +32,56 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { z } from "zod";
+import { readPassportApiResponse } from "./api-client";
+import {
+  ContextGrantToolInputSchema,
+  PreparedGymContextGrantResponseSchema,
+  contextGrantConfirmationFields,
+  type ContextGrantToolInput,
+} from "./context-grant-contract";
 import type { PortalBootstrap } from "./session";
+import {
+  createMutationConfirmationGate,
+  type MutationConfirmationGate,
+} from "./mutation-confirmation";
+import { callPassportWebMcp } from "./webmcp-client";
 
 export type PortalRole = "owner" | "doctor";
 export type ToastState = { message: string; tone?: "success" | "neutral" } | null;
 export type ToolEvent = { name: string; at: string; source: "webmcp-handler" };
 
+type PreparedContextGrantMutation = Readonly<{
+  expiresAt: string;
+  input: ContextGrantToolInput;
+  preparationToken: string;
+}>;
+
+function sameContextGrantInput(
+  prepared: ContextGrantToolInput,
+  requested: CreateContextGrantInput,
+): boolean {
+  const expiresInMinutes = requested.expiresInMinutes ?? 5;
+  return (
+    prepared.recipient === requested.recipient &&
+    prepared.expiresInMinutes === expiresInMinutes &&
+    prepared.scopes.length === requested.scopes.length &&
+    prepared.scopes.every((scope) => requested.scopes.includes(scope))
+  );
+}
+
 type PortalContextValue = {
   role: PortalRole;
   actor: PortalBootstrap["actor"];
-  passports: readonly DigitalPassport[];
-  patient: DigitalPassport;
+  passports: PortalBootstrap["passports"];
+  patient: DigitalPassport | null;
   grants: readonly AccessGrant[];
-  createGrant: (
-    recipient: "doctor" | "gym",
-    scopes: PassportScope[],
-    days: number,
-  ) => Promise<void>;
+  createDoctorAccessGrant: (scopes: PassportScope[], days: number) => Promise<void>;
+  createGymContextGrant: (expiresInMinutes: number) => Promise<{
+    audience: "adaptive-gym";
+    scopes: readonly ["gym.context.read", "gym.feedback.write"];
+    expiresAt: string;
+  }>;
   revokeGrant: (id: string) => Promise<void>;
   toast: ToastState;
   notify: (message: string) => void;
@@ -48,43 +90,31 @@ type PortalContextValue = {
   toolEvents: readonly ToolEvent[];
   auditEvents: PortalBootstrap["auditEvents"];
   guidance: PortalBootstrap["guidance"];
+  savedRoutines: PortalBootstrap["savedRoutines"];
+  demoResetEnabled: boolean;
 };
 
 const PortalContext = createContext<PortalContextValue | null>(null);
 
-function ageFrom(dateOfBirth: string) {
-  return Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / 31_557_600_000);
-}
-
-function concisePassport(passport: DigitalPassport) {
-  return {
-    id: passport.id,
-    profile: {
-      displayName: passport.identity.displayName,
-      age: ageFrom(passport.identity.dateOfBirth),
-      heightCm: passport.heightCm,
-      weightKg: passport.weightKg,
-    },
-    health: {
-      conditions: passport.conditions.map(({ label, status }) => ({ label, status })),
-      notableResults: passport.notableResults.map(({ label, value, unit, interpretation }) => ({
-        label,
-        value,
-        unit,
-        interpretation,
-      })),
-    },
-    mobility: {
-      considerations: passport.functional.movementConsiderations,
-      accessibilityNeeds: passport.functional.accessibilityNeeds,
-      stopSignals: passport.functional.stopSignals,
-    },
-    goals: passport.functional.goals,
-    updatedAt: passport.updatedAt,
-    synthetic: true,
-  };
-}
-
+const DoctorGrantResponseSchema = z.object({ grant: AccessGrantSchema }).strict();
+const GymContextResponseSchema = z
+  .object({
+    exchangeUrl: z.string().url().max(2_048),
+    expiresAt: z.string().datetime(),
+    audience: z.literal("adaptive-gym"),
+    scopes: z.tuple([z.literal("gym.context.read"), z.literal("gym.feedback.write")]),
+  })
+  .strict();
+const RevokeGrantResponseSchema = z
+  .object({ revoked: z.literal(true), grantId: z.string().min(1).max(128) })
+  .strict();
+const GuidanceResponseSchema = z
+  .object({
+    saved: z.literal(true),
+    guidanceId: z.string().min(1).max(128),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
 export function PortalProvider({
   bootstrap,
   children,
@@ -95,20 +125,30 @@ export function PortalProvider({
   const pathname = usePathname();
   const role = bootstrap.actor.role;
   const passports = bootstrap.passports;
-  const patient = passports[0];
-  if (!patient) throw new Error("No authorized Passport is available for this account.");
+  const ownerPassport =
+    role === "owner" ? DigitalPassportSchema.safeParse(passports[0]) : undefined;
+  const patient = ownerPassport?.success ? ownerPassport.data : null;
+  if (role === "owner" && !ownerPassport?.success) {
+    throw new Error("No Passport is linked to this owner account.");
+  }
 
   const [grants, setGrants] = useState<AccessGrant[]>(bootstrap.grants);
   const [toast, setToast] = useState<ToastState>(null);
   const [confirmation, setConfirmation] = useState<MutationConfirmationRequest | null>(null);
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
-  const confirmationResolver = useRef<((approved: boolean) => void) | null>(null);
+  const confirmationGate = useRef<MutationConfirmationGate | null>(null);
+  if (!confirmationGate.current) {
+    confirmationGate.current = createMutationConfirmationGate(setConfirmation);
+  }
+  const preparedContextGrants = useRef(new Map<string, PreparedContextGrantMutation>());
 
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(null), 3600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => () => confirmationGate.current?.dispose(), []);
 
   const notify = useCallback((message: string) => setToast({ message, tone: "success" }), []);
   const trace = useCallback((name: string) => {
@@ -120,39 +160,63 @@ export function PortalProvider({
     );
   }, []);
 
-  const createGrant = useCallback(
-    async (recipient: "doctor" | "gym", scopes: PassportScope[], days: number) => {
-      const response = await fetch(
-        recipient === "gym" ? "/api/context-grants" : "/api/access-grants",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scopes, days, expiresInMinutes: 5 }),
-        },
+  const createDoctorAccessGrant = useCallback(
+    async (scopes: PassportScope[], days: number) => {
+      const response = await fetch("/api/access-grants", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ scopes, days }),
+      });
+      const result = await readPassportApiResponse(
+        response,
+        DoctorGrantResponseSchema,
+        "The permission could not be created.",
       );
-      const result = (await response.json()) as {
-        grant?: AccessGrant;
-        exchangeUrl?: string;
-        error?: string;
-      };
-      if (!response.ok) throw new Error(result.error ?? "The permission could not be created.");
-      if (result.grant) setGrants((current) => [result.grant as AccessGrant, ...current]);
-      if (result.exchangeUrl) {
-        notify("One-use Gym context approved. Continuing to Adaptive Gym…");
-        window.location.assign(result.exchangeUrl);
-        return;
-      }
+      setGrants((current) => [result.grant, ...current]);
       notify("Doctor access granted and persisted");
     },
     [notify],
   );
 
+  const createGymContextGrant = useCallback(
+    async (expiresInMinutes: number, signal?: AbortSignal, preparationToken?: string) => {
+      const response = await fetch("/api/context-grants", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          expiresInMinutes,
+          ...(preparationToken ? { preparationToken } : {}),
+        }),
+        signal,
+      });
+      const result = await readPassportApiResponse(
+        response,
+        GymContextResponseSchema,
+        "The one-use Gym context could not be created.",
+      );
+      notify("One-use Gym context approved. Continuing to Adaptive Gym…");
+      window.location.assign(result.exchangeUrl);
+      return {
+        audience: result.audience,
+        scopes: result.scopes,
+        expiresAt: result.expiresAt,
+      };
+    },
+    [notify],
+  );
+
   const revokeGrant = useCallback(
-    async (id: string) => {
+    async (id: string, signal?: AbortSignal) => {
       const response = await fetch(`/api/access-grants/${encodeURIComponent(id)}`, {
         method: "DELETE",
+        headers: { accept: "application/json" },
+        signal,
       });
-      if (!response.ok) throw new Error("The permission could not be revoked.");
+      await readPassportApiResponse(
+        response,
+        RevokeGrantResponseSchema,
+        "The permission could not be revoked.",
+      );
       setGrants((current) =>
         current.map((grant) =>
           grant.id === id
@@ -165,152 +229,165 @@ export function PortalProvider({
     [notify],
   );
 
-  const getAuthorizedPatient = useCallback(
-    (patientId: string, requiredScope: PassportScope = "passport.summary.read") => {
-      const authorized = grants.some(
-        (grant) =>
-          grant.passportId === patientId &&
-          grant.granteeType === "clinician" &&
-          grant.status === "active" &&
-          grant.scopes.includes(requiredScope) &&
-          new Date(grant.expiresAt) > new Date(),
-      );
-      if (!authorized) throw new Error(`Missing active ${requiredScope} scope for this patient.`);
-      const requested = passports.find((item) => item.id === patientId);
-      if (!requested) throw new Error("Patient is outside this doctor's My Patients list.");
-      return requested;
-    },
-    [grants, passports],
-  );
-
   const passportHandlers = useMemo<PassportToolHandlers>(
     () => ({
-      get_my_passport_summary: (args) => {
+      get_my_passport_summary: (args, context) => {
         trace("get_my_passport_summary");
-        const summary = concisePassport(patient);
-        if (!args.sections?.length) return summary;
-        return Object.fromEntries(
-          args.sections.map((section) => [section, summary[section as keyof typeof summary]]),
+        return callPassportWebMcp(
+          {
+            tool: "get_my_passport_summary",
+            input: { sections: args.sections ? [...args.sections] : undefined },
+          },
+          context.signal,
         );
       },
-      list_my_shares: (args) => {
+      list_my_shares: (args, context) => {
         trace("list_my_shares");
-        const status = args.status ?? "active";
-        return grants.filter(
-          (grant) =>
-            grant.passportId === patient.id && (status === "all" || grant.status === status),
+        return callPassportWebMcp(
+          { tool: "list_my_shares", input: { status: args.status ?? "active" } },
+          context.signal,
         );
       },
-      create_context_grant: async (args) => {
+      create_context_grant: async (args, context) => {
+        const digest = context.mutationApproval?.quoteDigest;
+        const prepared = digest ? preparedContextGrants.current.get(digest) : undefined;
+        if (!digest || !prepared || !sameContextGrantInput(prepared.input, args)) {
+          throw new WebMCPToolError(
+            "CONFLICT",
+            "The approved Gym projection is no longer available. Review it again.",
+          );
+        }
+        preparedContextGrants.current.delete(digest);
         trace("create_context_grant");
-        await createGrant("gym", ["gym.context.read"], 1);
+        const result = await createGymContextGrant(
+          prepared.input.expiresInMinutes,
+          context.signal,
+          prepared.preparationToken,
+        );
         return {
           created: true,
-          recipient: args.recipient,
-          scopes: args.scopes,
-          exchangeExpiresInMinutes: Math.min(args.expiresInMinutes ?? 5, 15),
+          recipient: result.audience,
+          scopes: result.scopes,
+          expiresAt: result.expiresAt,
           containsClinicalRecords: false,
           handoffStarted: true,
         };
       },
-      revoke_access_grant: async ({ grantId }) => {
+      revoke_access_grant: async ({ grantId }, context) => {
         trace("revoke_access_grant");
-        const ownGrant = grants.find(
-          (grant) =>
-            grant.id === grantId && grant.passportId === patient.id && grant.status === "active",
-        );
-        if (!ownGrant) throw new Error("Active grant not found for this Passport owner.");
-        await revokeGrant(grantId);
+        await revokeGrant(grantId, context.signal);
         return { revoked: true, grantId };
       },
     }),
-    [createGrant, grants, patient, revokeGrant, trace],
+    [createGymContextGrant, revokeGrant, trace],
   );
 
   const doctorHandlers = useMemo<DoctorToolHandlers>(
     () => ({
-      search_my_patients: ({ query = "", limit = 10 }) => {
+      search_my_patients: ({ query = "", limit = 10 }, context) => {
         trace("search_my_patients");
-        const normalized = query.toLowerCase();
-        return passports
-          .filter((item) => item.identity.displayName.toLowerCase().includes(normalized))
-          .slice(0, limit)
-          .map((item) => ({
-            id: item.id,
-            displayName: item.identity.displayName,
-            updatedAt: item.updatedAt,
-          }));
+        return callPassportWebMcp(
+          { tool: "search_my_patients", input: { query, limit } },
+          context.signal,
+        );
       },
-      get_patient_overview: ({ patientId }) => {
+      get_patient_overview: ({ patientId }, context) => {
         trace("get_patient_overview");
-        return concisePassport(getAuthorizedPatient(patientId));
+        return callPassportWebMcp(
+          { tool: "get_patient_overview", input: { patientId } },
+          context.signal,
+        );
       },
-      get_patient_section: ({ patientId, section }) => {
+      get_patient_section: ({ patientId, section }, context) => {
         trace("get_patient_section");
-        const scope =
-          section === "documents"
-            ? "passport.documents.read"
-            : section === "summary" || section === "mobility"
-              ? "passport.summary.read"
-              : "passport.clinical.read";
-        const requested = getAuthorizedPatient(patientId, scope);
-        const sections = {
-          summary: concisePassport(requested),
-          medications: requested.medications,
-          allergies: requested.allergies,
-          labs: requested.notableResults,
-          mobility: requested.functional,
-          documents: requested.documents.map(({ id, title, kind, issuedAt, sourceId }) => ({
-            id,
-            title,
-            kind,
-            issuedAt,
-            sourceId,
-          })),
-        };
-        return { patientId: requested.id, section, data: sections[section] };
+        return callPassportWebMcp(
+          { tool: "get_patient_section", input: { patientId, section } },
+          context.signal,
+        );
       },
-      get_patient_changes: ({ patientId, since }) => {
-        trace("get_patient_changes");
-        const requested = getAuthorizedPatient(patientId);
-        return {
-          patientId: requested.id,
-          since,
-          hasChanges: new Date(requested.updatedAt) > new Date(since),
-          updatedAt: requested.updatedAt,
-          changedSections: ["summary", "labs"],
-        };
-      },
-      open_patient_source: ({ patientId, sourceId }) => {
+      open_patient_source: ({ patientId, sourceId }, context) => {
         trace("open_patient_source");
-        const requested = getAuthorizedPatient(patientId, "passport.documents.read");
-        const source = requested.sources.find((item) => item.id === sourceId);
-        if (!source) throw new Error("Source not found within the authorized Passport.");
-        return source;
+        return callPassportWebMcp(
+          { tool: "open_patient_source", input: { patientId, sourceId } },
+          context.signal,
+        );
       },
-      add_clinical_guidance: async ({ patientId, guidance, expiresAt }) => {
+      add_clinical_guidance: async ({ patientId, guidance, expiresAt }, context) => {
         trace("add_clinical_guidance");
-        getAuthorizedPatient(patientId, "passport.guidance.write");
         const response = await fetch("/api/guidance", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", accept: "application/json" },
           body: JSON.stringify({ patientId, guidance, expiresAt }),
+          signal: context.signal,
         });
-        if (!response.ok) throw new Error("Guidance was not authorized or could not be saved.");
+        const result = await readPassportApiResponse(
+          response,
+          GuidanceResponseSchema,
+          "Guidance was not authorized or could not be saved.",
+        );
         notify("Clinical guidance persisted to the authorized audit timeline");
-        return { saved: true, patientId, expiresAt: expiresAt ?? null };
+        return { saved: true, patientId, expiresAt: result.expiresAt };
       },
     }),
-    [getAuthorizedPatient, notify, passports, trace],
+    [notify, trace],
   );
 
-  const completeToolCatalog = useMemo(
-    () =>
-      role === "owner"
-        ? createPassportToolCatalog(passportHandlers)
-        : createDoctorToolCatalog(doctorHandlers),
-    [doctorHandlers, passportHandlers, role],
-  );
+  const completeToolCatalog = useMemo(() => {
+    if (role === "doctor") return createDoctorToolCatalog(doctorHandlers);
+    return createPassportToolCatalog(passportHandlers).map((tool) =>
+      tool.name === "create_context_grant"
+        ? {
+            ...tool,
+            prepareMutation: async (
+              input: Record<string, unknown>,
+              context: WebMCPExecutionContext,
+            ) => {
+              const parsed = ContextGrantToolInputSchema.safeParse(input);
+              if (!parsed.success) {
+                throw new WebMCPToolError("VALIDATION", "The Gym context request was invalid.");
+              }
+              const response = await callPassportWebMcp(
+                { tool: "prepare_context_grant", input: parsed.data },
+                context.signal,
+              );
+              const prepared = PreparedGymContextGrantResponseSchema.safeParse(response);
+              if (!prepared.success) {
+                throw new WebMCPToolError(
+                  "UNAVAILABLE",
+                  "The Passport returned an invalid Gym projection preparation.",
+                );
+              }
+              for (const [digest, current] of preparedContextGrants.current) {
+                if (Date.parse(current.expiresAt) <= Date.now()) {
+                  preparedContextGrants.current.delete(digest);
+                }
+              }
+              if (preparedContextGrants.current.size >= 20) {
+                const oldest = preparedContextGrants.current.keys().next().value;
+                if (oldest) preparedContextGrants.current.delete(oldest);
+              }
+              preparedContextGrants.current.set(prepared.data.quoteDigest, {
+                expiresAt: prepared.data.projection.expiresAt,
+                input: parsed.data,
+                preparationToken: prepared.data.preparationToken,
+              });
+              return {
+                confirmation: {
+                  title: "Share minimum context with Adaptive Gym",
+                  description:
+                    "Create one short-lived, one-use handoff containing exactly the server-prepared Gym projection shown below.",
+                  fields: contextGrantConfirmationFields(prepared.data),
+                  riskClass: "account-write" as const,
+                  confirmLabel: "Share with Gym",
+                  cancelLabel: "Cancel",
+                },
+                quoteDigest: prepared.data.quoteDigest,
+              };
+            },
+          }
+        : tool,
+    );
+  }, [doctorHandlers, passportHandlers, role]);
 
   const toolCatalog = useMemo(() => {
     if (pathname === "/tools" || role === "doctor") return completeToolCatalog;
@@ -326,16 +403,11 @@ export function PortalProvider({
   }, [completeToolCatalog, pathname, role]);
 
   const confirmMutation = useCallback<ConfirmMutation>((request) => {
-    setConfirmation(request);
-    return new Promise<boolean>((resolve) => {
-      confirmationResolver.current = resolve;
-    });
+    return confirmationGate.current?.confirm(request) ?? false;
   }, []);
 
   const decideMutation = useCallback((approved: boolean) => {
-    confirmationResolver.current?.(approved);
-    confirmationResolver.current = null;
-    setConfirmation(null);
+    confirmationGate.current?.decide(approved);
   }, []);
 
   const toolsEnabled =
@@ -355,7 +427,8 @@ export function PortalProvider({
       passports,
       patient,
       grants,
-      createGrant,
+      createDoctorAccessGrant,
+      createGymContextGrant,
       revokeGrant,
       toast,
       notify,
@@ -364,12 +437,17 @@ export function PortalProvider({
       toolEvents,
       auditEvents: bootstrap.auditEvents,
       guidance: bootstrap.guidance,
+      savedRoutines: bootstrap.savedRoutines,
+      demoResetEnabled: bootstrap.demoResetEnabled,
     }),
     [
       bootstrap.actor,
       bootstrap.auditEvents,
+      bootstrap.demoResetEnabled,
       bootstrap.guidance,
-      createGrant,
+      bootstrap.savedRoutines,
+      createDoctorAccessGrant,
+      createGymContextGrant,
       grants,
       notify,
       passports,
@@ -406,16 +484,27 @@ export function PortalProvider({
                 <p>{confirmation.description}</p>
               </div>
             </div>
-            <div className="progressive-note">
-              <strong>Review exact input</strong>
-              <span>{JSON.stringify(confirmation.input, null, 2)}</span>
-            </div>
+            {confirmation.fields.length ? (
+              <div className="data-list">
+                {confirmation.fields.map((field) => (
+                  <div className="data-row" key={field.label}>
+                    <span>{field.label}</span>
+                    <strong>{field.value}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="progressive-note">
+                <strong>Review exact input</strong>
+                <span>{JSON.stringify(confirmation.input, null, 2)}</span>
+              </div>
+            )}
             <div className="modal-actions">
               <button className="button" onClick={() => decideMutation(false)}>
-                Decline
+                {confirmation.cancelLabel ?? "Decline"}
               </button>
               <button className="button primary" onClick={() => decideMutation(true)}>
-                Confirm action
+                {confirmation.confirmLabel ?? "Confirm action"}
               </button>
             </div>
           </section>

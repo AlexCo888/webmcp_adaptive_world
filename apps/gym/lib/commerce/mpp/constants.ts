@@ -1,0 +1,9 @@
+export const TEMPO_TESTNET_CHAIN_ID = 42_431 as const;
+export const TEMPO_TOKEN_DECIMALS = 6 as const;
+export const ROUTINE_PRO_AMOUNT_MINOR = 499 as const;
+export const ROUTINE_PRO_CURRENCY = "usd" as const;
+export const ROUTINE_PRO_PRODUCT_KEY = "adaptive_world.routine_pro.v1" as const;
+export const MPP_PAYMENT_CREDENTIAL_HEADER = "Payment-Authorization" as const;
+export const MPP_RECEIPT_HEADER = "Payment-Receipt" as const;
+export const MPP_REPLAY_TABLE = "mpp_replay_store" as const;
+export const MPP_OUTBOUND_TIMEOUT_MS = 20_000 as const;

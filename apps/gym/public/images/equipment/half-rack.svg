@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Half rack illustration</title>
+  <desc id="description">An original neutral line illustration of a generic barbell half rack.</desc>
+  <rect width="1200" height="800" rx="48" fill="#f1f3e8"/>
+  <ellipse cx="600" cy="672" rx="402" ry="50" fill="#dee2d3"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M349 650V151h502v499M310 650h183m214 0h184M350 151h501" stroke-width="33"/>
+    <path d="M432 151v499m336-499v499M409 267h382" stroke-width="24"/>
+    <path d="M263 370h674M301 332v76m598-76v76" stroke-width="25"/>
+    <circle cx="327" cy="370" r="58" stroke-width="22"/>
+    <circle cx="873" cy="370" r="58" stroke-width="22"/>
+    <path d="M432 504h112m224 0H656" stroke-width="27"/>
+  </g>
+  <path d="M488 267h224" stroke="#d8ff77" stroke-width="17" stroke-linecap="round"/>
+</svg>

@@ -39,7 +39,12 @@ export const EquipmentSchema = z.object({
   sourceUrl: z.string().url(),
   sourceLabel: z.string().min(2).max(120),
   sourceCheckedAt: z.string().date(),
-  imageUrl: z.string().url(),
+  imageUrl: z
+    .string()
+    .regex(
+      /^\/images\/equipment\/[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/u,
+      "Equipment artwork must be a project-owned local SVG",
+    ),
   imageAlt: z.string().min(5).max(180),
 });
 

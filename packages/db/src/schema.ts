@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +16,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
@@ -51,6 +54,37 @@ export const sessionStatusEnum = pgEnum("session_status", [
   "cancelled",
 ]);
 export const auditOutcomeEnum = pgEnum("audit_outcome", ["success", "denied", "error"]);
+export const commercePayerKindEnum = pgEnum("commerce_payer_kind", ["human", "agent"]);
+export const commerceProviderEnum = pgEnum("commerce_provider", ["stripe_checkout", "mpp_tempo"]);
+export const commerceOrderStatusEnum = pgEnum("commerce_order_status", [
+  "created",
+  "provider_pending",
+  "payment_submitted",
+  "reconciliation_required",
+  "paid_unfulfilled",
+  "fulfilled",
+  "failed",
+  "expired",
+  "voided",
+  "duplicate_paid",
+  "refund_pending",
+  "refunded",
+]);
+export const providerSetupStatusEnum = pgEnum("provider_setup_status", [
+  "prepared",
+  "requesting",
+  "attached",
+  "reconciliation_required",
+  "failed_terminal",
+]);
+export const entitlementGrantStatusEnum = pgEnum("entitlement_grant_status", ["active", "revoked"]);
+export const agentBudgetReservationStatusEnum = pgEnum("agent_budget_reservation_status", [
+  "reserved",
+  "submitted",
+  "reconciliation_required",
+  "settled",
+  "released",
+]);
 
 export const users = pgTable(
   "users",
@@ -171,6 +205,9 @@ export const accessGrants = pgTable(
       table.status,
       table.expiresAt,
     ),
+    uniqueIndex("access_grants_one_live_authority_uidx")
+      .on(table.patientId, table.granteeUserId)
+      .where(sql`${table.status} = 'active' AND ${table.revokedAt} IS NULL`),
     index("access_grants_patient_idx").on(table.patientId),
     check("access_grants_scopes_array_check", sql`jsonb_typeof(${table.scopes}) = 'array'`),
     check("access_grants_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
@@ -449,6 +486,360 @@ export const sessionFeedback = pgTable(
   ],
 );
 
+export const commerceOrders = pgTable(
+  "commerce_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    publicRef: varchar("public_ref", { length: 64 }).notNull(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "restrict" }),
+    originatingGymSessionId: uuid("originating_gym_session_id").references(() => gymSessions.id, {
+      onDelete: "set null",
+    }),
+    productKey: varchar("product_key", { length: 128 }).notNull(),
+    payerKind: commercePayerKindEnum("payer_kind").notNull(),
+    provider: commerceProviderEnum("provider"),
+    initiatedVia: varchar("initiated_via", { length: 24 }).notNull(),
+    initialTemplateId: varchar("initial_template_id", { length: 96 }).notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: varchar("currency", { length: 12 }).notNull(),
+    status: commerceOrderStatusEnum("status").notNull().default("created"),
+    providerPaymentRef: text("provider_payment_ref"),
+    receiptDigest: varchar("receipt_digest", { length: 64 }),
+    activeProviderSetupId: uuid("active_provider_setup_id").references(
+      (): AnyPgColumn => paymentProviderSetups.id,
+      { onDelete: "restrict" },
+    ),
+    capabilityVersion: integer("capability_version"),
+    capabilityDigest: varchar("capability_digest", { length: 64 }),
+    capabilityExpiresAt: timestamp("capability_expires_at", { withTimezone: true }),
+    budgetReservationId: uuid("budget_reservation_id").references(
+      (): AnyPgColumn => agentBudgetReservations.id,
+      { onDelete: "restrict" },
+    ),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    fulfilledAt: timestamp("fulfilled_at", { withTimezone: true }),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    failureCode: varchar("failure_code", { length: 96 }),
+    duplicateOfOrderId: uuid("duplicate_of_order_id").references(
+      (): AnyPgColumn => commerceOrders.id,
+      { onDelete: "restrict" },
+    ),
+    refundReference: text("refund_reference"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("commerce_orders_public_ref_uidx").on(table.publicRef),
+    unique("commerce_orders_id_amount_unique").on(table.id, table.amountMinor),
+    uniqueIndex("commerce_orders_provider_payment_uidx")
+      .on(table.provider, table.providerPaymentRef)
+      .where(sql`${table.providerPaymentRef} IS NOT NULL`),
+    uniqueIndex("commerce_orders_one_payable_entitlement_idx")
+      .on(table.patientId, table.productKey)
+      .where(
+        sql`${table.status} IN ('created', 'provider_pending', 'payment_submitted', 'reconciliation_required', 'paid_unfulfilled')`,
+      ),
+    index("commerce_orders_patient_created_idx").on(table.patientId, table.createdAt),
+    check("commerce_orders_amount_positive_check", sql`${table.amountMinor} > 0`),
+    check(
+      "commerce_orders_initiated_via_check",
+      sql`${table.initiatedVia} IN ('site-ui', 'webmcp')`,
+    ),
+    check(
+      "commerce_orders_currency_lower_check",
+      sql`${table.currency} = lower(${table.currency})`,
+    ),
+    check(
+      "commerce_orders_capability_pair_check",
+      sql`(
+        (${table.capabilityVersion} IS NULL)::int
+        + (${table.capabilityDigest} IS NULL)::int
+        + (${table.capabilityExpiresAt} IS NULL)::int
+      ) IN (0, 3)`,
+    ),
+    check(
+      "commerce_orders_receipt_digest_check",
+      sql`${table.receiptDigest} IS NULL OR ${table.receiptDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "commerce_orders_capability_version_check",
+      sql`${table.capabilityVersion} IS NULL OR ${table.capabilityVersion} > 0`,
+    ),
+    check(
+      "commerce_orders_capability_digest_check",
+      sql`${table.capabilityDigest} IS NULL OR ${table.capabilityDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "commerce_orders_capability_provider_check",
+      sql`${table.capabilityDigest} IS NULL OR (${table.provider} IS NOT NULL AND ${table.provider} = 'mpp_tempo')`,
+    ),
+  ],
+);
+
+export const paymentProviderSetups = pgTable(
+  "payment_provider_setups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => commerceOrders.id, { onDelete: "restrict" }),
+    provider: commerceProviderEnum("provider").notNull(),
+    version: integer("version").notNull().default(1),
+    status: providerSetupStatusEnum("status").notNull().default("prepared"),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    requestParams: jsonb("request_params").$type<Record<string, unknown>>().notNull(),
+    requestParamsCanonical: text("request_params_canonical").notNull(),
+    requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
+    requestedExpiresAt: timestamp("requested_expires_at", { withTimezone: true }).notNull(),
+    preparedAt: timestamp("prepared_at", { withTimezone: true }).notNull().defaultNow(),
+    firstRequestStartedAt: timestamp("first_request_started_at", { withTimezone: true }),
+    idempotencyReplayUntil: timestamp("idempotency_replay_until", { withTimezone: true }).notNull(),
+    requestStartedAt: timestamp("request_started_at", { withTimezone: true }),
+    leaseOwnerHash: varchar("lease_owner_hash", { length: 64 }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    providerResourceId: text("provider_resource_id"),
+    providerCreatedAt: timestamp("provider_created_at", { withTimezone: true }),
+    providerExpiresAt: timestamp("provider_expires_at", { withTimezone: true }),
+    attachedAt: timestamp("attached_at", { withTimezone: true }),
+    lastErrorCode: varchar("last_error_code", { length: 96 }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("payment_provider_setups_order_provider_version_uidx").on(
+      table.orderId,
+      table.provider,
+      table.version,
+    ),
+    uniqueIndex("payment_provider_setups_idempotency_uidx").on(table.idempotencyKey),
+    uniqueIndex("payment_provider_setups_resource_uidx")
+      .on(table.providerResourceId)
+      .where(sql`${table.providerResourceId} IS NOT NULL`),
+    uniqueIndex("payment_provider_setups_one_nonterminal_idx")
+      .on(table.orderId)
+      .where(
+        sql`${table.status} IN ('prepared', 'requesting', 'attached', 'reconciliation_required')`,
+      ),
+    check("payment_provider_setups_version_check", sql`${table.version} > 0`),
+    check(
+      "payment_provider_setups_fingerprint_check",
+      sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "payment_provider_setups_snapshot_json_check",
+      sql`${table.requestParams} = ${table.requestParamsCanonical}::jsonb`,
+    ),
+    check(
+      "payment_provider_setups_snapshot_digest_check",
+      sql`${table.requestFingerprint} = encode(digest(${table.requestParamsCanonical}, 'sha256'), 'hex')`,
+    ),
+    check(
+      "payment_provider_setups_lease_owner_hash_check",
+      sql`${table.leaseOwnerHash} IS NULL OR ${table.leaseOwnerHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "payment_provider_setups_attached_check",
+      sql`(
+        ${table.status} = 'attached'
+        AND ${table.providerResourceId} IS NOT NULL
+        AND ${table.attachedAt} IS NOT NULL
+      ) OR ${table.status} <> 'attached'`,
+    ),
+    check(
+      "payment_provider_setups_replay_window_check",
+      sql`${table.idempotencyReplayUntil} > ${table.preparedAt}`,
+    ),
+  ],
+);
+
+export const entitlementGrants = pgTable(
+  "entitlement_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "restrict" }),
+    entitlementKey: varchar("entitlement_key", { length: 128 }).notNull(),
+    sourceOrderId: uuid("source_order_id")
+      .notNull()
+      .references(() => commerceOrders.id, { onDelete: "restrict" }),
+    status: entitlementGrantStatusEnum("status").notNull().default("active"),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("entitlement_grants_active_patient_key_uidx")
+      .on(table.patientId, table.entitlementKey)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("entitlement_grants_source_order_uidx").on(table.sourceOrderId),
+    check(
+      "entitlement_grants_revoked_check",
+      sql`(${table.status} = 'revoked') = (${table.revokedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const savedRoutines = pgTable(
+  "saved_routines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "restrict" }),
+    sourceGymSessionId: uuid("source_gym_session_id")
+      .notNull()
+      .references(() => gymSessions.id, { onDelete: "restrict" }),
+    entitlementGrantId: uuid("entitlement_grant_id")
+      .notNull()
+      .references(() => entitlementGrants.id, { onDelete: "restrict" }),
+    title: text("title").notNull(),
+    plan: jsonb("plan").$type<Record<string, unknown>>().notNull(),
+    planHash: varchar("plan_hash", { length: 64 }).notNull(),
+    templateId: varchar("template_id", { length: 96 }).notNull(),
+    templateVersion: varchar("template_version", { length: 24 }).notNull(),
+    catalogVersion: varchar("catalog_version", { length: 64 }).notNull(),
+    createdVia: varchar("created_via", { length: 24 }).notNull(),
+    savedAt: timestamp("saved_at", { withTimezone: true }).notNull().defaultNow(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("saved_routines_session_template_uidx").on(
+      table.patientId,
+      table.sourceGymSessionId,
+      table.templateId,
+    ),
+    index("saved_routines_patient_saved_idx").on(table.patientId, table.savedAt),
+    check("saved_routines_plan_hash_check", sql`${table.planHash} ~ '^[0-9a-f]{64}$'`),
+    check("saved_routines_created_via_check", sql`${table.createdVia} IN ('site-ui', 'webmcp')`),
+  ],
+);
+
+export const agentBudgetBuckets = pgTable(
+  "agent_budget_buckets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentSubject: varchar("agent_subject", { length: 128 }).notNull(),
+    budgetDate: date("budget_date", { mode: "string" }).notNull(),
+    currency: varchar("currency", { length: 12 }).notNull(),
+    limitMinor: integer("limit_minor").notNull(),
+    reservedMinor: integer("reserved_minor").notNull().default(0),
+    settledMinor: integer("settled_minor").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("agent_budget_buckets_subject_date_currency_uidx").on(
+      table.agentSubject,
+      table.budgetDate,
+      table.currency,
+    ),
+    check(
+      "agent_budget_buckets_nonnegative_check",
+      sql`${table.limitMinor} >= 0 AND ${table.reservedMinor} >= 0 AND ${table.settledMinor} >= 0`,
+    ),
+    check(
+      "agent_budget_buckets_currency_lower_check",
+      sql`${table.currency} = lower(${table.currency})`,
+    ),
+    check(
+      "agent_budget_buckets_cap_check",
+      sql`${table.reservedMinor} + ${table.settledMinor} <= ${table.limitMinor}`,
+    ),
+  ],
+);
+
+export const agentBudgetReservations = pgTable(
+  "agent_budget_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bucketId: uuid("bucket_id")
+      .notNull()
+      .references(() => agentBudgetBuckets.id, { onDelete: "restrict" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => commerceOrders.id, { onDelete: "restrict" }),
+    amountMinor: integer("amount_minor").notNull(),
+    status: agentBudgetReservationStatusEnum("status").notNull().default("reserved"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releaseReason: varchar("release_reason", { length: 128 }),
+    lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("agent_budget_reservations_order_uidx").on(table.orderId),
+    index("agent_budget_reservations_bucket_status_idx").on(table.bucketId, table.status),
+    foreignKey({
+      columns: [table.orderId, table.amountMinor],
+      foreignColumns: [commerceOrders.id, commerceOrders.amountMinor],
+      name: "agent_budget_reservations_order_amount_fk",
+    }).onDelete("restrict"),
+    check("agent_budget_reservations_amount_check", sql`${table.amountMinor} > 0`),
+  ],
+);
+
+export const paymentProviderEvents = pgTable(
+  "payment_provider_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: commerceProviderEnum("provider").notNull(),
+    providerEventId: varchar("provider_event_id", { length: 255 }).notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => commerceOrders.id, { onDelete: "restrict" }),
+    eventType: varchar("event_type", { length: 128 }).notNull(),
+    payloadDigest: varchar("payload_digest", { length: 64 }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    outcome: varchar("outcome", { length: 96 }),
+  },
+  (table) => [
+    uniqueIndex("payment_provider_events_provider_event_uidx").on(
+      table.provider,
+      table.providerEventId,
+    ),
+    index("payment_provider_events_order_received_idx").on(table.orderId, table.receivedAt),
+    check("payment_provider_events_digest_check", sql`${table.payloadDigest} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+export const mppReplayStore = pgTable(
+  "mpp_replay_store",
+  {
+    key: varchar("key", { length: 512 }).primaryKey(),
+    value: jsonb("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [index("mpp_replay_store_expiry_idx").on(table.expiresAt)],
+);
+
+export const commerceRateLimits = pgTable(
+  "commerce_rate_limits",
+  {
+    keyHash: varchar("key_hash", { length: 64 }).primaryKey(),
+    dimension: varchar("dimension", { length: 16 }).notNull(),
+    hitCount: integer("hit_count").notNull().default(1),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("commerce_rate_limits_expiry_idx").on(table.expiresAt),
+    check("commerce_rate_limits_hash_check", sql`${table.keyHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "commerce_rate_limits_dimension_check",
+      sql`${table.dimension} IN ('session', 'order', 'ip', 'agent')`,
+    ),
+    check("commerce_rate_limits_hit_count_check", sql`${table.hitCount} > 0`),
+    check("commerce_rate_limits_window_check", sql`${table.expiresAt} > ${table.windowStartedAt}`),
+  ],
+);
+
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -483,3 +874,7 @@ export type Patient = typeof patients.$inferSelect;
 export type AccessGrant = typeof accessGrants.$inferSelect;
 export type ContextGrant = typeof contextGrants.$inferSelect;
 export type Equipment = typeof equipment.$inferSelect;
+export type CommerceOrder = typeof commerceOrders.$inferSelect;
+export type PaymentProviderSetup = typeof paymentProviderSetups.$inferSelect;
+export type EntitlementGrant = typeof entitlementGrants.$inferSelect;
+export type SavedRoutine = typeof savedRoutines.$inferSelect;

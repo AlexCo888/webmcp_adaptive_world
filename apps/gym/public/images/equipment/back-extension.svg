@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Back extension station illustration</title>
+  <desc id="description">An original neutral line illustration of a supported back extension station.</desc>
+  <rect width="1200" height="800" rx="48" fill="#edf4ef"/>
+  <ellipse cx="602" cy="668" rx="380" ry="53" fill="#d6e3da"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M347 651V205h132v446M312 651h205" stroke-width="31"/>
+    <path d="M412 279h353l75 372M477 322l171 108" stroke-width="26"/>
+    <path d="M535 529h171v79H535zM566 528V410h104v118" stroke-width="29"/>
+    <path d="m648 430 139-55m-24-31 48 61" stroke-width="21"/>
+    <path d="M706 651h176" stroke-width="31"/>
+  </g>
+  <circle cx="648" cy="430" r="18" fill="#d8ff77"/>
+</svg>

@@ -1,4 +1,4 @@
-import { createDatabase } from "@adaptive-world/db";
+import { createDatabase, createTransactionalDatabase } from "@adaptive-world/db";
 
 const buildOnly = process.env.NEXT_PHASE === "phase-production-build" || process.env.CI === "true";
 
@@ -9,10 +9,13 @@ function getDatabaseUrl(): string {
   throw new Error("DATABASE_URL is required at runtime");
 }
 
+const databaseUrl = getDatabaseUrl();
+
 const globalForDatabase = globalThis as typeof globalThis & {
   adaptiveWorldDatabase?: ReturnType<typeof createDatabase>;
 };
 
-export const db = globalForDatabase.adaptiveWorldDatabase ?? createDatabase(getDatabaseUrl());
+export const db = globalForDatabase.adaptiveWorldDatabase ?? createDatabase(databaseUrl);
+export const transactionalDb = createTransactionalDatabase(databaseUrl);
 
 if (process.env.NODE_ENV !== "production") globalForDatabase.adaptiveWorldDatabase = db;

@@ -1,20 +1,22 @@
 import { equipmentCatalog } from "@adaptive-world/demo-data";
+import { matchesEquipmentSearch } from "@/lib/equipment-search";
 
 export function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q")?.trim().toLowerCase();
+  const query = searchParams.get("q") ?? undefined;
   const category = searchParams.get("category");
-  const results = equipmentCatalog.filter(
-    (item) =>
-      (!category || item.category === category) &&
-      (!query ||
-        [item.name, item.summary, ...item.capabilities, ...item.suitabilityTags]
-          .join(" ")
-          .toLowerCase()
-          .includes(query)),
+  const results = equipmentCatalog.filter((item) =>
+    matchesEquipmentSearch(item, {
+      query,
+      ...(category ? { category } : {}),
+    }),
   );
   return Response.json(
-    { count: results.length, equipment: results },
-    { headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" } },
+    {
+      ok: true,
+      data: { count: results.length, equipment: results },
+      requestId: request.headers.get("x-request-id") ?? crypto.randomUUID(),
+    },
+    { headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } },
   );
 }

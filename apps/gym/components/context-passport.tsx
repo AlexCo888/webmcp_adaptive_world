@@ -13,47 +13,66 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useGymExperience } from "@/components/gym-experience-context";
 
 type State = "loading" | "disconnected" | "redeeming" | "active" | "error";
 
 export function ContextPassport({ passportUrl }: { passportUrl: string }) {
+  const { setContextActive } = useGymExperience();
   const [state, setState] = useState<State>("loading");
   const [projection, setProjection] = useState<GymContextProjection | null>(null);
+  const [scopes, setScopes] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState("");
 
   const loadCurrent = useCallback(async () => {
     const response = await fetch("/api/context/current", { cache: "no-store" });
     if (!response.ok) {
+      setContextActive(false);
       setState("disconnected");
       return;
     }
-    const data = (await response.json()) as { projection?: GymContextProjection };
+    const data = (await response.json()) as {
+      projection?: GymContextProjection;
+      scopes?: string[];
+    };
     if (data.projection) {
+      setContextActive(true);
       setProjection(data.projection);
+      setScopes(data.scopes ?? []);
       setState("active");
     } else {
+      setContextActive(false);
       setState("disconnected");
     }
-  }, []);
+  }, [setContextActive]);
 
-  const redeem = useCallback(async (code: string) => {
-    setState("redeeming");
-    setMessage(null);
-    const response = await fetch("/api/context/redeem", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    const data = (await response.json()) as { projection?: GymContextProjection; error?: string };
-    if (!response.ok || !data.projection) {
-      setMessage(data.error ?? "The one-use code could not be redeemed.");
-      setState("error");
-      return;
-    }
-    setProjection(data.projection);
-    setState("active");
-  }, []);
+  const redeem = useCallback(
+    async (code: string) => {
+      setState("redeeming");
+      setMessage(null);
+      const response = await fetch("/api/context/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = (await response.json()) as {
+        projection?: GymContextProjection;
+        scopes?: string[];
+        error?: string;
+      };
+      if (!response.ok || !data.projection) {
+        setMessage(data.error ?? "The one-use code could not be redeemed.");
+        setState("error");
+        return;
+      }
+      setContextActive(true);
+      setProjection(data.projection);
+      setScopes(data.scopes ?? []);
+      setState("active");
+    },
+    [setContextActive],
+  );
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.hash.slice(1)).get("code");
@@ -152,10 +171,6 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
       </div>
       <div className="projection-summary">
         <div>
-          <span>Age range</span>
-          <strong>{projection.ageBand}</strong>
-        </div>
-        <div>
           <span>Experience</span>
           <strong>{projection.experienceLevel}</strong>
         </div>
@@ -166,15 +181,51 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
       </div>
       <div className="connected-context-grid">
         <ContextSection title="Goals" values={projection.goals} />
+        <ContextSection title="Preferred activities" values={projection.preferredActivities} />
+        <ContextSection
+          title="Functional capabilities"
+          values={projection.functionalCapabilities}
+        />
         <ContextSection
           title="Movement considerations"
           values={projection.movementConsiderations}
           emphasis
         />
-        {projection.accessibilityNeeds.length ? (
-          <ContextSection title="Access needs" values={projection.accessibilityNeeds} />
-        ) : null}
+        <ContextSection title="Avoid" values={projection.avoid} danger />
+        <ContextSection title="Access needs" values={projection.accessibilityNeeds} />
         <ContextSection title="Stop signals" values={projection.stopSignals} danger />
+      </div>
+      <div className="data-list" aria-label="Projection authority and provenance">
+        <div className="data-row">
+          <span>Projection reference</span>
+          <strong>{projection.projectionId}</strong>
+        </div>
+        <div className="data-row">
+          <span>Purpose</span>
+          <strong>{projection.purpose}</strong>
+        </div>
+        <div className="data-row">
+          <span>Granted scopes</span>
+          <strong>{scopes.length ? scopes.join(", ") : "None"}</strong>
+        </div>
+        <div className="data-row">
+          <span>Provenance classes</span>
+          <strong>
+            {projection.sourceCategories.length ? projection.sourceCategories.join(", ") : "None"}
+          </strong>
+        </div>
+        <div className="data-row">
+          <span>Issued at</span>
+          <strong>{projection.issuedAt}</strong>
+        </div>
+        <div className="data-row">
+          <span>Expires at</span>
+          <strong>{projection.expiresAt}</strong>
+        </div>
+        <div className="data-row">
+          <span>Synthetic</span>
+          <strong>{projection.synthetic ? "Yes" : "No"}</strong>
+        </div>
       </div>
       <div className="privacy-boundary">
         <LockKeyhole size={18} />
@@ -183,6 +234,11 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
           laboratories, documents, Passport ID, and clinician identity.
         </p>
       </div>
+      {message ? (
+        <p className="grant-message" role="alert">
+          {message}
+        </p>
+      ) : null}
       <div className="projection-actions">
         <span className="projection-expiry">
           <Clock3 size={14} /> Context expires {new Date(projection.expiresAt).toLocaleString()}
@@ -192,8 +248,14 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
             className="button button--light"
             type="button"
             onClick={async () => {
-              await fetch("/api/context/current", { method: "DELETE" });
+              const response = await fetch("/api/context/current", { method: "DELETE" });
+              if (!response.ok) {
+                setMessage("The server could not revoke this Gym session. Please try again.");
+                return;
+              }
               setProjection(null);
+              setScopes([]);
+              setContextActive(false);
               setState("disconnected");
             }}
           >
@@ -223,14 +285,18 @@ function ContextSection({
     <div className="context-section">
       <h3>{title}</h3>
       <div className="tag-cloud">
-        {values.map((value) => (
-          <span
-            className={danger ? "tag tag--orange" : emphasis ? "tag tag--green" : "tag"}
-            key={value}
-          >
-            {value}
-          </span>
-        ))}
+        {values.length ? (
+          values.map((value) => (
+            <span
+              className={danger ? "tag tag--orange" : emphasis ? "tag tag--green" : "tag"}
+              key={value}
+            >
+              {value}
+            </span>
+          ))
+        ) : (
+          <span className="tag">None</span>
+        )}
       </div>
     </div>
   );

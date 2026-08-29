@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">Treadmill illustration</title>
+  <desc id="description">An original neutral line illustration of a commercial treadmill.</desc>
+  <rect width="1200" height="800" rx="48" fill="#edf4ef"/>
+  <ellipse cx="600" cy="668" rx="430" ry="56" fill="#d6e3da"/>
+  <g fill="none" stroke="#183329" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M250 564h610l-82 105H331Z" stroke-width="42"/>
+    <path d="M766 566 863 252h95" stroke-width="34"/>
+    <path d="M825 355H974" stroke-width="30"/>
+    <rect x="866" y="201" width="142" height="113" rx="20" stroke-width="24"/>
+    <circle cx="355" cy="668" r="29" stroke-width="18"/>
+    <circle cx="784" cy="668" r="29" stroke-width="18"/>
+  </g>
+  <path d="M908 255h56" stroke="#d8ff77" stroke-width="18" stroke-linecap="round"/>
+</svg>

@@ -16,7 +16,7 @@ export interface ListMySharesInput {
 
 export interface CreateContextGrantInput {
   readonly recipient: "adaptive-gym";
-  readonly scopes: readonly "gym.context.read"[];
+  readonly scopes: readonly ("gym.context.read" | "gym.feedback.write")[];
   readonly expiresInMinutes?: number;
 }
 
@@ -99,10 +99,10 @@ export function createPassportToolCatalog(
               description: "Gym scopes the person explicitly approves.",
               items: {
                 type: "string",
-                enum: ["gym.context.read"],
+                enum: ["gym.context.read", "gym.feedback.write"],
               },
-              minItems: 1,
-              maxItems: 1,
+              minItems: 2,
+              maxItems: 2,
               uniqueItems: true,
             },
             expiresInMinutes: {

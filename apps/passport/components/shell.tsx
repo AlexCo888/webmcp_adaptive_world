@@ -139,7 +139,8 @@ export function PageHeading({
   action?: ReactNode;
 }) {
   const { actor, patient, role } = usePortal();
-  const label = role === "owner" ? patient.identity.displayName : actor.displayName;
+  const label =
+    role === "owner" ? (patient?.identity.displayName ?? actor.displayName) : actor.displayName;
   const initials = label
     .split(" ")
     .filter((part) => !part.endsWith("."))
