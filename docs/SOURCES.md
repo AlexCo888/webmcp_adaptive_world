@@ -74,6 +74,10 @@ for Adaptive World—no manufacturer product photography. The root
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) inventories the original
 artwork and applicable third-party notices.
 
+For the Torque Free-Standing F9, the catalog keeps the product page's doors-open
+machine footprint separate from the 244 × 274 cm live area in Torque's linked
+assembly guide. Constrained-space searches use the live area.
+
 ## Non-claims
 
 Official technical sources support implementation choices; they do not establish health-data compliance, clinical validity, or regulatory clearance. Those claims are explicitly outside this MVP.

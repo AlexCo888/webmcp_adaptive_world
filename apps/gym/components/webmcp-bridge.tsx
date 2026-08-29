@@ -116,6 +116,7 @@ function compactEquipment(item: ReturnType<typeof EquipmentSchema.parse>) {
     model: item.model,
     category: item.category,
     dimensionsCm: item.dimensionsCm,
+    ...(item.operatingDimensionsCm ? { operatingDimensionsCm: item.operatingDimensionsCm } : {}),
     accessFeatures: item.accessibility.slice(0, 3),
     locationZone: item.locationZone,
     sourceUrl: item.sourceUrl,

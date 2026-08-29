@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { IdSchema, SlugSchema } from "./common";
 
+const EquipmentDimensionsSchema = z.object({
+  length: z.number().positive().max(1000),
+  width: z.number().positive().max(1000),
+  height: z.number().positive().max(500),
+});
+
 export const EquipmentCategorySchema = z.enum([
   "cardio",
   "selectorized-strength",
@@ -20,11 +26,8 @@ export const EquipmentSchema = z.object({
   model: z.string().min(1).max(100),
   category: EquipmentCategorySchema,
   summary: z.string().min(20).max(400),
-  dimensionsCm: z.object({
-    length: z.number().positive().max(1000),
-    width: z.number().positive().max(1000),
-    height: z.number().positive().max(500),
-  }),
+  dimensionsCm: EquipmentDimensionsSchema,
+  operatingDimensionsCm: EquipmentDimensionsSchema.optional(),
   requiredClearanceCm: z.number().min(0).max(300),
   maxUserWeightKg: z.number().positive().max(500).optional(),
   power: z.enum(["none", "120v", "220v", "self-powered", "ac-adapter"]),

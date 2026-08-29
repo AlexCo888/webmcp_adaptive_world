@@ -46,4 +46,24 @@ describe("shared equipment search", () => {
 
     expect(matches).toHaveLength(0);
   });
+
+  it("uses documented operating dimensions for constrained-space searches", () => {
+    const f9 = equipmentCatalog.find((item) => item.id === "torque_f9_functional_trainer");
+
+    if (!f9) throw new Error("Expected the F9 fixture in the equipment catalog");
+    expect(
+      matchesEquipmentSearch(f9, {
+        query: "functional trainer",
+        maxWidthCm: 200,
+        maxDepthCm: 220,
+      }),
+    ).toBe(false);
+    expect(
+      matchesEquipmentSearch(f9, {
+        query: "functional trainer",
+        maxWidthCm: 244,
+        maxDepthCm: 274,
+      }),
+    ).toBe(true);
+  });
 });

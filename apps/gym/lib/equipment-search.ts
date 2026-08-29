@@ -46,6 +46,7 @@ export function matchesEquipmentSearch(
   item: Equipment,
   criteria: EquipmentSearchCriteria,
 ): boolean {
+  const spaceDimensions = item.operatingDimensionsCm ?? item.dimensionsCm;
   const queryTerms = criteria.query?.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const requiresAccessibility = queryTerms.some((term) => ACCESSIBILITY_TERMS.has(term));
   const meaningfulQueryTerms = queryTerms.filter(
@@ -53,8 +54,8 @@ export function matchesEquipmentSearch(
   );
   if (criteria.category && item.category !== criteria.category) return false;
   if (criteria.categories?.length && !criteria.categories.includes(item.category)) return false;
-  if (criteria.maxWidthCm && item.dimensionsCm.width > criteria.maxWidthCm) return false;
-  if (criteria.maxDepthCm && item.dimensionsCm.length > criteria.maxDepthCm) return false;
+  if (criteria.maxWidthCm && spaceDimensions.width > criteria.maxWidthCm) return false;
+  if (criteria.maxDepthCm && spaceDimensions.length > criteria.maxDepthCm) return false;
   if (criteria.accessibleOnly && item.accessibility.length === 0) return false;
   if (requiresAccessibility && item.accessibility.length === 0) return false;
   if (criteria.availableOnly && !item.available) return false;

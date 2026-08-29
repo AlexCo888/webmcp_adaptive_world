@@ -62,8 +62,12 @@ export default async function EquipmentDetailPage({ params }: Props) {
             </div>
             <div>
               <MapPin size={18} />
-              <span>Planning clearance</span>
-              <strong>{item.requiredClearanceCm} cm</strong>
+              <span>{item.operatingDimensionsCm ? "Operating area" : "Planning clearance"}</span>
+              <strong>
+                {item.operatingDimensionsCm
+                  ? `${item.operatingDimensionsCm.length} × ${item.operatingDimensionsCm.width} cm`
+                  : `${item.requiredClearanceCm} cm`}
+              </strong>
             </div>
             <div>
               <PlugZap size={18} />

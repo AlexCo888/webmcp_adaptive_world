@@ -85,13 +85,13 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
             },
             maxWidthCm: {
               type: "number",
-              description: "Maximum available width in centimeters.",
+              description: "Maximum available operating width in centimeters.",
               minimum: 1,
               maximum: 10_000,
             },
             maxDepthCm: {
               type: "number",
-              description: "Maximum available depth in centimeters.",
+              description: "Maximum available operating depth in centimeters.",
               minimum: 1,
               maximum: 10_000,
             },

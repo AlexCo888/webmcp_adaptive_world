@@ -470,6 +470,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "Twin-stack functional trainer with two adjustable cable arms and a cabinet that folds closed for storage.",
     dimensionsCm: { length: 155, width: 177, height: 213 },
+    operatingDimensionsCm: { length: 274, width: 244, height: 213 },
     requiredClearanceCm: 122,
     power: "none",
     stations: 2,
@@ -482,7 +483,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     syntheticFacilityInventory: true,
     sourceUrl:
       "https://www.torquefitness.com/products/free-standing-f9-fold-away-functional-trainer",
-    sourceLabel: "Torque Fitness product specifications",
+    sourceLabel: "Torque Fitness product page and linked assembly guide",
     sourceCheckedAt: checkedAt,
     imageUrl: "/images/equipment/torque-free-standing-f9-functional-trainer.webp",
     imageAlt: "AI-generated studio visualization of a Torque F9 fold-away functional trainer",
