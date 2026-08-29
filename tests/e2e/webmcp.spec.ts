@@ -256,10 +256,10 @@ test("canonical natural-language searches stay grounded in the visible catalog",
   });
   expect(JSON.parse(String(matchingOutput))).toMatchObject({
     ok: true,
-    data: { count: 2, returned: 1, truncated: true },
+    data: { count: 5, returned: 1, truncated: true },
   });
-  await expect(page.locator(".results-summary strong")).toHaveText("2");
-  await expect(page.locator(".equipment-card")).toHaveCount(2);
+  await expect(page.locator(".results-summary strong")).toHaveText("5");
+  await expect(page.locator(".equipment-card")).toHaveCount(5);
 
   const unavailableOutput = await invokeModelContextTool(page, "search_equipment", {
     query: "anti-gravity treadmill",
