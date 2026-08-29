@@ -55,24 +55,27 @@ their terms.
 
 ## Product names and source citations
 
-The demo catalog references real product models from Life Fitness, SCIFIT,
-Rogue Fitness, and Eleiko. Product names and trademarks belong to their
-respective owners. Each record retains a direct manufacturer product-page URL
-in `packages/demo-data/src/equipment.ts`; those links support the catalog's
+The demo catalog references real product models from Life Fitness, Hammer
+Strength, SCIFIT, Rogue Fitness, Eleiko, Torque Fitness, Balanced Body, and
+NuStep. Product names and trademarks belong to their respective owners. Each
+record retains a direct manufacturer product-page URL in
+`packages/demo-data/src/equipment.ts`; those links support the catalog's
 specification provenance and are summarized in
 [`docs/SOURCES.md`](./docs/SOURCES.md). Their inclusion does not imply
 manufacturer sponsorship, authorization, ownership, or endorsement.
 
 No official manufacturer product photography is shipped or rendered directly.
-Official manufacturer product images were used only as visual references for
-equipment geometry while creating new, logo-free visualizations. The resulting
-assets are original AI-generated visualizations, not official photography or
-exact manufacturer depictions. Product identity and specifications remain
-grounded in the cited manufacturer URL, not in the generated image.
+The original 12 equipment renders used official product images only as broad
+geometry references; the ten expansion renders used cited descriptions and
+specifications plus one existing project-generated render as a style reference.
+The resulting assets are original, logo-free AI-generated visualizations, not
+official photography or exact manufacturer depictions. Product identity and
+specifications remain grounded in the cited manufacturer URL, not in the
+generated image.
 
 ## Generated project visuals
 
-The 15 versioned visual designs—the Gym hero, 12 equipment renders, and the Gym
+The 25 versioned visual designs—the Gym hero, 22 equipment renders, and the Gym
 and Passport app icons—were created for Adaptive World with OpenAI's built-in
 image generation on 2026-08-29. Their source prompts, reference policy,
 versioned paths, and web-delivery derivatives are recorded in

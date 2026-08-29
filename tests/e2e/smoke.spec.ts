@@ -31,7 +31,7 @@ test("Gym looks and behaves like a public club site before context is connected"
   await expect
     .poll(() => hero.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(600);
-  await expect(page.getByText("12", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("22", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /Tour the equipment/ })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Plan a visit without an account." }),
@@ -87,8 +87,8 @@ test("Gym exposes only verified products and refuses context-free walkthrough cr
   };
 
   expect(catalog.ok).toBe(true);
-  expect(catalog.data.count).toBe(12);
-  expect(new Set(catalog.data.equipment.map(({ id }) => id)).size).toBe(12);
+  expect(catalog.data.count).toBe(22);
+  expect(new Set(catalog.data.equipment.map(({ id }) => id)).size).toBe(22);
   expect(catalog.data.equipment.every(({ verifiedProduct }) => verifiedProduct)).toBe(true);
   expect(catalog.data.equipment.every(({ sourceUrl }) => sourceUrl.startsWith("https://"))).toBe(
     true,

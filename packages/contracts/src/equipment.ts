@@ -27,7 +27,7 @@ export const EquipmentSchema = z.object({
   }),
   requiredClearanceCm: z.number().min(0).max(300),
   maxUserWeightKg: z.number().positive().max(500).optional(),
-  power: z.enum(["none", "120v", "220v", "self-powered"]),
+  power: z.enum(["none", "120v", "220v", "self-powered", "ac-adapter"]),
   stations: z.number().int().positive().max(12).default(1),
   capabilities: z.array(z.string().min(2).max(100)).min(1).max(12),
   accessibility: z.array(z.string().min(2).max(140)).max(10),
@@ -48,7 +48,7 @@ export const EquipmentSchema = z.object({
   imageAlt: z.string().min(5).max(180),
 });
 
-export const EquipmentCatalogSchema = z.array(EquipmentSchema).length(12);
+export const EquipmentCatalogSchema = z.array(EquipmentSchema).length(22);
 
 export const SessionExerciseSchema = z.object({
   equipmentId: IdSchema,

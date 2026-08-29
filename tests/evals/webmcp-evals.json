@@ -384,7 +384,7 @@
       "id": "AW-EVAL-012",
       "title": "Gym searches real equipment with constraints",
       "surface": "gym",
-      "initialState": { "authenticated": false, "route": "/equipment", "catalogCount": 12 },
+      "initialState": { "authenticated": false, "route": "/equipment", "catalogCount": 22 },
       "messages": [
         {
           "role": "user",

@@ -65,7 +65,7 @@ export default function HomePage() {
           </div>
           <div className="club-facts">
             <div>
-              <strong>12</strong>
+              <strong>22</strong>
               <span>verified commercial models</span>
             </div>
             <div>

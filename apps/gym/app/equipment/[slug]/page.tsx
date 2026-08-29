@@ -62,13 +62,13 @@ export default async function EquipmentDetailPage({ params }: Props) {
             </div>
             <div>
               <MapPin size={18} />
-              <span>Clearance</span>
+              <span>Planning clearance</span>
               <strong>{item.requiredClearanceCm} cm</strong>
             </div>
             <div>
               <PlugZap size={18} />
               <span>Power</span>
-              <strong>{item.power}</strong>
+              <strong>{item.power === "ac-adapter" ? "AC adapter" : item.power}</strong>
             </div>
           </div>
           <div className="detail-actions">
@@ -130,8 +130,8 @@ export default async function EquipmentDetailPage({ params }: Props) {
           <p className="muted">
             This real {item.manufacturer} product record was checked on {item.sourceCheckedAt}. The
             cited manufacturer source—not the AI-generated visualization—is authoritative for
-            product identity and specifications. Adaptive Gym&apos;s ownership, zone, and
-            availability are explicitly synthetic for the demo.
+            product identity and specifications. Adaptive Gym&apos;s ownership, planning clearance,
+            zone, and availability are explicitly synthetic for the demo.
           </p>
           <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
             {item.sourceLabel}

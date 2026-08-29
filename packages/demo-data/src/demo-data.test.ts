@@ -16,12 +16,12 @@ void test("contains six valid synthetic passports and gym projections", () => {
   assert.equal(GymContextProjectionSchema.array().safeParse(demoGymProfiles).success, true);
 });
 
-void test("contains 12 verified product records with unique ids, slugs, and sources", () => {
-  assert.equal(equipmentCatalog.length, 12);
+void test("contains 22 verified product records with unique ids, slugs, and sources", () => {
+  assert.equal(equipmentCatalog.length, 22);
   assert.equal(EquipmentCatalogSchema.safeParse(equipmentCatalog).success, true);
-  assert.equal(new Set(equipmentCatalog.map(({ id }) => id)).size, 12);
-  assert.equal(new Set(equipmentCatalog.map(({ slug }) => slug)).size, 12);
-  assert.equal(new Set(equipmentCatalog.map(({ imageUrl }) => imageUrl)).size, 12);
+  assert.equal(new Set(equipmentCatalog.map(({ id }) => id)).size, 22);
+  assert.equal(new Set(equipmentCatalog.map(({ slug }) => slug)).size, 22);
+  assert.equal(new Set(equipmentCatalog.map(({ imageUrl }) => imageUrl)).size, 22);
   for (const item of equipmentCatalog) {
     assert.equal(item.verifiedProduct, true);
     assert.match(item.sourceUrl, /^https:\/\//u);
@@ -30,6 +30,17 @@ void test("contains 12 verified product records with unique ids, slugs, and sour
     assert.doesNotMatch(item.imageUrl, /^https?:\/\//u);
     assert.equal(item.syntheticFacilityInventory, true);
   }
+});
+
+void test("fills every previously sparse equipment category", () => {
+  const count = (category: (typeof equipmentCatalog)[number]["category"]) =>
+    equipmentCatalog.filter((item) => item.category === category).length;
+
+  assert.equal(count("plate-loaded-strength"), 2);
+  assert.equal(count("free-weights"), 4);
+  assert.equal(count("functional-training"), 3);
+  assert.equal(count("pilates-mobility"), 2);
+  assert.equal(count("rehabilitation"), 3);
 });
 
 void test("gym projection excludes restricted clinical data", () => {

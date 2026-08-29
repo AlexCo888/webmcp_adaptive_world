@@ -20,7 +20,13 @@ describe("shared equipment search", () => {
       }),
     );
 
-    expect(matches).toHaveLength(2);
+    expect(matches.map((item) => item.id)).toEqual([
+      "lf_integrity_plus_elliptical",
+      "lf_integrity_recumbent",
+      "balanced_body_allegro_2",
+      "nustep_t6max",
+      "scifit_stepone",
+    ]);
     expect(matches.every((item) => item.accessibility.length > 0)).toBe(true);
     expect(matches.every((item) => item.suitabilityTags.includes("low-impact"))).toBe(true);
   });

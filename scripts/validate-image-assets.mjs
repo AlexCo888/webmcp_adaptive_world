@@ -276,9 +276,9 @@ async function readEquipmentSlugs() {
   );
   const uniqueSlugs = [...new Set(slugs)];
 
-  if (slugs.length !== 12 || uniqueSlugs.length !== 12) {
+  if (slugs.length !== 22 || uniqueSlugs.length !== 22) {
     fail(
-      `Expected 12 unique equipment slugs in ${relativePath(sourcePath)}, found ${slugs.length} entries and ${uniqueSlugs.length} unique values`,
+      `Expected 22 unique equipment slugs in ${relativePath(sourcePath)}, found ${slugs.length} entries and ${uniqueSlugs.length} unique values`,
     );
   }
   return uniqueSlugs;
@@ -302,9 +302,9 @@ async function validateEquipment() {
     .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".webp")
     .map((entry) => entry.name)
     .sort();
-  if (webpFiles.length !== 12) {
+  if (webpFiles.length !== 22) {
     fail(
-      `${relativePath(equipmentDirectory)} must contain exactly 12 WebP files; found ${webpFiles.length}`,
+      `${relativePath(equipmentDirectory)} must contain exactly 22 WebP files; found ${webpFiles.length}`,
     );
   }
 
@@ -369,5 +369,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  "Image asset validation passed: 1 Gym hero WebP, 12 equipment WebPs, 10 PNG app icons, and no SVG assets or references.",
+  "Image asset validation passed: 1 Gym hero WebP, 22 equipment WebPs, 10 PNG app icons, and no SVG assets or references.",
 );
