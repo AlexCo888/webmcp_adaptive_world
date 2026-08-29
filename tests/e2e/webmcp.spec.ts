@@ -57,7 +57,7 @@ const generatedRoutine = {
   templateId: "low_impact_orientation",
   templateVersion: "1.0",
   createdVia: "webmcp",
-  catalogVersion: "verified-2026-08-27",
+  catalogVersion: "verified-2026-08-29",
   durationMinutes: 40,
   status: "draft",
   exercises: [

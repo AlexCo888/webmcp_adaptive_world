@@ -535,7 +535,7 @@
         "authenticated": false,
         "route": "/session",
         "contextStatus": "active",
-        "catalogVersion": "verified-2026-08-27"
+        "catalogVersion": "verified-2026-08-29"
       },
       "messages": [
         {
