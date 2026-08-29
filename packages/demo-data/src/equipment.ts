@@ -498,6 +498,7 @@ export const equipmentCatalog = EquipmentCatalogSchema.parse([
     summary:
       "All-surface push sled with magnetic resistance, dual push positions and solid airless tires.",
     dimensionsCm: { length: 115, width: 81, height: 95 },
+    operatingDimensionsCm: { length: 298, width: 81, height: 95 },
     requiredClearanceCm: 183,
     power: "none",
     stations: 1,

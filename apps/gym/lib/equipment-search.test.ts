@@ -78,4 +78,24 @@ describe("shared equipment search", () => {
 
     expect(matches.map((item) => item.id)).toEqual(["lf_dual_adjustable_pulley"]);
   });
+
+  it("uses the push sled's travel lane instead of its stationary footprint", () => {
+    const tank = equipmentCatalog.find((item) => item.id === "torque_tank_m1");
+
+    if (!tank) throw new Error("Expected the TANK M1 fixture in the equipment catalog");
+    expect(
+      matchesEquipmentSearch(tank, {
+        query: "push sled",
+        maxWidthCm: 100,
+        maxDepthCm: 120,
+      }),
+    ).toBe(false);
+    expect(
+      matchesEquipmentSearch(tank, {
+        query: "push sled",
+        maxWidthCm: 100,
+        maxDepthCm: 298,
+      }),
+    ).toBe(true);
+  });
 });

@@ -78,6 +78,11 @@ For the Torque Free-Standing F9, the catalog keeps the product page's doors-open
 machine footprint separate from the 244 × 274 cm live area in Torque's linked
 assembly guide. Constrained-space searches use the live area.
 
+For the mobile Torque TANK M1, the operating length is the 115 cm product
+footprint plus Adaptive Gym's synthetic 183 cm travel clearance. Space filters
+therefore use a 298 cm lane while the catalog still displays the product's
+physical footprint separately.
+
 ## Non-claims
 
 Official technical sources support implementation choices; they do not establish health-data compliance, clinical validity, or regulatory clearance. Those claims are explicitly outside this MVP.
