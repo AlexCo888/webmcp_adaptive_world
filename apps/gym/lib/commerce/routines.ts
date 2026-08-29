@@ -63,8 +63,13 @@ export async function createAndSavePersonalizedRoutine({
           if (!(await verifySha256Hex(canonicalExisting, existing.rows[0].plan_hash))) {
             throw new CommerceError("RECONCILIATION_REQUIRED");
           }
+          const session = GeneratedSessionSchema.parse(existing.rows[0].plan);
+          await client.query(
+            "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
+            [active.row.id, canonicalExisting],
+          );
           return {
-            session: GeneratedSessionSchema.parse(existing.rows[0].plan),
+            session,
             savedRoutineRef: existing.rows[0].id,
             reused: true,
           };

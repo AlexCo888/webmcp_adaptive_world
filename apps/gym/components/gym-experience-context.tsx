@@ -20,9 +20,9 @@ type GymExperience = {
   savedRoutineRef: string | null;
   announcement: string;
   setContextActive: (active: boolean) => void;
-  applyEquipmentSearch(intent: EquipmentSearchIntent, count: number): void;
-  openEquipment(slug: string): void;
-  applyPersonalizedRoutine(session: GeneratedSession, savedRoutineRef: string): void;
+  applyEquipmentSearch: (intent: EquipmentSearchIntent, count: number) => void;
+  openEquipment: (slug: string) => void;
+  applyPersonalizedRoutine: (session: GeneratedSession, savedRoutineRef: string) => void;
 };
 
 const GymExperienceContext = createContext<GymExperience | null>(null);

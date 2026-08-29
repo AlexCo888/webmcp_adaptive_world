@@ -124,7 +124,13 @@ function compactEquipment(item: ReturnType<typeof EquipmentSchema.parse>) {
 
 export function WebMcpBridge() {
   const pathname = usePathname();
-  const gymExperience = useGymExperience();
+  const {
+    contextActive,
+    setContextActive,
+    applyEquipmentSearch,
+    openEquipment,
+    applyPersonalizedRoutine,
+  } = useGymExperience();
   const [open, setOpen] = useState(false);
   const [hasPersistedRoutine, setHasPersistedRoutine] = useState(false);
   const [events, setEvents] = useState<ExecutionEvent[]>([]);
@@ -184,7 +190,7 @@ export function WebMcpBridge() {
       fetchBoundedJson<unknown>("/api/session", {}, { signal: controller.signal }),
     ]).then(([contextResult, sessionResult]) => {
       if (controller.signal.aborted) return;
-      gymExperience.setContextActive(
+      setContextActive(
         contextResult.status === "fulfilled" &&
           Boolean(
             contextResult.value &&
@@ -202,7 +208,7 @@ export function WebMcpBridge() {
       );
     });
     return () => controller.abort();
-  }, [gymExperience.setContextActive, pathname]);
+  }, [pathname, setContextActive]);
 
   const handlers = useMemo<GymToolHandlers>(
     () => ({
@@ -240,7 +246,11 @@ export function WebMcpBridge() {
               availableOnly: true,
             }),
           );
-        gymExperience.applyEquipmentSearch(input, matches.length);
+        // Publish the tool result before mirroring it into the route UI. The
+        // provider update must not invalidate the invocation that caused it.
+        window.setTimeout(() => {
+          if (!context.signal?.aborted) applyEquipmentSearch(input, matches.length);
+        }, 0);
         trace("search_equipment");
         const requestedLimit = input.limit ?? 10;
         const returned = matches.slice(0, Math.min(requestedLimit, 5));
@@ -260,7 +270,11 @@ export function WebMcpBridge() {
         const data = envelopeData(response);
         if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
         const item = EquipmentSchema.parse((data as { equipment?: unknown }).equipment);
-        gymExperience.openEquipment(item.slug);
+        // Let the WebMCP promise publish its bounded result before this
+        // route change tears down the route-scoped registration.
+        window.setTimeout(() => {
+          if (!context.signal?.aborted) openEquipment(item.slug);
+        }, 0);
         trace("get_equipment");
         return { equipment: compactEquipment(item) };
       },
@@ -390,7 +404,7 @@ export function WebMcpBridge() {
             const record = data as Record<string, unknown>;
             if (record.session && typeof record.savedRoutineRef === "string") {
               const session = GeneratedSessionSchema.parse(record.session);
-              gymExperience.applyPersonalizedRoutine(session, record.savedRoutineRef);
+              applyPersonalizedRoutine(session, record.savedRoutineRef);
               trace("create_personalized_routine");
               return {
                 created: true,
@@ -497,7 +511,7 @@ export function WebMcpBridge() {
         },
       },
     }),
-    [finishMutationExecution, gymExperience, trace],
+    [applyEquipmentSearch, applyPersonalizedRoutine, finishMutationExecution, openEquipment, trace],
   );
 
   const completeCatalog = useMemo(() => createGymToolCatalog(handlers), [handlers]);
@@ -505,9 +519,9 @@ export function WebMcpBridge() {
     const allowed = pathname.startsWith("/equipment")
       ? ["get_gym_profile", "search_equipment", "get_equipment"]
       : pathname === "/passport"
-        ? ["get_gym_profile", ...(gymExperience.contextActive ? ["get_active_context"] : [])]
+        ? ["get_gym_profile", ...(contextActive ? ["get_active_context"] : [])]
         : pathname === "/session/feedback"
-          ? gymExperience.contextActive && hasPersistedRoutine
+          ? contextActive && hasPersistedRoutine
             ? ["get_active_context", "record_session_feedback"]
             : []
           : pathname === "/session"
@@ -515,13 +529,13 @@ export function WebMcpBridge() {
                 "get_gym_profile",
                 "search_equipment",
                 "get_equipment",
-                ...(gymExperience.contextActive
+                ...(contextActive
                   ? ["get_active_context", "get_routine_pro_offer", "create_personalized_routine"]
                   : []),
               ]
             : ["get_gym_profile", "search_equipment", "get_equipment"];
     return completeCatalog.filter((tool) => allowed.includes(tool.name));
-  }, [completeCatalog, gymExperience.contextActive, hasPersistedRoutine, pathname]);
+  }, [completeCatalog, contextActive, hasPersistedRoutine, pathname]);
 
   const confirmMutation = useCallback<ConfirmMutation>(
     (request) => {

@@ -95,6 +95,26 @@ async function installRoutineApiStubs(page: Page): Promise<Array<Record<string, 
       body: JSON.stringify({ ok: true, data: routineProOffer, requestId: "request-e2e-offer" }),
     }),
   );
+  await page.route("**/api/commerce/routine-pro/status**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        data: { entitled: false },
+        requestId: "request-e2e-status",
+      }),
+    }),
+  );
+  await page.route("**/api/commerce/routine-pro/cancel", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        data: { cancelled: true },
+        requestId: "request-e2e-cancel",
+      }),
+    }),
+  );
   await page.route("**/api/commerce/routine-pro/agent-pay", async (route) => {
     agentPayBodies.push((await route.request().postDataJSON()) as Record<string, unknown>);
     await route.fulfill({
@@ -179,6 +199,8 @@ test("disconnect unregisters protected Gym tools without a reload", async ({ pag
 test("a shim-invoked free equipment search updates the existing catalog UI", async ({ page }) => {
   await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
+  const before = await modelContextSnapshot(page);
+  const registrationIds = before.activeTools.map(({ id }) => id);
 
   const output = await invokeModelContextTool(page, "search_equipment", {
     query: "rower",
@@ -193,6 +215,8 @@ test("a shim-invoked free equipment search updates the existing catalog UI", asy
   await expect(page.locator(".results-summary strong")).toHaveText("1");
 
   const snapshot = await modelContextSnapshot(page);
+  expect(snapshot.activeTools.map(({ id }) => id)).toEqual(registrationIds);
+  expect(snapshot.unregistrations.some(({ id }) => registrationIds.includes(id))).toBe(false);
   expect(snapshot.invocations).toEqual([
     expect.objectContaining({ tool: "search_equipment", input: { query: "rower", limit: 10 } }),
   ]);

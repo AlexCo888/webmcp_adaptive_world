@@ -6,6 +6,20 @@
 -- duplicate between the collapse and the unique-index build.
 LOCK TABLE access_grants IN SHARE ROW EXCLUSIVE MODE;
 
+-- Retire stale legacy rows before selecting the authority that survives the
+-- cutover. The partial unique index intentionally cannot put expires_at in its
+-- predicate (now() is not immutable), so leaving these rows as active would
+-- make them conflict with the canonical upsert even though they no longer
+-- convey authority. Marking them expired also prevents their scopes from being
+-- folded into a grant that is live at this transaction's now() snapshot.
+UPDATE access_grants AS expired_grant
+SET
+  status = 'expired',
+  updated_at = now()
+WHERE expired_grant.status = 'active'
+  AND expired_grant.revoked_at IS NULL
+  AND expired_grant.expires_at <= now();
+
 WITH ranked AS (
   SELECT
     grant_row.*,
@@ -19,15 +33,20 @@ WITH ranked AS (
   FROM access_grants AS grant_row
   WHERE grant_row.status = 'active'
     AND grant_row.revoked_at IS NULL
+    AND grant_row.expires_at > now()
 ), merged AS (
   SELECT
     ranked.patient_id,
     ranked.grantee_user_id,
     ranked.canonical_id,
     max(ranked.expires_at) AS expires_at,
-    jsonb_agg(DISTINCT scope_value ORDER BY scope_value) AS scopes
+    coalesce(
+      jsonb_agg(DISTINCT scope_value ORDER BY scope_value)
+        FILTER (WHERE scope_value IS NOT NULL),
+      '[]'::jsonb
+    ) AS scopes
   FROM ranked
-  CROSS JOIN LATERAL jsonb_array_elements_text(ranked.scopes) AS scope(scope_value)
+  LEFT JOIN LATERAL jsonb_array_elements_text(ranked.scopes) AS scope(scope_value) ON true
   WHERE ranked.authority_count > 1
   GROUP BY ranked.patient_id, ranked.grantee_user_id, ranked.canonical_id
 )
@@ -49,6 +68,7 @@ WITH ranked AS (
   FROM access_grants AS grant_row
   WHERE grant_row.status = 'active'
     AND grant_row.revoked_at IS NULL
+    AND grant_row.expires_at > now()
 )
 UPDATE access_grants AS duplicate
 SET

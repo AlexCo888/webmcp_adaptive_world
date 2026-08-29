@@ -41,6 +41,33 @@ describe("Adaptive Routine Pro migration safeguards", () => {
     );
   });
 
+  it("excludes expired legacy grants from the canonical live authority", async () => {
+    const migration = await readFile(canonicalGrantMigrationUrl, "utf8");
+    const expiryCutover = migration.indexOf("UPDATE access_grants AS expired_grant");
+    const firstRanking = migration.indexOf("WITH ranked AS");
+    const uniqueIndex = migration.indexOf(
+      "CREATE UNIQUE INDEX access_grants_one_live_authority_uidx",
+    );
+
+    expect(expiryCutover).toBeGreaterThan(-1);
+    expect(expiryCutover).toBeLessThan(firstRanking);
+    expect(firstRanking).toBeLessThan(uniqueIndex);
+    expect(migration).toMatch(
+      /UPDATE access_grants AS expired_grant[\s\S]*status = 'expired'[\s\S]*expired_grant\.expires_at <= now\(\)/u,
+    );
+    expect(migration.match(/grant_row\.expires_at > now\(\)/gu)).toHaveLength(2);
+  });
+
+  it("retains live expiry aggregation when a legacy grant has no scopes", async () => {
+    const migration = await readFile(canonicalGrantMigrationUrl, "utf8");
+
+    expect(migration).toContain(
+      "LEFT JOIN LATERAL jsonb_array_elements_text(ranked.scopes) AS scope(scope_value) ON true",
+    );
+    expect(migration).toContain("FILTER (WHERE scope_value IS NOT NULL)");
+    expect(migration).toContain("'[]'::jsonb");
+  });
+
   it("locks the patient before claiming a context grant during redemption", async () => {
     const migration = await readFile(patientLockMigrationUrl, "utf8");
     const patientLock = migration.indexOf("FOR UPDATE OF patient_row");
