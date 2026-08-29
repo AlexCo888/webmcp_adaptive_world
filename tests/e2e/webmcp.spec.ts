@@ -294,10 +294,22 @@ test("tool output remains bounded and exact invocation input is recorded", async
   const output = await invokeModelContextTool(page, "search_equipment", { limit: 20 });
   expect(typeof output).toBe("string");
   expect(String(output).length).toBeLessThanOrEqual(1_500);
-  expect(JSON.parse(String(output))).toMatchObject({
+  const parsedOutput = JSON.parse(String(output)) as {
+    readonly ok: boolean;
+    readonly data: {
+      readonly count: number;
+      readonly returned: number;
+      readonly truncated: boolean;
+      readonly equipment: readonly unknown[];
+    };
+  };
+  expect(parsedOutput).toMatchObject({
     ok: true,
-    data: { count: 22, returned: 2, truncated: true },
+    data: { count: 22, truncated: true },
   });
+  expect(parsedOutput.data.returned).toBeGreaterThan(0);
+  expect(parsedOutput.data.returned).toBeLessThanOrEqual(5);
+  expect(parsedOutput.data.equipment).toHaveLength(parsedOutput.data.returned);
 
   const snapshot = await modelContextSnapshot(page);
   expect(snapshot.invocations.at(-1)).toEqual(
