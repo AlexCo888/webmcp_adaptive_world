@@ -40,6 +40,23 @@ describe("shared equipment search", () => {
     expect(JSON.stringify({ ok: true, data: toolResult }).length).toBeLessThanOrEqual(1_500);
   });
 
+  it("trims explicit limits to the largest result that fits the output budget", () => {
+    for (const query of ["low impact accessible equipment", "functional training"]) {
+      const matches = equipmentCatalog.filter((item) =>
+        matchesEquipmentSearch(item, { query, availableOnly: true }),
+      );
+      const toolResult = createEquipmentSearchToolResult(matches, 3);
+
+      expect(matches.length).toBeGreaterThanOrEqual(3);
+      expect(toolResult).toMatchObject({
+        count: matches.length,
+        returned: 2,
+        truncated: true,
+      });
+      expect(JSON.stringify({ ok: true, data: toolResult }).length).toBeLessThanOrEqual(1_500);
+    }
+  });
+
   it("maps the rower equipment noun only to the rowing ergometer", () => {
     const matches = equipmentCatalog.filter((item) =>
       matchesEquipmentSearch(item, { query: "rower", availableOnly: true }),

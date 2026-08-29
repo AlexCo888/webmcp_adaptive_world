@@ -1,4 +1,5 @@
 import type { Equipment } from "@adaptive-world/contracts";
+import { DEFAULT_TOOL_OUTPUT_LIMIT } from "@adaptive-world/webmcp";
 
 export type EquipmentSearchCriteria = Readonly<{
   query?: string;
@@ -97,11 +98,25 @@ export function createEquipmentSearchToolResult(
     Math.max(1, Math.floor(requestedLimit)),
     MAX_EQUIPMENT_TOOL_RESULT_LIMIT,
   );
-  const returned = matches.slice(0, boundedLimit);
+  const equipment = matches.slice(0, boundedLimit).map(compactEquipmentForTool);
+
+  while (equipment.length > 0) {
+    const result = {
+      count: matches.length,
+      returned: equipment.length,
+      truncated: matches.length > equipment.length,
+      equipment,
+    };
+    if (JSON.stringify({ ok: true, data: result }).length <= DEFAULT_TOOL_OUTPUT_LIMIT) {
+      return result;
+    }
+    equipment.pop();
+  }
+
   return {
     count: matches.length,
-    returned: returned.length,
-    truncated: matches.length > returned.length,
-    equipment: returned.map(compactEquipmentForTool),
+    returned: 0,
+    truncated: matches.length > 0,
+    equipment,
   };
 }

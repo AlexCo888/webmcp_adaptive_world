@@ -295,8 +295,8 @@ test("tool output remains bounded and exact invocation input is recorded", async
   expect(typeof output).toBe("string");
   expect(String(output).length).toBeLessThanOrEqual(1_500);
   expect(JSON.parse(String(output))).toMatchObject({
-    ok: false,
-    error: { code: "OUTPUT_TOO_LARGE" },
+    ok: true,
+    data: { count: 22, returned: 2, truncated: true },
   });
 
   const snapshot = await modelContextSnapshot(page);
