@@ -67,6 +67,7 @@ async function signIn(browser: Browser, role: DemoRole): Promise<SignedInActor> 
     const authEndpoint = new URL("/api/auth/sign-in/email", passportBaseUrl).toString();
     const destinationPath = role === "owner" ? "/" : "/doctor";
     const submit = page.getByRole("button", { name: "Sign in securely" });
+    await expect(submit).toBeEnabled();
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const responsePromise = page.waitForResponse(

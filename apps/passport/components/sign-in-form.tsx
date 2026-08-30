@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { signInErrorMessage } from "@/lib/sign-in-error";
 
@@ -23,10 +23,15 @@ const accounts = [
 const demoPassword = "AdaptiveWorld2026!";
 
 export function SignInForm() {
+  const [interactive, setInteractive] = useState(false);
   const [email, setEmail] = useState<string>(accounts[0].email);
   const [password, setPassword] = useState<string>(demoPassword);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setInteractive(true);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +91,7 @@ export function SignInForm() {
             <button
               type="button"
               className={`account-choice ${email === account.email ? "selected" : ""}`}
+              disabled={!interactive}
               key={account.email}
               onClick={() => {
                 setEmail(account.email);
@@ -126,7 +132,11 @@ export function SignInForm() {
               {error}
             </p>
           ) : null}
-          <button className="button primary signin-submit" disabled={pending} type="submit">
+          <button
+            className="button primary signin-submit"
+            disabled={!interactive || pending}
+            type="submit"
+          >
             {pending ? "Creating secure session…" : "Sign in securely"}
           </button>
         </form>
