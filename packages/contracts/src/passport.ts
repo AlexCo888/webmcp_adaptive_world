@@ -8,6 +8,7 @@ import {
   SensitivitySchema,
   SourceReferenceSchema,
 } from "./common";
+import { RoutineGoalSchema } from "./commerce";
 
 export const BiologicalSexSchema = z.enum(["female", "male", "intersex", "unknown"]);
 
@@ -136,6 +137,7 @@ export const GymContextProjectionSchema = z.object({
   projectionId: IdSchema,
   subjectAlias: z.string().min(1).max(80),
   purpose: z.literal("adaptive_gym_session"),
+  requestedRoutineGoal: RoutineGoalSchema.optional(),
   goals: z.array(z.string().min(2).max(100)).min(1).max(8),
   experienceLevel: FunctionalProfileSchema.shape.experienceLevel,
   preferredSessionMinutes: FunctionalProfileSchema.shape.preferredSessionMinutes,

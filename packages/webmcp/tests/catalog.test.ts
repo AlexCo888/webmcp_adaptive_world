@@ -30,6 +30,10 @@ describe("Adaptive World tool catalogs", () => {
       "revoke_access_grant",
     ]);
     expect(tools.filter(({ annotations }) => !annotations.readOnlyHint)).toHaveLength(2);
+    expect(tools.find(({ name }) => name === "create_context_grant")?.inputSchema).toMatchObject({
+      required: ["recipient", "scopes", "goal"],
+      properties: { goal: { minLength: 2, maxLength: 160 } },
+    });
   });
 
   it("publishes the exact 5 truthful doctor tools without simulated change data", () => {

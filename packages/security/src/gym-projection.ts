@@ -1,4 +1,5 @@
 export interface GymProjectionInput {
+  requestedRoutineGoal?: string;
   goals?: readonly string[];
   experienceLevel?: string;
   preferredActivities?: readonly string[];
@@ -23,6 +24,7 @@ const ALLOWED_KEYS = new Set([
   "purpose",
   "generatedAt",
   "validUntil",
+  "requestedRoutineGoal",
   "goals",
   "experienceLevel",
   "preferredActivities",
@@ -87,6 +89,7 @@ export function buildGymProjection(
     purpose: "adaptive_gym_session",
     generatedAt: now.toISOString(),
     validUntil: new Date(now.getTime() + validityMs).toISOString(),
+    requestedRoutineGoal: input.requestedRoutineGoal?.trim(),
     goals: cleanStrings(input.goals),
     experienceLevel: input.experienceLevel?.slice(0, 64),
     preferredActivities: cleanStrings(input.preferredActivities),
@@ -137,6 +140,15 @@ export function assertSafeGymProjection(value: unknown): asserts value is GymPro
   }
   if (Date.parse(candidate.validUntil) <= Date.parse(candidate.generatedAt)) {
     throw new TypeError("Gym projection must expire after it is generated");
+  }
+  if (
+    candidate.requestedRoutineGoal !== undefined &&
+    (typeof candidate.requestedRoutineGoal !== "string" ||
+      candidate.requestedRoutineGoal.length < 2 ||
+      candidate.requestedRoutineGoal.length > 160 ||
+      candidate.requestedRoutineGoal !== candidate.requestedRoutineGoal.trim())
+  ) {
+    throw new TypeError("Requested routine goal is invalid");
   }
   if (candidate.preferredSessionMinutes !== undefined) {
     const minutes = candidate.preferredSessionMinutes as Record<string, unknown>;

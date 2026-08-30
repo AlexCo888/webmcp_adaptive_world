@@ -55,7 +55,13 @@ describe("natural-language staff-template matching", () => {
     ).toBe("first_visit_foundations");
   });
 
-  it("uses the live Passport goals as the accessible site-UI default", () => {
+  it("prefers the approved requested goal and falls back to Passport goals", () => {
+    expect(
+      defaultRoutineGoal({
+        ...projection,
+        requestedRoutineGoal: "Support lifelong health without bodybuilding-style muscle gain",
+      }),
+    ).toBe("Support lifelong health without bodybuilding-style muscle gain");
     expect(defaultRoutineGoal(projection)).toBe(
       "Build whole-body strength; Improve mobility; Run 5 km comfortably",
     );

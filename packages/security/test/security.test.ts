@@ -174,8 +174,14 @@ describe("authorization and minimization", () => {
   });
 
   it("builds an allowlisted gym projection and blocks clinical identity fields", () => {
-    const projection = buildGymProjection({ goals: ["Build strength"], avoid: ["Max lifts"] });
+    const projection = buildGymProjection({
+      requestedRoutineGoal: "Support lifelong health",
+      goals: ["Build strength"],
+      avoid: ["Max lifts"],
+    });
+    expect(projection.requestedRoutineGoal).toBe("Support lifelong health");
     expect(projection.goals).toEqual(["Build strength"]);
+    expect(() => assertSafeGymProjection({ ...projection, requestedRoutineGoal: "x" })).toThrow();
     expect(() => assertSafeGymProjection({ ...projection, medications: ["secret"] })).toThrow();
     expect(() => assertSafeGymProjection({ ...projection, patientId: "secret" })).toThrow();
   });

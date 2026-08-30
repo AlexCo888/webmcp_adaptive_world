@@ -161,12 +161,15 @@ async function connectOwnerPassportToGym(page: Page): Promise<void> {
   const invocation = invokeModelContextTool(page, "create_context_grant", {
     recipient: "adaptive-gym",
     scopes: ["gym.context.read", "gym.feedback.write"],
+    goal: naturalLanguageGoal,
     expiresInMinutes: 5,
   });
   const confirmation = page.getByRole("alertdialog", {
     name: "Share minimum context with Adaptive Gym",
   });
   await expect(confirmation).toContainText("gym.context.read, gym.feedback.write");
+  await expect(confirmation).toContainText(naturalLanguageGoal);
+  await expect(confirmation).toContainText("Free connection");
   await expect(confirmation).toContainText("Not shared");
   await confirmation.getByRole("button", { name: "Share with Gym" }).click();
   expect(
@@ -280,9 +283,17 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           name: "Choose what to share",
         });
         await projectionDialog.getByLabel("Recipient").selectOption("gym");
+        await projectionDialog
+          .getByLabel("What should Adaptive Gym help you achieve?")
+          .fill(naturalLanguageGoal);
         await expect(
           projectionDialog.getByLabel("Adaptive Gym projection field preview"),
         ).toContainText("adaptive_gym_session");
+        await expect(projectionDialog).toContainText(naturalLanguageGoal);
+        await expect(
+          projectionDialog.getByText("Requested routine goal", { exact: true }),
+        ).toBeVisible();
+        await expect(projectionDialog.getByText("Passport goals", { exact: true })).toBeVisible();
         await expect(projectionDialog).toContainText("gym.context.read, gym.feedback.write");
         await expect(projectionDialog).toContainText(
           "Not shared: name, exact birth date, contacts, diagnoses, medications, labs, allergies, documents, Passport ID, clinician identity, or payment data.",
@@ -292,6 +303,7 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         const invocation = invokeModelContextTool(owner.page, "create_context_grant", {
           recipient: "adaptive-gym",
           scopes: ["gym.context.read", "gym.feedback.write"],
+          goal: naturalLanguageGoal,
           expiresInMinutes: 5,
         });
         const confirmation = owner.page.getByRole("alertdialog", {
@@ -299,8 +311,11 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         });
         await expect(confirmation).toContainText("Adaptive Gym");
         await expect(confirmation).toContainText("gym.context.read, gym.feedback.write");
+        await expect(confirmation).toContainText(naturalLanguageGoal);
+        await expect(confirmation).toContainText("Free connection");
         for (const disclosedField of [
-          "Goals",
+          "Requested routine goal",
+          "Passport goals",
           "Experience",
           "Preferred session",
           "Preferred activities",
@@ -404,6 +419,7 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
             recipient: string;
             scopes: string[];
             expiresAt: string;
+            requestedRoutineGoal: string;
             containsClinicalRecords: boolean;
             handoffStarted: boolean;
           }>(await invocation),
@@ -412,6 +428,7 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           recipient: "adaptive-gym",
           scopes: ["gym.context.read", "gym.feedback.write"],
           expiresAt: grantEnvelope.data.expiresAt,
+          requestedRoutineGoal: naturalLanguageGoal,
           containsClinicalRecords: false,
           handoffStarted: true,
         });
@@ -422,6 +439,12 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         await expect(owner.page.getByText("One-use grant redeemed", { exact: true })).toBeVisible();
         await expect(owner.page).toHaveURL(`${gymBaseUrl}/passport`);
         await expect(owner.page.getByText("Passport member", { exact: true })).toBeVisible();
+
+        const activeContext = await owner.context.request.get(`${gymBaseUrl}/api/context/current`);
+        expect(activeContext.ok()).toBeTruthy();
+        await expect(activeContext.json()).resolves.toMatchObject({
+          projection: { requestedRoutineGoal: naturalLanguageGoal },
+        });
 
         const replay = await request.post(`${gymBaseUrl}/api/context/redeem`, {
           data: { code },

@@ -1,14 +1,20 @@
-import type { DigitalPassport } from "@adaptive-world/contracts";
+import { RoutineGoalSchema, type DigitalPassport } from "@adaptive-world/contracts";
 import type { GymProjectionInput } from "@adaptive-world/security";
 
 export const GYM_CONTEXT_SCOPES = ["gym.context.read", "gym.feedback.write"] as const;
 
-export const GYM_CONTEXT_PURPOSE =
-  "Match a staff-authored Gym walkthrough to approved movement context";
+export function gymContextPurpose(requestedRoutineGoal: string): string {
+  const goal = RoutineGoalSchema.parse(requestedRoutineGoal);
+  return `Connect approved Passport context to Adaptive Gym for: ${goal}`;
+}
 
 /** The complete allowlisted profile used to construct a Gym context grant. */
-export function gymProjectionInput(passport: DigitalPassport): GymProjectionInput {
+export function gymProjectionInput(
+  passport: DigitalPassport,
+  requestedRoutineGoal: string,
+): GymProjectionInput {
   return {
+    requestedRoutineGoal: RoutineGoalSchema.parse(requestedRoutineGoal),
     goals: passport.functional.goals,
     experienceLevel: passport.functional.experienceLevel,
     preferredActivities: passport.functional.preferredActivities,

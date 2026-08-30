@@ -242,6 +242,7 @@ export async function executePassportWebMcp(
       return prepareGymContextGrant({
         passport,
         actorId: actor.id,
+        requestedRoutineGoal: request.input.goal,
         expiresInMinutes: request.input.expiresInMinutes,
         now,
       });

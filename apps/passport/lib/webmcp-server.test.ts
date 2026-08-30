@@ -53,6 +53,29 @@ describe("Passport WebMCP closed request contract", () => {
     ).toBe(false);
   });
 
+  it("requires and normalizes the exact natural-language goal for a Gym grant", async () => {
+    const { PassportWebMcpRequestSchema } = await import("./webmcp-server");
+    const input = {
+      recipient: "adaptive-gym",
+      scopes: ["gym.context.read", "gym.feedback.write"],
+      goal: "  Support lifelong health without bodybuilding-style muscle gain  ",
+      expiresInMinutes: 5,
+    };
+    expect(
+      PassportWebMcpRequestSchema.parse({ tool: "prepare_context_grant", input }),
+    ).toMatchObject({
+      input: { goal: "Support lifelong health without bodybuilding-style muscle gain" },
+    });
+    const { goal: _goal, ...withoutGoal } = input;
+    void _goal;
+    expect(
+      PassportWebMcpRequestSchema.safeParse({
+        tool: "prepare_context_grant",
+        input: withoutGoal,
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps the doctor summary free of clinical measurements", async () => {
     const { doctorPassportSummary } = await import("./webmcp-server");
     const summary = doctorPassportSummary(testPassport, new Date("2026-08-29T09:00:00.000Z"));

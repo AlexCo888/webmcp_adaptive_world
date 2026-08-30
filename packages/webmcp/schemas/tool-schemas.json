@@ -42,9 +42,10 @@
               "maxItems": 2,
               "uniqueItems": true
             },
+            "goal": { "type": "string", "minLength": 2, "maxLength": 160 },
             "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 15, "default": 5 }
           },
-          "required": ["recipient", "scopes"]
+          "required": ["recipient", "scopes", "goal"]
         },
         "revoke_access_grant": {
           "type": "object",

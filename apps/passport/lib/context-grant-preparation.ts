@@ -1,6 +1,7 @@
 import {
   DigitalPassportSchema,
   GymContextProjectionSchema,
+  RoutineGoalSchema,
   type DigitalPassport,
 } from "@adaptive-world/contracts";
 import {
@@ -20,7 +21,7 @@ import {
   PreparedGymContextGrantResponseSchema,
   type PreparedGymContextGrant,
 } from "./context-grant-contract";
-import { GYM_CONTEXT_PURPOSE, GYM_CONTEXT_SCOPES, gymProjectionInput } from "./gym-projection";
+import { GYM_CONTEXT_SCOPES, gymContextPurpose, gymProjectionInput } from "./gym-projection";
 import { parsePersistedDigitalPassport } from "./persisted-passport";
 
 const PREPARATION_ISSUER = "adaptive-world-passport";
@@ -39,6 +40,7 @@ export type LockedGymContextGrantPreparation =
       patientId: string;
       timing: ReturnType<typeof resolveContextGrantTiming>;
       profile: GymProjection;
+      purpose: string;
     };
 
 const PreparationClaimsSchema = z
@@ -67,6 +69,7 @@ export function resolveContextGrantTiming(expiresInMinutes: number, issuedAt = n
 export async function prepareLockedGymContextGrant(
   input: {
     actorId: string;
+    requestedRoutineGoal: string;
     expiresInMinutes: number;
     preparationToken?: string;
   },
@@ -84,10 +87,12 @@ export async function prepareLockedGymContextGrant(
   const lockedPatient = z.object({ id: z.string().uuid(), profile: z.unknown() }).parse(lockedRow);
 
   const passport = parsePersistedDigitalPassport(lockedPatient.profile);
+  const requestedRoutineGoal = RoutineGoalSchema.parse(input.requestedRoutineGoal);
   const verifiedPreparation = input.preparationToken
     ? await verifyPreparedGymContextGrant({
         passport,
         actorId: input.actorId,
+        requestedRoutineGoal,
         expiresInMinutes: input.expiresInMinutes,
         preparationToken: input.preparationToken,
       })
@@ -99,11 +104,17 @@ export async function prepareLockedGymContextGrant(
   const timing = verifiedPreparation?.timing ?? resolveContextGrantTiming(input.expiresInMinutes);
   const profile =
     verifiedPreparation?.profile ??
-    buildGymProjection(gymProjectionInput(passport), {
+    buildGymProjection(gymProjectionInput(passport, requestedRoutineGoal), {
       now: timing.issuedAt,
       validityMs: timing.ttlMs,
     });
-  return { kind: "ready", patientId: lockedPatient.id, timing, profile };
+  return {
+    kind: "ready",
+    patientId: lockedPatient.id,
+    timing,
+    profile,
+    purpose: verifiedPreparation?.purpose ?? gymContextPurpose(requestedRoutineGoal),
+  };
 }
 
 function publicDisclosure(profile: GymProjection) {
@@ -112,6 +123,7 @@ function publicDisclosure(profile: GymProjection) {
     projectionId: "gym_projection_pending",
     subjectAlias: "Passport member",
     purpose: profile.purpose,
+    requestedRoutineGoal: profile.requestedRoutineGoal,
     goals: profile.goals ?? [],
     experienceLevel: profile.experienceLevel,
     preferredSessionMinutes: preferred ? Math.round((preferred.min + preferred.max) / 2) : 45,
@@ -134,11 +146,11 @@ function publicDisclosure(profile: GymProjection) {
   });
 }
 
-async function projectionDigest(profile: GymProjection): Promise<string> {
+async function projectionDigest(profile: GymProjection, purpose: string): Promise<string> {
   return sha256Hex(
     canonicalizeJson({
       audience: "adaptive-gym",
-      purpose: GYM_CONTEXT_PURPOSE,
+      purpose,
       scopes: GYM_CONTEXT_SCOPES,
       profile,
     }),
@@ -147,34 +159,48 @@ async function projectionDigest(profile: GymProjection): Promise<string> {
 
 function buildPreparedProjection(
   passport: DigitalPassport,
+  requestedRoutineGoal: string,
   expiresInMinutes: number,
   issuedAt: Date,
 ) {
+  const goal = RoutineGoalSchema.parse(requestedRoutineGoal);
   const timing = resolveContextGrantTiming(expiresInMinutes, issuedAt);
-  const profile = buildGymProjection(gymProjectionInput(passport), {
+  const profile = buildGymProjection(gymProjectionInput(passport, goal), {
     now: timing.issuedAt,
     validityMs: timing.ttlMs,
   });
   if (profile.validUntil !== timing.expiresAt.toISOString()) {
     throw new Error("Context grant preparation expiry invariant failed");
   }
-  return { timing, profile, projection: publicDisclosure(profile) };
+  return {
+    timing,
+    profile,
+    purpose: gymContextPurpose(goal),
+    projection: publicDisclosure(profile),
+  };
 }
 
 export async function prepareGymContextGrant({
   passport,
   actorId,
+  requestedRoutineGoal,
   expiresInMinutes,
   now = new Date(),
 }: {
   passport: DigitalPassport;
   actorId: string;
+  requestedRoutineGoal: string;
   expiresInMinutes: number;
   now?: Date;
 }): Promise<PreparedGymContextGrant> {
   const parsedPassport = DigitalPassportSchema.parse(passport);
-  const prepared = buildPreparedProjection(parsedPassport, expiresInMinutes, now);
-  const digest = await projectionDigest(prepared.profile);
+  const prepared = buildPreparedProjection(
+    parsedPassport,
+    requestedRoutineGoal,
+    expiresInMinutes,
+    now,
+  );
+  const digest = await projectionDigest(prepared.profile, prepared.purpose);
   const preparationToken = await signDemoToken({
     issuer: PREPARATION_ISSUER,
     audience: PREPARATION_AUDIENCE,
@@ -192,7 +218,7 @@ export async function prepareGymContextGrant({
   return PreparedGymContextGrantResponseSchema.parse({
     audience: "adaptive-gym",
     scopes: GYM_CONTEXT_SCOPES,
-    purpose: GYM_CONTEXT_PURPOSE,
+    purpose: prepared.purpose,
     projection: prepared.projection,
     preparationToken,
     quoteDigest: digest,
@@ -202,12 +228,14 @@ export async function prepareGymContextGrant({
 export async function verifyPreparedGymContextGrant({
   passport,
   actorId,
+  requestedRoutineGoal,
   expiresInMinutes,
   preparationToken,
   now = new Date(),
 }: {
   passport: DigitalPassport;
   actorId: string;
+  requestedRoutineGoal: string;
   expiresInMinutes: number;
   preparationToken: string;
   now?: Date;
@@ -224,11 +252,12 @@ export async function verifyPreparedGymContextGrant({
   const issuedAt = new Date(parsed.data.issuedAt);
   const prepared = buildPreparedProjection(
     DigitalPassportSchema.parse(passport),
+    requestedRoutineGoal,
     expiresInMinutes,
     issuedAt,
   );
   if (prepared.timing.expiresAt.toISOString() !== parsed.data.expiresAt) return null;
-  const digest = await projectionDigest(prepared.profile);
+  const digest = await projectionDigest(prepared.profile, prepared.purpose);
   if (!constantTimeEqualHex(digest, parsed.data.projectionDigest)) return null;
   return prepared;
 }

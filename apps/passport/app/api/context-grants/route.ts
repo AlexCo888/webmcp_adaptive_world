@@ -1,14 +1,16 @@
 import { createContextGrantStore } from "@adaptive-world/db";
 import { auditEvents } from "@adaptive-world/db/schema";
+import { RoutineGoalSchema } from "@adaptive-world/contracts";
 import { issueContextGrant } from "@adaptive-world/security";
 import { z } from "zod";
 import { apiError, apiSuccess, readJson, requestId, requireApiActor } from "@/lib/api";
 import { prepareLockedGymContextGrant } from "@/lib/context-grant-preparation";
 import { transactionalDb } from "@/lib/database";
-import { GYM_CONTEXT_PURPOSE, GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
+import { GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 
 export const ContextGrantInputSchema = z
   .object({
+    goal: RoutineGoalSchema,
     expiresInMinutes: z.number().int().min(1).max(15).default(5),
     preparationToken: z.string().min(80).max(2_048),
   })
@@ -23,12 +25,13 @@ export async function POST(request: Request) {
   const actor = authorization.actor;
   const input = await readJson(request, ContextGrantInputSchema);
   if (!input.success) {
-    return apiError("VALIDATION", "Invalid exchange lifetime.", 400, currentRequestId);
+    return apiError("VALIDATION", "Invalid Gym goal or exchange lifetime.", 400, currentRequestId);
   }
   const issuance = await transactionalDb.transaction(async (tx) => {
     const preparation = await prepareLockedGymContextGrant(
       {
         actorId: actor.id,
+        requestedRoutineGoal: input.data.goal,
         expiresInMinutes: input.data.expiresInMinutes,
         preparationToken: input.data.preparationToken,
       },
@@ -36,12 +39,12 @@ export async function POST(request: Request) {
     );
     if (preparation.kind !== "ready") return preparation;
 
-    const { patientId, timing, profile } = preparation;
+    const { patientId, timing, profile, purpose } = preparation;
     const created = await issueContextGrant(createContextGrantStore(tx), {
       patientId,
       createdByUserId: actor.id,
       audience: "adaptive-gym",
-      purpose: GYM_CONTEXT_PURPOSE,
+      purpose,
       scopes: [...GYM_CONTEXT_SCOPES],
       projection: { version: 1, profile, validUntil: profile.validUntil },
       ttlMs: timing.ttlMs,

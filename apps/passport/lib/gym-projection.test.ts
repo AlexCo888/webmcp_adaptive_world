@@ -7,10 +7,13 @@ import {
 import { testPassport } from "./test-passport-fixture";
 
 describe("Gym projection disclosure", () => {
+  const requestedRoutineGoal = "Support lifelong health without bodybuilding-style muscle gain";
+
   it("builds the complete allowlist shown before sharing", () => {
-    const projection = gymProjectionInput(testPassport);
+    const projection = gymProjectionInput(testPassport, requestedRoutineGoal);
     expect(GYM_CONTEXT_SCOPES).toEqual(["gym.context.read", "gym.feedback.write"]);
     expect(projection).toEqual({
+      requestedRoutineGoal,
       goals: ["Build strength"],
       experienceLevel: "beginner",
       preferredActivities: ["Cycling"],
@@ -26,7 +29,7 @@ describe("Gym projection disclosure", () => {
   });
 
   it("does not project clinical, identity, document, or payment fields", () => {
-    const serialized = JSON.stringify(gymProjectionInput(testPassport));
+    const serialized = JSON.stringify(gymProjectionInput(testPassport, requestedRoutineGoal));
     expect(serialized).not.toContain(testPassport.identity.displayName);
     expect(serialized).not.toContain(testPassport.identity.dateOfBirth);
     expect(serialized).not.toContain(testPassport.medications[0]?.name ?? "Test medication");

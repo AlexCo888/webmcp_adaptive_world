@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PassportScope } from "@adaptive-world/contracts";
+import { RoutineGoalSchema, type PassportScope } from "@adaptive-world/contracts";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
 import type { PreparedGymContextGrant } from "@/lib/context-grant-contract";
@@ -54,6 +54,7 @@ export function SharingView() {
   const [recipient, setRecipient] = useState<"doctor" | "gym">("doctor");
   const [selectedScopes, setSelectedScopes] = useState<PassportScope[]>(["passport.summary.read"]);
   const [days, setDays] = useState(30);
+  const [gymGoal, setGymGoal] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preparedGymGrant, setPreparedGymGrant] = useState<PreparedGymContextGrant | null>(null);
@@ -63,6 +64,8 @@ export function SharingView() {
   const activeGymHandoffs = gymHandoffs.filter(
     (handoff) => handoff.status === "ready" || handoff.status === "connected",
   );
+  const normalizedGymGoal = gymGoal.trim();
+  const gymGoalIsValid = RoutineGoalSchema.safeParse(normalizedGymGoal).success;
 
   useEffect(() => {
     if (!showCreate || recipient !== "gym") {
@@ -70,28 +73,47 @@ export function SharingView() {
       setPreparingGymGrant(false);
       return;
     }
+    if (!gymGoalIsValid) {
+      setPreparedGymGrant(null);
+      setPreparingGymGrant(false);
+      setError(null);
+      return;
+    }
     const controller = new AbortController();
     setPreparedGymGrant(null);
-    setPreparingGymGrant(true);
+    setPreparingGymGrant(false);
     setError(null);
-    void prepareGymContextGrant(5, controller.signal)
-      .then((prepared) => {
-        if (!controller.signal.aborted) setPreparedGymGrant(prepared);
-      })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : "The live Gym projection could not be prepared.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setPreparingGymGrant(false);
-      });
-    return () => controller.abort();
-  }, [preparationRevision, prepareGymContextGrant, recipient, showCreate]);
+    const timeout = window.setTimeout(() => {
+      setPreparingGymGrant(true);
+      void prepareGymContextGrant(normalizedGymGoal, 5, controller.signal)
+        .then((prepared) => {
+          if (!controller.signal.aborted) setPreparedGymGrant(prepared);
+        })
+        .catch((caught: unknown) => {
+          if (!controller.signal.aborted) {
+            setError(
+              caught instanceof Error
+                ? caught.message
+                : "The live Gym projection could not be prepared.",
+            );
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPreparingGymGrant(false);
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [
+    gymGoalIsValid,
+    normalizedGymGoal,
+    preparationRevision,
+    prepareGymContextGrant,
+    recipient,
+    showCreate,
+  ]);
 
   const toggleScope = (scope: PassportScope) =>
     setSelectedScopes((current) =>
@@ -103,8 +125,20 @@ export function SharingView() {
     setError(null);
     try {
       if (recipient === "gym") {
+        const parsedGoal = RoutineGoalSchema.safeParse(gymGoal);
+        if (!parsedGoal.success) throw new Error("Enter the goal you want Adaptive Gym to use.");
         if (!preparedGymGrant) throw new Error("Review the live Gym projection before approval.");
-        await createGymContextGrant(5, undefined, preparedGymGrant.preparationToken);
+        if (preparedGymGrant.projection.requestedRoutineGoal !== parsedGoal.data) {
+          throw new Error(
+            "Your goal changed. Review the refreshed Gym projection before approval.",
+          );
+        }
+        await createGymContextGrant(
+          parsedGoal.data,
+          5,
+          undefined,
+          preparedGymGrant.preparationToken,
+        );
       } else await createDoctorAccessGrant(scopes, days);
       if (recipient === "doctor") setShowCreate(false);
     } catch (caught) {
@@ -411,14 +445,42 @@ export function SharingView() {
                 </div>
               ) : (
                 <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="gym-goal">What should Adaptive Gym help you achieve?</label>
+                    <textarea
+                      id="gym-goal"
+                      rows={3}
+                      value={gymGoal}
+                      maxLength={160}
+                      onChange={(event) => setGymGoal(event.target.value)}
+                      placeholder="For example: Support lifelong health without bodybuilding-style muscle gain"
+                      style={{
+                        width: "100%",
+                        resize: "vertical",
+                        border: "1px solid var(--line)",
+                        borderRadius: 11,
+                        padding: 12,
+                      }}
+                    />
+                    <small>
+                      Your exact words will be shown for approval and carried into the Gym session.
+                    </small>
+                  </div>
                   <div className="progressive-note">
                     <Icon name="shield" width="17" />
                     <span>
-                      This live, server-prepared preview comes from the current Passport. Approval
-                      is bound to these exact fields and timestamps; payment adds no data or scopes.
+                      The requested goal comes from your words. The movement context comes from the
+                      current Passport. Approval is bound to both, plus these exact timestamps; this
+                      connection is free. Routine Pro is a separate paid action in Gym with its own
+                      explicit confirmation.
                     </span>
                   </div>
-                  {preparingGymGrant ? (
+                  {!gymGoalIsValid ? (
+                    <div className="progressive-note" role="status">
+                      <Icon name="info" width="17" />
+                      <span>Enter a goal to prepare the live, purpose-bound Gym projection.</span>
+                    </div>
+                  ) : preparingGymGrant ? (
                     <div className="progressive-note" role="status">
                       <Icon name="clock" width="17" />
                       <span>Preparing the current minimum Gym projection…</span>
@@ -465,7 +527,10 @@ export function SharingView() {
                 disabled={
                   pending ||
                   (recipient === "doctor" && selectedScopes.length === 0) ||
-                  (recipient === "gym" && !preparedGymGrant)
+                  (recipient === "gym" &&
+                    (!gymGoalIsValid ||
+                      !preparedGymGrant ||
+                      preparedGymGrant.projection.requestedRoutineGoal !== normalizedGymGoal))
                 }
                 onClick={submit}
               >
@@ -487,12 +552,17 @@ export function SharingView() {
 function GymProjectionPreview({ prepared }: { prepared: PreparedGymContextGrant }) {
   const projection = prepared.projection;
   const rows: Array<[string, string]> = [
+    [
+      "This step",
+      "Free connection; routine generation and Passport saving require a separate, explicitly confirmed paid action in Gym",
+    ],
     ["Grant purpose", prepared.purpose],
     ["Granted scopes", prepared.scopes.join(", ")],
     ["Projection purpose", projection.purpose],
     ["Subject alias", projection.subjectAlias],
     ["Anonymous projection reference", projection.projectionReference],
-    ["Goals", projection.goals.join("; ") || "None"],
+    ["Requested routine goal", projection.requestedRoutineGoal],
+    ["Passport goals", projection.goals.join("; ") || "None"],
     ["Experience", projection.experienceLevel],
     ["Preferred session", `${projection.preferredSessionMinutes} minutes`],
     ["Preferred activities", projection.preferredActivities.join("; ") || "None"],

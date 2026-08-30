@@ -17,6 +17,7 @@ export interface ListMySharesInput {
 export interface CreateContextGrantInput {
   readonly recipient: "adaptive-gym";
   readonly scopes: readonly ("gym.context.read" | "gym.feedback.write")[];
+  readonly goal: string;
   readonly expiresInMinutes?: number;
 }
 
@@ -85,7 +86,7 @@ export function createPassportToolCatalog(
         name: "create_context_grant",
         title: "Share context with Gym",
         description:
-          "Prepare a short-lived, one-use grant containing only approved Adaptive Gym context.",
+          "Prepare a free, short-lived, one-use connection that binds the person's exact routine goal to approved Adaptive Gym context. Routine generation and Passport saving are a separate paid Gym action.",
         inputSchema: {
           type: "object",
           properties: {
@@ -105,6 +106,13 @@ export function createPassportToolCatalog(
               maxItems: 2,
               uniqueItems: true,
             },
+            goal: {
+              type: "string",
+              description:
+                "The person's exact natural-language goal for this Gym visit. It is shown in the consent preview and passed separately from Passport facts.",
+              minLength: 2,
+              maxLength: 160,
+            },
             expiresInMinutes: {
               type: "integer",
               description: "Minutes before the one-use code expires.",
@@ -113,7 +121,7 @@ export function createPassportToolCatalog(
               default: 5,
             },
           },
-          required: ["recipient", "scopes"],
+          required: ["recipient", "scopes", "goal"],
           additionalProperties: false,
         },
         readOnly: false,

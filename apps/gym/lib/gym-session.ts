@@ -82,6 +82,7 @@ export function toPublicGymContext(
     projectionId: toPublicGymProjectionId(sessionId),
     subjectAlias: "Passport member",
     purpose: stored.profile.purpose,
+    requestedRoutineGoal: stored.profile.requestedRoutineGoal,
     goals: stored.profile.goals,
     experienceLevel,
     preferredSessionMinutes: preferredMinutes,

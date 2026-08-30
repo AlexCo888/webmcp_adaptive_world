@@ -192,6 +192,7 @@ function includesAny(value: string, terms: readonly string[]): boolean {
 }
 
 export function defaultRoutineGoal(profile: GymContextProjection): string {
+  if (profile.requestedRoutineGoal) return profile.requestedRoutineGoal;
   const goals = profile.goals.slice(0, 3).join("; ");
   return (goals || "Support long-term health with a balanced, sustainable routine").slice(0, 160);
 }

@@ -1,42 +1,53 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { prepareLockedGymContextGrant } from "@/lib/context-grant-preparation";
+import {
+  prepareGymContextGrant,
+  prepareLockedGymContextGrant,
+} from "@/lib/context-grant-preparation";
 import { testPassport } from "@/lib/test-passport-fixture";
 import { ContextGrantInputSchema, resolveContextGrantTiming } from "./route";
 
 describe("Gym context grant duration", () => {
   const preparationToken = "p".repeat(80);
+  const goal = "Support lifelong health without bodybuilding-style muscle gain";
 
   it("defaults to five minutes and preserves accepted values", () => {
-    expect(ContextGrantInputSchema.parse({ preparationToken })).toEqual({
+    expect(ContextGrantInputSchema.parse({ goal, preparationToken })).toEqual({
+      goal,
       expiresInMinutes: 5,
       preparationToken,
     });
-    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 1, preparationToken })).toEqual({
+    expect(ContextGrantInputSchema.parse({ goal, expiresInMinutes: 1, preparationToken })).toEqual({
+      goal,
       expiresInMinutes: 1,
       preparationToken,
     });
-    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 10, preparationToken })).toEqual({
-      expiresInMinutes: 10,
-      preparationToken,
-    });
+    expect(ContextGrantInputSchema.parse({ goal, expiresInMinutes: 10, preparationToken })).toEqual(
+      {
+        goal,
+        expiresInMinutes: 10,
+        preparationToken,
+      },
+    );
   });
 
   it("rejects values outside 1-15 minutes and unknown fields", () => {
-    expect(ContextGrantInputSchema.safeParse({ expiresInMinutes: 5 }).success).toBe(false);
+    expect(ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 5 }).success).toBe(false);
+    expect(ContextGrantInputSchema.safeParse({ preparationToken }).success).toBe(false);
     expect(
-      ContextGrantInputSchema.safeParse({ expiresInMinutes: 0, preparationToken }).success,
+      ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 0, preparationToken }).success,
     ).toBe(false);
     expect(
-      ContextGrantInputSchema.safeParse({ expiresInMinutes: 16, preparationToken }).success,
+      ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 16, preparationToken }).success,
     ).toBe(false);
     expect(
-      ContextGrantInputSchema.safeParse({ expiresInMinutes: 1.5, preparationToken }).success,
+      ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 1.5, preparationToken }).success,
     ).toBe(false);
     expect(
       ContextGrantInputSchema.safeParse({
         expiresInMinutes: 5,
+        goal,
         preparationToken,
         scopes: ["anything"],
       }).success,
@@ -74,6 +85,7 @@ describe("Gym context grant duration", () => {
     const preparation = await prepareLockedGymContextGrant(
       {
         actorId: "00000000-0000-4000-8000-000000000001",
+        requestedRoutineGoal: goal,
         expiresInMinutes: 5,
       },
       execute,
@@ -84,6 +96,39 @@ describe("Gym context grant duration", () => {
     expect(preparation.kind).toBe("ready");
     if (preparation.kind !== "ready") throw new Error("Expected a locked preparation");
     expect(preparation.patientId).toBe("10000000-0000-4000-8000-000000000001");
+    expect(preparation.profile.requestedRoutineGoal).toBe(goal);
     expect(preparation.profile.goals).toEqual(["Use only the locked database profile"]);
+    expect(preparation.purpose).toContain(goal);
+  });
+
+  it("rejects issuing a prepared grant when the requested goal changes after approval", async () => {
+    const actorId = "00000000-0000-4000-8000-000000000001";
+    const prepared = await prepareGymContextGrant({
+      passport: testPassport,
+      actorId,
+      requestedRoutineGoal: goal,
+      expiresInMinutes: 5,
+    });
+    const execute = () =>
+      Promise.resolve({
+        rows: [
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            profile: testPassport,
+          },
+        ],
+      });
+
+    const changed = await prepareLockedGymContextGrant(
+      {
+        actorId,
+        requestedRoutineGoal: "Train for maximum bodybuilding muscle gain",
+        expiresInMinutes: 5,
+        preparationToken: prepared.preparationToken,
+      },
+      execute,
+    );
+
+    expect(changed).toEqual({ kind: "invalid_preparation" });
   });
 });

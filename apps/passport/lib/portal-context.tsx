@@ -65,6 +65,7 @@ function sameContextGrantInput(
   const expiresInMinutes = requested.expiresInMinutes ?? 5;
   return (
     prepared.recipient === requested.recipient &&
+    prepared.goal === requested.goal.trim() &&
     prepared.expiresInMinutes === expiresInMinutes &&
     prepared.scopes.length === requested.scopes.length &&
     prepared.scopes.every((scope) => requested.scopes.includes(scope))
@@ -79,11 +80,13 @@ type PortalContextValue = {
   grants: readonly AccessGrant[];
   gymHandoffs: readonly GymHandoff[];
   prepareGymContextGrant: (
+    goal: string,
     expiresInMinutes: number,
     signal?: AbortSignal,
   ) => Promise<PreparedGymContextGrant>;
   createDoctorAccessGrant: (scopes: PassportScope[], days: number) => Promise<void>;
   createGymContextGrant: (
+    goal: string,
     expiresInMinutes: number,
     signal: AbortSignal | undefined,
     preparationToken: string,
@@ -194,10 +197,11 @@ export function PortalProvider({
   );
 
   const prepareGymContextGrant = useCallback(
-    async (expiresInMinutes: number, signal?: AbortSignal) => {
+    async (goal: string, expiresInMinutes: number, signal?: AbortSignal) => {
       const input = ContextGrantToolInputSchema.parse({
         recipient: "adaptive-gym",
         scopes: ["gym.context.read", "gym.feedback.write"],
+        goal,
         expiresInMinutes,
       });
       const response = await callPassportWebMcp({ tool: "prepare_context_grant", input }, signal);
@@ -214,11 +218,17 @@ export function PortalProvider({
   );
 
   const createGymContextGrant = useCallback(
-    async (expiresInMinutes: number, signal: AbortSignal | undefined, preparationToken: string) => {
+    async (
+      goal: string,
+      expiresInMinutes: number,
+      signal: AbortSignal | undefined,
+      preparationToken: string,
+    ) => {
       const response = await fetch("/api/context-grants", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
+          goal,
           expiresInMinutes,
           preparationToken,
         }),
@@ -324,6 +334,7 @@ export function PortalProvider({
         preparedContextGrants.current.delete(digest);
         trace("create_context_grant");
         const result = await createGymContextGrant(
+          prepared.input.goal,
           prepared.input.expiresInMinutes,
           context.signal,
           prepared.preparationToken,
@@ -333,6 +344,7 @@ export function PortalProvider({
           recipient: result.audience,
           scopes: result.scopes,
           expiresAt: result.expiresAt,
+          requestedRoutineGoal: prepared.input.goal,
           containsClinicalRecords: false,
           handoffStarted: true,
         };
