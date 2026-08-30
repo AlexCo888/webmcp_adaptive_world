@@ -5,8 +5,13 @@ import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
 import {
   markAgentPaymentReconciliationRequired,
   markAgentPaymentSubmitted,
+  releaseAgentReservationBeforeSubmission,
   reserveAgentBudgetForOrder,
 } from "@/lib/commerce/budget";
+import {
+  isAgentPaymentConfigurationError,
+  safeAgentPaymentFailureCause,
+} from "@/lib/commerce/agent-pay-diagnostics";
 import { getCommerceConfig } from "@/lib/commerce/config";
 import {
   assertSameOrigin,
@@ -34,6 +39,9 @@ export const dynamic = "force-dynamic";
 
 function asCommerceError(error: unknown): CommerceError {
   if (!(error instanceof MppAdapterError)) {
+    if (isAgentPaymentConfigurationError(error)) {
+      return new CommerceError("PROVIDER_UNAVAILABLE", true);
+    }
     return error instanceof CommerceError ? error : new CommerceError("INTERNAL_ERROR", true);
   }
   const code =
@@ -43,6 +51,9 @@ function asCommerceError(error: unknown): CommerceError {
 
 export async function POST(request: Request) {
   const id = requestId(request);
+  let stage = "validate_request";
+  let cleanupOrderId: string | null = null;
+  let submissionClaimed = false;
   try {
     assertSameOrigin(request);
     const config = getCommerceConfig();
@@ -50,6 +61,7 @@ export async function POST(request: Request) {
     if (!parsed.success || parsed.data.paymentMode !== "agent_wallet") {
       throw new CommerceError("INVALID_REQUEST");
     }
+    stage = "load_context";
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
@@ -97,8 +109,10 @@ export async function POST(request: Request) {
     ) {
       throw new CommerceError("QUOTE_CHANGED");
     }
+    stage = "rate_limit_request";
     await rateLimitPaymentRequest(request, { sessionId: active.row.id, agent: true });
 
+    stage = "create_order";
     const state = await createOrReuseRoutineProOrder({
       active,
       templateId: parsed.data.templateId,
@@ -143,12 +157,17 @@ export async function POST(request: Request) {
     if (["payment_submitted", "reconciliation_required"].includes(order.status)) {
       throw new CommerceError("RECONCILIATION_REQUIRED");
     }
+    cleanupOrderId = order.id;
+    stage = "reserve_budget";
     await reserveAgentBudgetForOrder(order);
+    stage = "prepare_snapshot";
     const prepared = await prepareMppOrder(order);
+    stage = "load_provider";
     const capabilityDigest = await digestRoutineProCapability(prepared.capability);
     const adapter = createTempoAgentPaymentAdapter({
       config: mppConfigForSnapshot(prepared.offer),
     });
+    stage = "prepare_provider";
     const payment = await adapter.prepare({
       capability: prepared.capability,
       capabilityDigest,
@@ -156,16 +175,22 @@ export async function POST(request: Request) {
       signal: request.signal,
       snapshot: prepared.offer,
     });
+    stage = "sign_payment";
     const signed = await payment.sign();
+    stage = "submit_payment";
     const paid = await signed.submitAfterMarkSubmitted({
       markSubmitted: async () => {
+        stage = "mark_submitted";
         await markAgentPaymentSubmitted(order.id);
+        submissionClaimed = true;
+        stage = "submit_payment";
       },
     });
     if (paid.outcome === "reconciliation_required") {
       await markAgentPaymentReconciliationRequired(order.id);
       throw new CommerceError("RECONCILIATION_REQUIRED");
     }
+    stage = "verify_entitlement";
     if (!(await hasRoutineProEntitlement(active.row.patientId))) {
       throw new CommerceError("FULFILLMENT_PENDING", true);
     }
@@ -186,6 +211,31 @@ export async function POST(request: Request) {
       routine.reused ? 200 : 201,
     );
   } catch (error) {
-    return failure(asCommerceError(error), id);
+    let safeError = asCommerceError(error);
+    if (cleanupOrderId && !submissionClaimed) {
+      try {
+        await releaseAgentReservationBeforeSubmission(cleanupOrderId, `agent_pay_${stage}_failed`);
+      } catch (cleanupError) {
+        console.error(
+          "routine_pro_agent_pay_cleanup_failed",
+          JSON.stringify({
+            requestId: id,
+            stage,
+            cause: safeAgentPaymentFailureCause(cleanupError),
+          }),
+        );
+        safeError = new CommerceError("RECONCILIATION_REQUIRED");
+      }
+    }
+    console.error(
+      "routine_pro_agent_pay_failed",
+      JSON.stringify({
+        requestId: id,
+        stage,
+        cause: safeAgentPaymentFailureCause(error),
+        clientCode: safeError.code,
+      }),
+    );
+    return failure(safeError, id);
   }
 }

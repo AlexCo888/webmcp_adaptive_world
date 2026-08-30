@@ -76,7 +76,9 @@ async function signIn(browser: Browser, role: DemoRole): Promise<SignedInActor> 
       const response = await responsePromise;
 
       if (response.status() === 429 && attempt < 2) {
-        await expect(page.getByRole("alert")).toContainText("Too many sign-in attempts");
+        await expect(
+          page.getByRole("alert").filter({ hasText: "Too many sign-in attempts" }),
+        ).toContainText("Too many sign-in attempts");
         const retryAfterHeader = await response.headerValue("x-retry-after");
         const parsedRetryAfter = Number.parseInt(retryAfterHeader ?? "", 10);
         const retryAfterSeconds = Number.isFinite(parsedRetryAfter)
