@@ -8,6 +8,7 @@ import {
   retryPaidUnfulfilledOrder,
 } from "@/lib/commerce/fulfillment";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { safeAgentPaymentFailureCause } from "@/lib/commerce/agent-pay-diagnostics";
 import { CommerceError, failure, requestId } from "@/lib/commerce/http";
 import { resolveMppMerchantAction } from "@/lib/commerce/mpp-policy";
 import {
@@ -52,18 +53,23 @@ function asCommerceError(error: unknown): CommerceError {
 
 export async function POST(request: Request) {
   const id = requestId(request);
+  let stage = "read_capability";
   try {
     const capability = capabilityFrom(request);
+    stage = "digest_capability";
     const capabilityDigest = await digestRoutineProCapability(capability);
+    stage = "load_prepared_order";
     const prepared = await getPreparedMppOrderByCapabilityDigest(capabilityDigest);
     if (!prepared) throw new CommerceError("PAYMENT_FAILED");
 
+    stage = "resolve_action";
     const hasCredential = request.headers.has(MPP_PAYMENT_CREDENTIAL_HEADER);
     const action = resolveMppMerchantAction({
       agentPaymentsEnabled: getCommerceConfig().agentEnabled,
       hasCredential,
       orderStatus: prepared.orderStatus,
     });
+    stage = "rate_limit_request";
     await rateLimitPaymentRequest(request, {
       sessionId: prepared.gymSessionId,
       orderRef: prepared.publicRef,
@@ -82,10 +88,12 @@ export async function POST(request: Request) {
       });
     }
 
+    stage = "load_provider";
     const adapter = createTempoMerchantAdapter({
       config: mppConfigForSnapshot(prepared.offer),
       store: mppAtomicStore,
     });
+    stage = "handle_provider";
     const result = await adapter.handle({
       capabilityDigest,
       now: new Date(),
@@ -94,6 +102,7 @@ export async function POST(request: Request) {
     });
 
     if (result.status === 402) {
+      stage = "attach_challenge";
       await attachMppChallenge(prepared.setupId, result.safe.challenge.challengeId);
       const headers = new Headers(result.protocolResponse.headers);
       headers.set("cache-control", "no-store");
@@ -105,6 +114,7 @@ export async function POST(request: Request) {
       });
     }
 
+    stage = "record_provider_event";
     const providerEventId = `mpp_${await sha256Hex(result.evidence.providerPaymentRef)}`;
     const payloadDigest = await digestProviderEvidence([
       result.evidence.providerPaymentRef,
@@ -121,6 +131,7 @@ export async function POST(request: Request) {
 
     let evidencePersisted = false;
     try {
+      stage = "persist_evidence";
       await persistVerifiedPaymentEvidence({
         orderId: prepared.orderId,
         provider: "mpp_tempo",
@@ -132,6 +143,7 @@ export async function POST(request: Request) {
         providerEventId,
       });
       evidencePersisted = true;
+      stage = "fulfill_order";
       const fulfilled = await fulfillRoutineProOrder({
         orderId: prepared.orderId,
         provider: "mpp_tempo",
@@ -154,6 +166,7 @@ export async function POST(request: Request) {
       );
     } catch (error) {
       if (!evidencePersisted) throw error;
+      stage = "mark_paid_unfulfilled";
       await markPaidUnfulfilled(prepared.orderId, providerEventId);
       return result.withReceipt(
         protocolJson(
@@ -171,6 +184,16 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    return failure(asCommerceError(error), id);
+    const safeError = asCommerceError(error);
+    console.error(
+      "routine_pro_mpp_failed",
+      JSON.stringify({
+        requestId: id,
+        stage,
+        cause: safeAgentPaymentFailureCause(error),
+        clientCode: safeError.code,
+      }),
+    );
+    return failure(safeError, id);
   }
 }

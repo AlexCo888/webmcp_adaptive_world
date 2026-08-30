@@ -7,11 +7,12 @@ import { verifyOrderCapability } from "./capability";
 import { MPP_RECEIPT_HEADER } from "./constants";
 import type { EnabledMppProviderConfig, MppProviderConfig } from "./config";
 import { requireEnabledMppProvider } from "./config";
-import { MppAdapterError } from "./errors";
+import { MppAdapterError, type MppDiagnosticStage } from "./errors";
 import {
   assertSnapshotMatchesProvider,
   buildTempoChargeOptions,
   validateTempoChallenge,
+  type PersistedTempoPaymentSnapshot,
   type SafeTempoChallenge,
   type TempoChargeOptions,
 } from "./snapshot";
@@ -77,6 +78,12 @@ export interface TempoMerchantAdapter {
   ): Promise<TempoMerchantResult>;
 }
 
+function atStage(error: unknown, diagnosticStage: MppDiagnosticStage): MppAdapterError {
+  return error instanceof MppAdapterError
+    ? new MppAdapterError(error.safeCode, { retryable: error.retryable, diagnosticStage })
+    : new MppAdapterError("PROVIDER_UNAVAILABLE", { retryable: true, diagnosticStage });
+}
+
 export function createMppxTempoMerchantProvider(
   config: EnabledMppProviderConfig,
   store: Store.AtomicStore,
@@ -140,7 +147,9 @@ function receiptCarrier(
     }
     return { header, paidAt, receipt };
   } catch {
-    throw new MppAdapterError("RECONCILIATION_REQUIRED");
+    throw new MppAdapterError("RECONCILIATION_REQUIRED", {
+      diagnosticStage: "merchant_receipt_validate",
+    });
   }
 }
 
@@ -172,9 +181,23 @@ export function createTempoMerchantAdapter(
       now,
       snapshot: snapshotInput,
     }: Readonly<{ now: Date; snapshot: unknown }>): Promise<SafeTempoChallenge> {
-      const snapshot = assertSnapshotMatchesProvider(snapshotInput, config);
-      const challenge = await provider.createChallenge(buildTempoChargeOptions(snapshot));
-      return validateTempoChallenge(challenge, snapshot, now);
+      let snapshot: PersistedTempoPaymentSnapshot;
+      try {
+        snapshot = assertSnapshotMatchesProvider(snapshotInput, config);
+      } catch (error) {
+        throw atStage(error, "merchant_snapshot_match");
+      }
+      let challenge: unknown;
+      try {
+        challenge = await provider.createChallenge(buildTempoChargeOptions(snapshot));
+      } catch (error) {
+        throw atStage(error, "merchant_provider_handle");
+      }
+      try {
+        return validateTempoChallenge(challenge, snapshot, now);
+      } catch (error) {
+        throw atStage(error, "merchant_challenge_validate");
+      }
     },
 
     async handle({
@@ -188,20 +211,49 @@ export function createTempoMerchantAdapter(
       request: Request;
       snapshot: unknown;
     }>): Promise<TempoMerchantResult> {
-      const snapshot = assertSnapshotMatchesProvider(snapshotInput, config);
-      const capability = extractCapability(request, config.merchantUrl);
-      await verifyOrderCapability({
-        capability,
-        capabilityDigest,
-        capabilitySecret: config.capabilitySecret,
-        now,
-        snapshot,
-      });
+      let snapshot: PersistedTempoPaymentSnapshot;
+      try {
+        snapshot = assertSnapshotMatchesProvider(snapshotInput, config);
+      } catch (error) {
+        throw atStage(error, "merchant_snapshot_match");
+      }
+      let capability: string;
+      try {
+        capability = extractCapability(request, config.merchantUrl);
+      } catch (error) {
+        throw atStage(error, "merchant_capability_extract");
+      }
+      try {
+        await verifyOrderCapability({
+          capability,
+          capabilityDigest,
+          capabilitySecret: config.capabilitySecret,
+          now,
+          snapshot,
+        });
+      } catch (error) {
+        throw atStage(error, "merchant_capability_verify");
+      }
 
-      const result = await provider.handle(request, buildTempoChargeOptions(snapshot));
+      let result: TempoMerchantProviderResult;
+      try {
+        result = await provider.handle(request, buildTempoChargeOptions(snapshot));
+      } catch (error) {
+        throw atStage(error, "merchant_provider_handle");
+      }
       if (result.status === 402) {
-        const protocolChallenge = Challenge.fromResponse(result.challenge);
-        const safeChallenge = validateTempoChallenge(protocolChallenge, snapshot, now);
+        let protocolChallenge: unknown;
+        try {
+          protocolChallenge = Challenge.fromResponse(result.challenge);
+        } catch (error) {
+          throw atStage(error, "merchant_challenge_decode");
+        }
+        let safeChallenge: SafeTempoChallenge;
+        try {
+          safeChallenge = validateTempoChallenge(protocolChallenge, snapshot, now);
+        } catch (error) {
+          throw atStage(error, "merchant_challenge_validate");
+        }
         return Object.freeze({
           protocolResponse: result.challenge,
           safe: Object.freeze({

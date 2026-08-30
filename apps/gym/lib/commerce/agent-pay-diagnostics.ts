@@ -31,7 +31,11 @@ export function isAgentPaymentConfigurationError(error: unknown): boolean {
  */
 export function safeAgentPaymentFailureCause(error: unknown): string {
   if (error instanceof CommerceError) return `commerce:${error.code}`;
-  if (error instanceof MppAdapterError) return `mpp:${error.safeCode}`;
+  if (error instanceof MppAdapterError) {
+    return error.diagnosticStage
+      ? `mpp:${error.safeCode}:${error.diagnosticStage}`
+      : `mpp:${error.safeCode}`;
+  }
   if (error instanceof Error) {
     if (error.message === "Routine Pro capability secrets must contain at least 32 bytes") {
       return "configuration:COMMERCE_CAPABILITY_SECRET_TOO_SHORT";

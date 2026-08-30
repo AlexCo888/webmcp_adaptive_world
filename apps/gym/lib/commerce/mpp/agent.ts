@@ -311,9 +311,18 @@ export function createTempoAgentPaymentAdapter(
       try {
         prepared = await client.preparePayment(response, { request });
       } catch {
-        throw new MppAdapterError("INVALID_PAYMENT_SNAPSHOT");
+        throw new MppAdapterError("INVALID_PAYMENT_SNAPSHOT", {
+          diagnosticStage: "agent_challenge_decode",
+        });
       }
-      const safeChallenge = validateTempoChallenge(prepared.challenge, snapshot, now);
+      let safeChallenge: SafeTempoChallenge;
+      try {
+        safeChallenge = validateTempoChallenge(prepared.challenge, snapshot, now);
+      } catch {
+        throw new MppAdapterError("INVALID_PAYMENT_SNAPSHOT", {
+          diagnosticStage: "agent_challenge_validate",
+        });
+      }
 
       return createPreparedState({
         client,

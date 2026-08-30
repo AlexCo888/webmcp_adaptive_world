@@ -15,6 +15,13 @@ describe("agent-payment diagnostics", () => {
     expect(safeAgentPaymentFailureCause(new MppAdapterError("PAYMENT_FAILED"))).toBe(
       "mpp:PAYMENT_FAILED",
     );
+    expect(
+      safeAgentPaymentFailureCause(
+        new MppAdapterError("PAYMENT_FAILED", {
+          diagnosticStage: "merchant_capability_extract",
+        }),
+      ),
+    ).toBe("mpp:PAYMENT_FAILED:merchant_capability_extract");
   });
 
   it("identifies configuration classes without logging values", () => {
