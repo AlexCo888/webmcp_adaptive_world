@@ -19,3 +19,9 @@ export const payableOrderStatuses = [
   "reconciliation_required",
   "paid_unfulfilled",
 ] as const;
+
+export function canResumeRoutineProOrderStatus(status: string): boolean {
+  // paid_unfulfilled resumes only local idempotent fulfillment; it never opens
+  // or retries a payment rail.
+  return ["created", "provider_pending", "paid_unfulfilled"].includes(status);
+}

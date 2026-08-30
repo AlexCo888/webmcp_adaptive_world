@@ -1,6 +1,7 @@
 import { GeneratedSessionSchema } from "@adaptive-world/contracts";
 import { getGymSession } from "@/lib/gym-session";
 import { failure, requestId, success, CommerceError } from "@/lib/commerce/http";
+import { canResumeRoutineProOrderStatus } from "@/lib/commerce/constants";
 import {
   getOrderByPublicRefForPatient,
   getPayableOrder,
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
                 order.payerKind === "human"
                   ? ("Human test checkout" as const)
                   : ("Adaptive World demo agent" as const),
-              canResume: ["created", "provider_pending"].includes(order.status),
+              canResume: canResumeRoutineProOrderStatus(order.status),
               initialTemplateId: order.initialTemplateId,
               initialGoal: order.initialGoal,
             }
