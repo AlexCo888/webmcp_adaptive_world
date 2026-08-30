@@ -5,6 +5,7 @@ import type { PassportScope } from "@adaptive-world/contracts";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
 import type { PreparedGymContextGrant } from "@/lib/context-grant-contract";
+import { formatPassportDate, formatPassportDateTime } from "@/lib/date-format";
 import { GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 import { usePortal } from "@/lib/portal-context";
 
@@ -30,21 +31,6 @@ function recipientName(id: string, type: string) {
   if (id.includes("gym") || type === "application") return "Adaptive Gym";
   if (id.includes("vargas") || type === "clinician") return "Dr. Elena Vargas";
   return id;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(value),
-  );
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 function gymHandoffStatus(status: "ready" | "connected" | "expired" | "revoked") {
@@ -205,7 +191,7 @@ export function SharingView() {
                           ))}
                         </div>
                       </td>
-                      <td>{formatDate(grant.expiresAt)}</td>
+                      <td>{formatPassportDate(grant.expiresAt)}</td>
                       <td>
                         <span className={`pill ${grant.status === "active" ? "" : "neutral"}`}>
                           {grant.status}
@@ -288,7 +274,7 @@ export function SharingView() {
                               ))}
                             </div>
                           </td>
-                          <td>{formatDateTime(handoff.expiresAt)}</td>
+                          <td>{formatPassportDateTime(handoff.expiresAt)}</td>
                           <td>
                             <span className={`pill ${live ? "" : "neutral"}`}>
                               {gymHandoffStatus(handoff.status)}

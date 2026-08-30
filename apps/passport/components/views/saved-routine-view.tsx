@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
+import { formatPassportDate } from "@/lib/date-format";
 import type { SavedRoutineDetail } from "@/lib/saved-routines";
 
 export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
@@ -13,7 +14,7 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
       <PageHeading
         eyebrow="Saved to your Passport"
         title={routine.title}
-        description={`${routine.durationMinutes} minutes · Saved ${new Date(routine.savedAt).toLocaleDateString()}`}
+        description={`${routine.durationMinutes} minutes · Saved ${formatPassportDate(routine.savedAt)}`}
         selector={false}
       />
       <div className="dashboard-grid">

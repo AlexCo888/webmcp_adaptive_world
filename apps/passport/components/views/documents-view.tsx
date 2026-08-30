@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { DigitalPassport } from "@adaptive-world/contracts";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
+import { formatPassportDate } from "@/lib/date-format";
 import { usePortal } from "@/lib/portal-context";
 
 type Document = DigitalPassport["documents"][number];
@@ -20,12 +21,6 @@ function kindLabel(kind: Document["kind"]) {
 
 function docIcon(kind: Document["kind"]) {
   return kind === "lab-report" ? "lab" : kind === "imaging" ? "scan" : "file";
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(value),
-  );
 }
 
 export function DocumentsView() {
@@ -102,7 +97,7 @@ export function DocumentsView() {
                 <h3>{document.title}</h3>
                 <p>{kindLabel(document.kind)} · Synthetic demo</p>
                 <div className="doc-footer">
-                  <small>{formatDate(document.issuedAt)}</small>
+                  <small>{formatPassportDate(document.issuedAt)}</small>
                   <span className="pill neutral">{document.sensitivity}</span>
                 </div>
               </button>
@@ -156,7 +151,7 @@ export function DocumentsView() {
                       {result.interpretation ?? "informational"}
                     </span>
                   </td>
-                  <td>{formatDate(result.observedAt)}</td>
+                  <td>{formatPassportDate(result.observedAt)}</td>
                   <td>
                     <code>{result.sourceId}</code>
                   </td>
@@ -196,7 +191,7 @@ export function DocumentsView() {
               </div>
               <div className="data-row">
                 <span>Issued</span>
-                <strong>{formatDate(selected.issuedAt)}</strong>
+                <strong>{formatPassportDate(selected.issuedAt)}</strong>
               </div>
               <div className="data-row">
                 <span>Sensitivity</span>

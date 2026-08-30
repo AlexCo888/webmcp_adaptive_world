@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
+import { formatPassportDate } from "@/lib/date-format";
 import { usePortal } from "@/lib/portal-context";
 import type { DoctorPassportView } from "@/lib/session";
 
@@ -32,7 +33,7 @@ function PatientCard({
         <div>
           <strong>{patient.displayName}</strong>
           <small>
-            {patient.ageYears} years · Updated {new Date(patient.updatedAt).toLocaleDateString()}
+            {patient.ageYears} years · Updated {formatPassportDate(patient.updatedAt)}
           </small>
         </div>
       </div>
@@ -232,7 +233,7 @@ function PatientDetail({ patient, section }: { patient: DoctorPassportView; sect
                 {document.kind} · {document.sourceId}
               </p>
               <div className="doc-footer">
-                <small>{new Date(document.issuedAt).toLocaleDateString()}</small>
+                <small>{formatPassportDate(document.issuedAt)}</small>
                 <button className="text-link">Open source</button>
               </div>
             </article>
@@ -438,7 +439,7 @@ export function DoctorView() {
               <div>
                 <h2>{patient.displayName}</h2>
                 <p className="card-subtitle">
-                  Authorized through {new Date(authorizationExpiry).toLocaleDateString()}
+                  Authorized through {formatPassportDate(authorizationExpiry)}
                 </p>
               </div>
             </div>

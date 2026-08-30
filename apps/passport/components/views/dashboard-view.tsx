@@ -3,16 +3,11 @@
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
+import { formatPassportDate } from "@/lib/date-format";
 import { usePortal } from "@/lib/portal-context";
 
 function age(dateOfBirth: string) {
   return Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / 31_557_600_000);
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(value),
-  );
 }
 
 export function DashboardView() {
@@ -67,7 +62,7 @@ export function DashboardView() {
             <div className="hero-stats">
               <div className="hero-stat">
                 <span>Last updated</span>
-                <strong>{formatDate(patient.updatedAt)}</strong>
+                <strong>{formatPassportDate(patient.updatedAt)}</strong>
               </div>
               <div className="hero-stat">
                 <span>Active shares</span>
@@ -147,7 +142,7 @@ export function DashboardView() {
                   <div>
                     <h3>{item.doctorName}</h3>
                     <p>{item.guidance}</p>
-                    <small>Expires {formatDate(item.expiresAt)}</small>
+                    <small>Expires {formatPassportDate(item.expiresAt)}</small>
                   </div>
                 </div>
               ))}
@@ -173,7 +168,7 @@ export function DashboardView() {
                       <div>
                         <strong>{routine.title}</strong>
                         <small>
-                          Saved {formatDate(routine.savedAt)} · Template {routine.templateVersion}
+                          Saved {formatPassportDate(routine.savedAt)} · Template {routine.templateVersion}
                         </small>
                       </div>
                     </div>
