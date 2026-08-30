@@ -174,6 +174,51 @@ export async function resetSyntheticDemo(
       for update of reservation
     `);
 
+    // An MPP challenge is not payment evidence. If both the order and budget
+    // prove that credential submission never started, terminalize the setup so
+    // a prior pre-submission failure cannot permanently block demo restoration.
+    const safePreSubmissionMppSetups = await tx
+      .select({ id: paymentProviderSetups.id })
+      .from(paymentProviderSetups)
+      .innerJoin(commerceOrders, eq(paymentProviderSetups.orderId, commerceOrders.id))
+      .innerJoin(agentBudgetReservations, eq(agentBudgetReservations.orderId, commerceOrders.id))
+      .where(
+        and(
+          inArray(commerceOrders.patientId, [...DEMO_PATIENT_IDS]),
+          eq(commerceOrders.provider, "mpp_tempo"),
+          inArray(commerceOrders.status, ["provider_pending", "voided"]),
+          eq(commerceOrders.activeProviderSetupId, paymentProviderSetups.id),
+          isNull(commerceOrders.submittedAt),
+          isNull(commerceOrders.providerPaymentRef),
+          isNull(commerceOrders.receiptDigest),
+          isNull(commerceOrders.paidAt),
+          eq(paymentProviderSetups.provider, "mpp_tempo"),
+          inArray(paymentProviderSetups.status, ["prepared", "attached"]),
+          isNull(paymentProviderSetups.firstRequestStartedAt),
+          isNull(paymentProviderSetups.requestStartedAt),
+          inArray(agentBudgetReservations.status, ["reserved", "released"]),
+          isNull(agentBudgetReservations.submittedAt),
+          isNull(agentBudgetReservations.settledAt),
+        ),
+      );
+    if (safePreSubmissionMppSetups.length) {
+      await tx
+        .update(paymentProviderSetups)
+        .set({
+          status: "failed_terminal",
+          lastErrorCode: "SYNTHETIC_DEMO_RESET_BEFORE_CREDENTIAL_SUBMISSION",
+          leaseOwnerHash: null,
+          leaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          inArray(
+            paymentProviderSetups.id,
+            safePreSubmissionMppSetups.map((setup) => setup.id),
+          ),
+        );
+    }
+
     const ambiguousOrders = await tx
       .select({ id: commerceOrders.id })
       .from(commerceOrders)

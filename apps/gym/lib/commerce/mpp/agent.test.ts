@@ -210,6 +210,48 @@ test("concurrent callers attach and send only the credential that wins the durab
   assert.deepEqual(sentCredentials, attachedCredentials);
 });
 
+test("a local durable-mark error is preserved and no credential is attached or sent", async () => {
+  const config = mppTestConfig();
+  const snapshot = mppTestSnapshot();
+  const challenge = await protocolChallenge();
+  const capability = await regenerateOrderCapability(snapshot, TEST_CAPABILITY_SECRET);
+  const markError = Object.assign(new Error("database transition failed"), { code: "42P08" });
+  let attached = false;
+  let fetchCount = 0;
+  const client: TempoAgentClientPort = {
+    preparePayment: () =>
+      Promise.resolve({
+        challenge,
+        createCredential: () => Promise.resolve("credential-private-value"),
+        setCredential(request) {
+          attached = true;
+          return request;
+        },
+      }),
+    rawFetch() {
+      fetchCount += 1;
+      return Promise.resolve(new Response(null, { status: 402 }));
+    },
+  };
+  const adapter = createTempoAgentPaymentAdapter({ client, config });
+  const prepared = await adapter.prepare({
+    capability,
+    capabilityDigest: await digestOrderCapability(capability),
+    now: new Date("2026-08-29T12:00:00.000Z"),
+    snapshot,
+  });
+  const signed = await prepared.sign();
+
+  await assert.rejects(
+    signed.submitAfterMarkSubmitted({
+      markSubmitted: () => Promise.reject(markError),
+    }),
+    (error) => error === markError,
+  );
+  assert.equal(attached, false);
+  assert.equal(fetchCount, 1);
+});
+
 test("single-recipient and chain mismatches fail before signing", async () => {
   const config = mppTestConfig();
   const snapshot = mppTestSnapshot();

@@ -223,9 +223,12 @@ function createPreparedState(
 
           try {
             await markSubmitted();
-          } catch {
+          } catch (error) {
             submissionState = "signed";
-            throw new MppAdapterError("PROVIDER_UNAVAILABLE", { retryable: true });
+            // This callback is the local durable boundary and runs before the
+            // credential is attached or sent. Preserve its error so the route
+            // can classify and safely diagnose a database transition failure.
+            throw error;
           }
 
           submissionState = "consumed";

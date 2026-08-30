@@ -210,25 +210,29 @@ async function transitionReservation({
       throw new CommerceError("RECONCILIATION_REQUIRED");
     }
     const updated = await client.query<ReservationRow>(
-      `UPDATE agent_budget_reservations SET status = $2,
-         submitted_at = CASE WHEN $2 = 'submitted' THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
-         last_reconciled_at = CASE WHEN $2 = 'reconciliation_required' THEN now() ELSE last_reconciled_at END
+      `UPDATE agent_budget_reservations SET status = $2::agent_budget_reservation_status,
+         submitted_at = CASE WHEN $2::agent_budget_reservation_status = 'submitted'
+           THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+         last_reconciled_at = CASE
+           WHEN $2::agent_budget_reservation_status = 'reconciliation_required'
+           THEN now() ELSE last_reconciled_at END
        WHERE id = $1 AND status = ANY($3::agent_budget_reservation_status[]) RETURNING *`,
       [current.id, to, [...from]],
     );
     const changed = updated.rows[0];
     if (!changed) throw new CommerceError("RECONCILIATION_REQUIRED");
     const updatedOrder = await client.query(
-      `UPDATE commerce_orders SET status = $2,
-         submitted_at = CASE WHEN $2 = 'payment_submitted' THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+      `UPDATE commerce_orders SET status = $2::commerce_order_status,
+         submitted_at = CASE WHEN $2::commerce_order_status = 'payment_submitted'
+           THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
          failure_code = $3
        WHERE id = $1 AND (
-         ($2 = 'payment_submitted' AND status = 'provider_pending'
+         ($2::commerce_order_status = 'payment_submitted' AND status = 'provider_pending'
            AND provider_payment_ref IS NULL AND receipt_digest IS NULL AND paid_at IS NULL)
-         OR ($2 = 'reconciliation_required' AND status IN (
+         OR ($2::commerce_order_status = 'reconciliation_required' AND status IN (
            'payment_submitted','reconciliation_required'
          ) AND provider_payment_ref IS NULL AND receipt_digest IS NULL AND paid_at IS NULL)
-         OR ($2 = 'paid_unfulfilled' AND status IN (
+         OR ($2::commerce_order_status = 'paid_unfulfilled' AND status IN (
            'payment_submitted','reconciliation_required','paid_unfulfilled'
          ) AND provider_payment_ref IS NOT NULL AND receipt_digest IS NOT NULL
            AND paid_at IS NOT NULL)
@@ -273,11 +277,15 @@ export async function releaseAgentReservationBeforeSubmission(
     await client.query("SELECT id FROM patients WHERE id = $1 FOR UPDATE", [patientId]);
     const order = await client.query<{
       active_provider_setup_id: string | null;
+      paid_at: Date | null;
       provider: string | null;
+      provider_payment_ref: string | null;
+      receipt_digest: string | null;
       status: string;
       submitted_at: Date | null;
     }>(
-      `SELECT active_provider_setup_id, provider, status, submitted_at
+      `SELECT active_provider_setup_id, paid_at, provider, provider_payment_ref,
+         receipt_digest, status, submitted_at
        FROM commerce_orders WHERE id = $1 FOR UPDATE`,
       [orderId],
     );
@@ -286,9 +294,46 @@ export async function releaseAgentReservationBeforeSubmission(
       !lockedOrder ||
       lockedOrder.provider !== "mpp_tempo" ||
       lockedOrder.status !== "provider_pending" ||
-      lockedOrder.submitted_at
+      lockedOrder.submitted_at ||
+      lockedOrder.paid_at ||
+      lockedOrder.provider_payment_ref ||
+      lockedOrder.receipt_digest
     ) {
       throw new CommerceError("RECONCILIATION_REQUIRED");
+    }
+    if (lockedOrder.active_provider_setup_id) {
+      const setup = await client.query<{
+        first_request_started_at: Date | null;
+        id: string;
+        provider: string;
+        request_started_at: Date | null;
+        status: string;
+      }>(
+        `SELECT id, provider, status, first_request_started_at, request_started_at
+         FROM payment_provider_setups
+         WHERE id = $1 AND order_id = $2 FOR UPDATE`,
+        [lockedOrder.active_provider_setup_id, orderId],
+      );
+      const safeSetup = setup.rows[0];
+      if (
+        !safeSetup ||
+        safeSetup.provider !== "mpp_tempo" ||
+        !["prepared", "attached"].includes(safeSetup.status) ||
+        safeSetup.first_request_started_at ||
+        safeSetup.request_started_at
+      ) {
+        throw new CommerceError("RECONCILIATION_REQUIRED");
+      }
+      const terminalized = await client.query(
+        `UPDATE payment_provider_setups
+         SET status = 'failed_terminal', last_error_code = $2,
+           lease_owner_hash = NULL, lease_expires_at = NULL
+         WHERE id = $1 AND provider = 'mpp_tempo'
+           AND status IN ('prepared','attached')
+           AND first_request_started_at IS NULL AND request_started_at IS NULL`,
+        [safeSetup.id, reason.slice(0, 96)],
+      );
+      if (terminalized.rowCount !== 1) throw new CommerceError("RECONCILIATION_REQUIRED");
     }
     const reservationIdentity = await client.query<ReservationRow>(
       "SELECT * FROM agent_budget_reservations WHERE order_id = $1",
