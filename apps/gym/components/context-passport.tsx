@@ -197,8 +197,18 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
           <strong>{projection.preferredSessionMinutes} min</strong>
         </div>
       </div>
+      {projection.requestedRoutineGoal ? (
+        <div className="requested-routine-goal">
+          <span>Requested routine goal</span>
+          <strong>{projection.requestedRoutineGoal}</strong>
+          <p>
+            Your exact words, approved during the Passport handoff. This request guides the Gym; the
+            Passport goals below remain separate context.
+          </p>
+        </div>
+      ) : null}
       <div className="connected-context-grid">
-        <ContextSection title="Goals" values={projection.goals} />
+        <ContextSection title="Passport goals" values={projection.goals} />
         <ContextSection title="Preferred activities" values={projection.preferredActivities} />
         <ContextSection
           title="Functional capabilities"

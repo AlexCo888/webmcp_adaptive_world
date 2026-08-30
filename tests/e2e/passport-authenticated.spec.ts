@@ -439,6 +439,9 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         await expect(owner.page.getByText("One-use grant redeemed", { exact: true })).toBeVisible();
         await expect(owner.page).toHaveURL(`${gymBaseUrl}/passport`);
         await expect(owner.page.getByText("Passport member", { exact: true })).toBeVisible();
+        await expect(owner.page.getByText("Requested routine goal", { exact: true })).toBeVisible();
+        await expect(owner.page.getByText(naturalLanguageGoal, { exact: true })).toBeVisible();
+        await expect(owner.page.getByText("Passport goals", { exact: true })).toBeVisible();
 
         const activeContext = await owner.context.request.get(`${gymBaseUrl}/api/context/current`);
         expect(activeContext.ok()).toBeTruthy();

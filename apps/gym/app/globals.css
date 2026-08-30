@@ -3108,6 +3108,32 @@ textarea:focus-visible {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 28px;
 }
+.requested-routine-goal {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  padding: 18px 20px;
+  border: 1px solid rgba(199, 238, 99, 0.24);
+  border-radius: 16px;
+  background: rgba(199, 238, 99, 0.09);
+}
+.requested-routine-goal span {
+  color: var(--lime);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.requested-routine-goal strong {
+  font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.35;
+}
+.requested-routine-goal p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  line-height: 1.55;
+}
 .projection-actions {
   display: flex;
   align-items: center;
