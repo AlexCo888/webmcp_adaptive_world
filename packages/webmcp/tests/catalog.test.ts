@@ -81,9 +81,10 @@ describe("Adaptive World tool catalogs", () => {
     expect(
       tools.filter(({ annotations }) => !annotations.readOnlyHint).map(({ name }) => name),
     ).toEqual(["create_personalized_routine", "record_session_feedback"]);
-    expect(tools.find(({ name }) => name === "create_personalized_routine")?.prepareMutation).toBe(
-      prepare,
-    );
+    const createRoutine = tools.find(({ name }) => name === "create_personalized_routine");
+    expect(createRoutine?.prepareMutation).toBe(prepare);
+    expect(createRoutine?.inputSchema).toMatchObject({ required: ["goal"] });
+    expect(createRoutine?.inputSchema.required).not.toContain("templateId");
     expect(tools.find(({ name }) => name === "record_session_feedback")?.prepareMutation).toBe(
       prepare,
     );

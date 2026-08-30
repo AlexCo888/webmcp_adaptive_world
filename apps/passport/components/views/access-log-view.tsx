@@ -32,6 +32,10 @@ export function AccessLogView() {
       title: "Gym context redeemed",
       detail: "The code was atomically closed and an anonymous Gym session began",
     },
+    "gym.context_grant.revoked": {
+      title: "Gym permission revoked",
+      detail: "The handoff and any active anonymous Gym session were closed",
+    },
     "clinical_guidance.confirmed": {
       title: "Clinical guidance confirmed",
       detail: "The authorized clinician confirmed a write action",

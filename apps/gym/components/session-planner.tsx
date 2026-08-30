@@ -2,6 +2,7 @@
 
 import {
   GeneratedSessionSchema,
+  GymContextProjectionSchema,
   RoutineProOfferSchema,
   type Equipment,
   type GeneratedSession,
@@ -32,7 +33,12 @@ import {
   pendingRoutineProOrder,
   type PendingRoutineProOrder,
 } from "@/lib/routine-pro-client-state";
-import { facilityTemplates, type FacilityTemplate } from "@/lib/session-planner";
+import {
+  defaultRoutineGoal,
+  facilityTemplates,
+  recommendFacilityTemplate,
+  type FacilityTemplate,
+} from "@/lib/session-planner";
 
 type PaymentPhase = "idle" | "creating" | "opening-checkout" | "paying-agent";
 type RoutineProStatusCheck = Readonly<{
@@ -53,6 +59,8 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
   const experience = useGymExperience();
   const [context, setContext] = useState<GymContextProjection | null>(null);
   const [templateId, setTemplateId] = useState<FacilityTemplate["id"]>("first_visit_foundations");
+  const [templateManuallySelected, setTemplateManuallySelected] = useState(false);
+  const [goal, setGoal] = useState("");
   const [session, setSession] = useState<GeneratedSession | null>(null);
   const [offer, setOffer] = useState<RoutineProOffer | null>(null);
   const [paymentMode, setPaymentMode] = useState<"human_checkout" | "agent_wallet">(
@@ -78,7 +86,11 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
       const data = getEnvelopeData(response);
       const pending = pendingRoutineProOrder(data);
       setPendingOrder(pending);
-      if (pending) setTemplateId(pending.initialTemplateId);
+      if (pending) {
+        setTemplateId(pending.initialTemplateId);
+        setTemplateManuallySelected(true);
+        if (pending.initialGoal) setGoal(pending.initialGoal);
+      }
       return { entitled: data.entitled === true, pending };
     },
     [],
@@ -93,8 +105,11 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
       ]);
       if (contextResult.status === "fulfilled") {
         const data = contextResult.value as { projection?: GymContextProjection };
-        setContext(data.projection ?? null);
-        if (data.projection && !new URLSearchParams(window.location.search).has("routinePro")) {
+        const parsedContext = GymContextProjectionSchema.safeParse(data.projection);
+        const projection = parsedContext.success ? parsedContext.data : null;
+        setContext(projection);
+        if (projection) setGoal((current) => current || defaultRoutineGoal(projection));
+        if (projection && !new URLSearchParams(window.location.search).has("routinePro")) {
           await refreshPendingOrder(undefined, controller.signal).catch(() => undefined);
         }
       }
@@ -105,6 +120,8 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           if (parsed.success) {
             setSession(parsed.data);
             setTemplateId(parsed.data.templateId as FacilityTemplate["id"]);
+            setTemplateManuallySelected(true);
+            setGoal(parsed.data.goal);
           }
         }
       }
@@ -118,12 +135,19 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
     if (!experience.personalizedRoutine || !experience.savedRoutineRef) return;
     setSession(experience.personalizedRoutine);
     setTemplateId(experience.personalizedRoutine.templateId as FacilityTemplate["id"]);
+    setTemplateManuallySelected(true);
+    setGoal(experience.personalizedRoutine.goal);
     setSavedRoutineRef(experience.savedRoutineRef);
     window.setTimeout(
       () => document.querySelector(".session-canvas")?.scrollIntoView({ behavior: "smooth" }),
       0,
     );
   }, [experience.personalizedRoutine, experience.savedRoutineRef]);
+
+  useEffect(() => {
+    if (!context || templateManuallySelected || pendingOrder || goal.trim().length < 2) return;
+    setTemplateId(recommendFacilityTemplate(context, goal));
+  }, [context, goal, pendingOrder, templateManuallySelected]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -192,6 +216,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 templateId: state.initialTemplateId,
+                goal:
+                  typeof state.initialGoal === "string"
+                    ? state.initialGoal
+                    : "Support the approved Passport goals with a sustainable routine",
                 initiatedVia: "site-ui",
                 quoteValidUntil: freshOffer.quoteValidUntil,
                 quoteDigest: freshOffer.quoteDigest,
@@ -206,6 +234,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           }
           setSession(parsed);
           setTemplateId(parsed.templateId as FacilityTemplate["id"]);
+          setGoal(parsed.goal);
           setSavedRoutineRef(created.savedRoutineRef);
           setPendingOrder(null);
           setMessage("");
@@ -240,12 +269,18 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
       setStatus("error");
       return;
     }
+    if (goal.trim().length < 2) {
+      setMessage("Describe what you want this routine to support in your own words.");
+      setStatus("error");
+      return;
+    }
     setStatus("preparing");
     setMessage("");
     try {
       const { pending } = await refreshPendingOrder();
       if (pending) {
         setTemplateId(pending.initialTemplateId);
+        if (pending.initialGoal) setGoal(pending.initialGoal);
         setMessage("Payment already in progress. Resume the existing payer state below.");
         setStatus("idle");
         return;
@@ -297,6 +332,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
       }
       setTemplateId(current.initialTemplateId);
+      if (current.initialGoal) setGoal(current.initialGoal);
       setPaymentMode(mode);
       setOffer(prepared);
       setResumingPayment(true);
@@ -329,6 +365,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           templateId,
+          goal: goal.trim(),
           ...(!offer.entitled ? { paymentMode } : {}),
           initiatedVia: "site-ui",
           quoteValidUntil: offer.quoteValidUntil,
@@ -424,6 +461,25 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             </Link>
           </div>
         )}
+        <label className="routine-goal-field" htmlFor="routine-goal">
+          <span>
+            <strong>Your goal</strong>
+            <small>{goal.length}/160</small>
+          </span>
+          <textarea
+            id="routine-goal"
+            rows={3}
+            maxLength={160}
+            value={goal}
+            disabled={status === "matching" || status === "preparing" || pendingOrder !== null}
+            placeholder="For example: support lifelong health without bodybuilding-style muscle gain"
+            onChange={(event) => {
+              setGoal(event.target.value);
+              setTemplateManuallySelected(false);
+            }}
+          />
+          <small>Use your own words. The Gym matches them to a published staff template.</small>
+        </label>
         <div className="template-list" role="radiogroup" aria-label="Facility walkthrough">
           {facilityTemplates.map((template) => (
             <button
@@ -433,7 +489,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
               className={`template-option ${templateId === template.id ? "is-selected" : ""}`}
               key={template.id}
               disabled={status === "matching" || status === "preparing" || pendingOrder !== null}
-              onClick={() => setTemplateId(template.id)}
+              onClick={() => {
+                setTemplateId(template.id);
+                setTemplateManuallySelected(true);
+              }}
             >
               <span>
                 <strong>{template.name}</strong>
@@ -473,6 +532,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                 <dt>Status</dt>
                 <dd>{pendingOrderStatusLabel(pendingOrder)}</dd>
               </div>
+              <div>
+                <dt>Goal</dt>
+                <dd>{pendingOrder.initialGoal ?? goal}</dd>
+              </div>
             </dl>
             <button
               type="button"
@@ -498,7 +561,9 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           <button
             type="button"
             className="button button--lime button--block"
-            disabled={status === "matching" || status === "preparing" || !context}
+            disabled={
+              status === "matching" || status === "preparing" || !context || goal.trim().length < 2
+            }
             aria-busy={status === "preparing"}
             onClick={() => void prepareRoutine()}
           >
@@ -518,8 +583,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           </button>
         )}
         <p className="fine-print">
-          This does not ask an AI to invent a routine. It matches a versioned, staff-authored
-          walkthrough to the active minimum context and verified inventory.
+          Passport connection and context inspection stay free. Routine Pro pays only for creating
+          and saving the personalized result. The Gym matches a versioned, staff-authored
+          walkthrough to the active minimum context and verified inventory; it does not ask an AI to
+          invent a routine.
         </p>
       </aside>
 
@@ -575,17 +642,36 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             <p className="eyebrow">Adaptive Routine Pro</p>
             <h2 id="routine-confirm-title">
               {resumingPayment
-                ? "Resume your existing payment"
-                : "Create and save your personalized routine"}
+                ? "Resume your existing sandbox payment?"
+                : offer.entitled
+                  ? "Create and save your personalized routine"
+                  : "Approve Routine Pro sandbox payment?"}
             </h2>
             <p>
-              This uses the active minimum Gym context and the selected published template. It does
-              not expand Passport access.
+              Passport connection, context review, Gym profile, and equipment discovery are free.
+              This confirmation is only for Routine Pro routine creation and Passport saving; it
+              does not expand Passport access.
             </p>
             <dl className="confirmation-fields">
               <div>
+                <dt>Free tier</dt>
+                <dd>Passport connection, context review, Gym profile, and equipment discovery</dd>
+              </div>
+              <div>
+                <dt>Paid tier</dt>
+                <dd>Routine creation and Passport saving</dd>
+              </div>
+              <div>
                 <dt>Product</dt>
                 <dd>{offer.displayName}</dd>
+              </div>
+              <div>
+                <dt>Your goal</dt>
+                <dd>{goal.trim()}</dd>
+              </div>
+              <div>
+                <dt>Staff template</dt>
+                <dd>{templateId}</dd>
               </div>
               <div>
                 <dt>Includes</dt>
@@ -740,6 +826,13 @@ function SessionResult({
         </span>
         <span>
           <ShieldCheck size={15} /> Catalog {session.catalogVersion}
+        </span>
+      </div>
+      <div className="active-context">
+        <Fingerprint size={16} />
+        <span>
+          <strong>Your stated goal</strong>
+          {session.goal}
         </span>
       </div>
       {savedRoutineRef ? (

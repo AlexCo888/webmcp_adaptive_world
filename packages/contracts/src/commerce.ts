@@ -10,6 +10,7 @@ export const RoutineTemplateIdSchema = z.enum([
 ]);
 export const RoutinePaymentModeSchema = z.enum(["human_checkout", "agent_wallet"]);
 export const RoutineInitiationSchema = z.enum(["site-ui", "webmcp"]);
+export const RoutineGoalSchema = z.string().trim().min(2).max(160);
 
 export const RoutineProOfferSchema = z
   .object({
@@ -28,6 +29,7 @@ export const RoutineProOfferSchema = z
 export const PrepareRoutineRequestSchema = z
   .object({
     templateId: RoutineTemplateIdSchema,
+    goal: RoutineGoalSchema,
     paymentMode: RoutinePaymentModeSchema.optional(),
     initiatedVia: RoutineInitiationSchema.default("site-ui"),
   })
@@ -62,6 +64,7 @@ export const CommerceSafeCodeSchema = z.enum([
   "ORDER_PENDING",
   "ORDER_EXPIRED",
   "QUOTE_CHANGED",
+  "ROUTINE_CONFLICT",
   "PRICE_MISMATCH",
   "PAYMENT_REPLAY",
   "BUDGET_EXCEEDED",
@@ -87,6 +90,7 @@ export const RoutineStatusSchema = z
     canResume: z.boolean().default(false),
     routine: GeneratedSessionSchema.optional(),
     savedRoutineRef: z.string().max(64).optional(),
+    initialGoal: RoutineGoalSchema.nullable().optional(),
   })
   .strict();
 

@@ -26,24 +26,30 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
   const [manualCode, setManualCode] = useState("");
 
   const loadCurrent = useCallback(async () => {
-    const response = await fetch("/api/context/current", { cache: "no-store" });
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/context/current", { cache: "no-store" });
+      if (!response.ok) {
+        setContextActive(false);
+        setState("disconnected");
+        return;
+      }
+      const data = (await response.json()) as {
+        projection?: GymContextProjection;
+        scopes?: string[];
+      };
+      if (data.projection) {
+        setContextActive(true);
+        setProjection(data.projection);
+        setScopes(data.scopes ?? []);
+        setState("active");
+      } else {
+        setContextActive(false);
+        setState("disconnected");
+      }
+    } catch {
       setContextActive(false);
-      setState("disconnected");
-      return;
-    }
-    const data = (await response.json()) as {
-      projection?: GymContextProjection;
-      scopes?: string[];
-    };
-    if (data.projection) {
-      setContextActive(true);
-      setProjection(data.projection);
-      setScopes(data.scopes ?? []);
-      setState("active");
-    } else {
-      setContextActive(false);
-      setState("disconnected");
+      setMessage("The Gym could not check the current session. Please try again.");
+      setState("error");
     }
   }, [setContextActive]);
 
@@ -51,25 +57,32 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
     async (code: string) => {
       setState("redeeming");
       setMessage(null);
-      const response = await fetch("/api/context/redeem", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = (await response.json()) as {
-        projection?: GymContextProjection;
-        scopes?: string[];
-        error?: string;
-      };
-      if (!response.ok || !data.projection) {
-        setMessage(data.error ?? "The one-use code could not be redeemed.");
+      try {
+        const response = await fetch("/api/context/redeem", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code }),
+        });
+        const data = (await response.json().catch(() => null)) as {
+          projection?: GymContextProjection;
+          scopes?: string[];
+          error?: string;
+        } | null;
+        if (!response.ok || !data?.projection) {
+          setContextActive(false);
+          setMessage(data?.error ?? "The one-use code could not be redeemed.");
+          setState("error");
+          return;
+        }
+        setContextActive(true);
+        setProjection(data.projection);
+        setScopes(data.scopes ?? []);
+        setState("active");
+      } catch {
+        setContextActive(false);
+        setMessage("The Gym could not reach the session service. Please try again.");
         setState("error");
-        return;
       }
-      setContextActive(true);
-      setProjection(data.projection);
-      setScopes(data.scopes ?? []);
-      setState("active");
     },
     [setContextActive],
   );
@@ -105,11 +118,16 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
           <span className="context-state__icon">
             <Fingerprint size={28} />
           </span>
-          <p className="eyebrow">No context connected</p>
-          <h2>Start from your own Passport.</h2>
+          <p className="eyebrow">
+            {state === "error" ? "Handoff interrupted" : "No context connected"}
+          </p>
+          <h2>
+            {state === "error" ? "Your Gym session did not open." : "Start from your own Passport."}
+          </h2>
           <p>
-            Sign in as the Passport owner, review the exact Gym projection, then approve a
-            five-minute, one-use exchange. There is no profile picker inside the Gym.
+            {state === "error"
+              ? (message ?? "The one-use handoff could not be completed.")
+              : "Sign in as the Passport owner, review the exact Gym projection, then approve a five-minute, one-use exchange. There is no profile picker inside the Gym."}
           </p>
           <Link className="button button--lime" href={`${passportUrl}/sharing`}>
             Open Digital Passport <ArrowRight size={17} />

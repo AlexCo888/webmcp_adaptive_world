@@ -14,6 +14,10 @@ const functionalSourceCategoryMigrationUrl = new URL(
   "../migrations/0009_functional_source_category.sql",
   import.meta.url,
 );
+const redemptionAndGoalMigrationUrl = new URL(
+  "../migrations/0010_redeem_alias_and_routine_goal.sql",
+  import.meta.url,
+);
 
 describe("Adaptive Routine Pro migration safeguards", () => {
   it("binds each budget reservation to the immutable order amount", async () => {
@@ -80,6 +84,24 @@ describe("Adaptive Routine Pro migration safeguards", () => {
     expect(patientLock).toBeGreaterThan(-1);
     expect(grantClaim).toBeGreaterThan(patientLock);
     expect(migration).toContain("AND patient_id = target_patient_id");
+  });
+
+  it("qualifies the additive context-grant claim so PL/pgSQL outputs cannot shadow columns", async () => {
+    const migration = await readFile(redemptionAndGoalMigrationUrl, "utf8");
+
+    expect(migration).toContain("UPDATE public.context_grants AS grant_row");
+    expect(migration).toContain("AND grant_row.patient_id = target_patient_id");
+    expect(migration).toContain("RETURNING grant_row.* INTO claimed");
+    expect(migration).not.toMatch(/\n\s+AND patient_id = target_patient_id/gu);
+  });
+
+  it("persists and freezes a bounded natural-language goal on payment orders", async () => {
+    const migration = await readFile(redemptionAndGoalMigrationUrl, "utf8");
+
+    expect(migration).toContain("ALTER TABLE commerce_orders ADD COLUMN initial_goal text");
+    expect(migration).toContain("length(initial_goal) BETWEEN 2 AND 160");
+    expect(migration).toContain("NEW.initial_goal IS DISTINCT FROM OLD.initial_goal");
+    expect(migration).toContain("NEW.initial_template_id <> OLD.initial_template_id");
   });
 
   it("backfills only missing functional provenance on synthetic demo profiles", async () => {

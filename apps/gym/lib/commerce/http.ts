@@ -10,6 +10,7 @@ const ERROR_STATUS: Record<CommerceSafeCode, number> = {
   ORDER_PENDING: 409,
   ORDER_EXPIRED: 409,
   QUOTE_CHANGED: 409,
+  ROUTINE_CONFLICT: 409,
   PRICE_MISMATCH: 409,
   PAYMENT_REPLAY: 409,
   BUDGET_EXCEEDED: 409,
@@ -34,6 +35,8 @@ const SAFE_MESSAGES: Record<CommerceSafeCode, string> = {
   ORDER_PENDING: "A payment is already in progress. Resume the existing payment.",
   ORDER_EXPIRED: "The payment window has expired.",
   QUOTE_CHANGED: "The offer changed. Review it again before continuing.",
+  ROUTINE_CONFLICT:
+    "A different routine is already saved for this Gym session and staff template. Review it or choose another published template.",
   PRICE_MISMATCH: "The verified payment did not match the product price.",
   PAYMENT_REPLAY: "That payment proof was already processed.",
   BUDGET_EXCEEDED: "The demo agent daily test budget is not sufficient.",

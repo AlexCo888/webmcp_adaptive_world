@@ -55,10 +55,15 @@ scope, expiry, and revocation. Unauthorized IDs use an indistinguishable
 Public profile and equipment access must continue to work when every payment
 feature flag is false. Connecting and inspecting the minimum context is free.
 
-`create_personalized_routine` accepts only a published `templateId` and, when no
-entitlement exists, `paymentMode: "human_checkout" | "agent_wallet"`. It never
-accepts patient, owner, price, currency, entitlement, provider, merchant,
-wallet, destination, chain, token, RPC, or capability as tool input.
+`create_personalized_routine` requires the person’s bounded natural-language
+`goal`, accepts an optional published `templateId`, and—when no entitlement
+exists—accepts `paymentMode: "human_checkout" | "agent_wallet"`. If the template
+is omitted, Gym deterministically selects one published staff template from the
+goal and active minimum context; it does not invent exercise content. The tool
+defaults an omitted WebMCP payer to the sandbox demo agent when that mode is
+available, then pauses on the same first-party payment confirmation. The tool
+never accepts patient, owner, price, currency, entitlement, provider, merchant,
+wallet, destination, chain, token, RPC, or capability as input.
 
 ## Server-authoritative preparation
 
@@ -91,8 +96,9 @@ Preparation performs no write. Decline creates no order, provider setup, budget
 reservation, entitlement, or routine. A changed quote requires a fresh review.
 An entitled owner sees an `account-write` confirmation without a payment.
 
-The no-entitlement confirmation shows product, **$4.99 test USD**, payer,
-sandbox status, effect, and unchanged data scope. Human mode ends with
+The no-entitlement confirmation asks an explicit payment question and shows
+the free/paid boundary, product, **$4.99 test USD**, payer, sandbox status,
+effect, and unchanged data scope. Human mode ends with
 **Continue to secure test checkout**. Agent mode ends with
 **Approve agent payment**.
 

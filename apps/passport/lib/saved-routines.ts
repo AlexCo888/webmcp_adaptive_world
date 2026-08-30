@@ -14,6 +14,7 @@ export type SavedRoutineSummary = {
 };
 
 export type SavedRoutineDetail = SavedRoutineSummary & {
+  goal: string;
   durationMinutes: number;
   templateId: string;
   catalogVersion: string;
@@ -103,6 +104,7 @@ export async function getSavedRoutineDetail(
   return {
     id: row.routine.id,
     title: row.routine.title,
+    goal: plan.goal,
     savedAt: row.routine.savedAt.toISOString(),
     templateId: row.routine.templateId,
     templateVersion: row.routine.templateVersion,

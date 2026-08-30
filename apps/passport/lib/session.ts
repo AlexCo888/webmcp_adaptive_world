@@ -2,6 +2,7 @@ import {
   accessGrants,
   auditEvents,
   clinicalGuidance,
+  contextGrants,
   doctorPatientRelationships,
   patients,
   users,
@@ -72,6 +73,7 @@ export type PortalBootstrap = {
   actor: PortalActor;
   passports: PortalPassport[];
   grants: AccessGrant[];
+  gymHandoffs: GymHandoff[];
   auditEvents: Array<{
     id: string;
     action: string;
@@ -88,6 +90,18 @@ export type PortalBootstrap = {
   }>;
   savedRoutines: SavedRoutineSummary[];
   demoResetEnabled: boolean;
+};
+
+export type GymHandoff = {
+  id: string;
+  audience: "adaptive-gym";
+  purpose: string;
+  scopes: string[];
+  status: "ready" | "connected" | "expired" | "revoked";
+  issuedAt: string;
+  expiresAt: string;
+  redeemedAt?: string;
+  revokedAt?: string;
 };
 
 export async function getActorFromHeaders(requestHeaders: Headers): Promise<PortalActor | null> {
@@ -138,6 +152,27 @@ function mapGrant(
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt?.toISOString(),
   });
+}
+
+function mapGymHandoff(row: typeof contextGrants.$inferSelect, now = new Date()): GymHandoff {
+  const status = row.revokedAt
+    ? "revoked"
+    : row.expiresAt.getTime() <= now.getTime()
+      ? "expired"
+      : row.redeemedAt
+        ? "connected"
+        : "ready";
+  return {
+    id: row.id,
+    audience: "adaptive-gym",
+    purpose: row.purpose,
+    scopes: row.scopes,
+    status,
+    issuedAt: row.createdAt.toISOString(),
+    expiresAt: row.expiresAt.toISOString(),
+    ...(row.redeemedAt ? { redeemedAt: row.redeemedAt.toISOString() } : {}),
+    ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : {}),
+  };
 }
 
 function ageInYears(dateOfBirth: string, now: Date): number {
@@ -228,8 +263,16 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
       .limit(1);
     if (!owned) throw new Error("No Passport is linked to this account.");
     const passport = parsePersistedDigitalPassport(owned.profile);
-    const [grantRows, eventRows, guidanceRows, routineRows] = await Promise.all([
+    const [grantRows, contextGrantRows, eventRows, guidanceRows, routineRows] = await Promise.all([
       db.select().from(accessGrants).where(eq(accessGrants.patientId, owned.id)),
+      db
+        .select()
+        .from(contextGrants)
+        .where(
+          and(eq(contextGrants.patientId, owned.id), eq(contextGrants.audience, "adaptive-gym")),
+        )
+        .orderBy(sql`${contextGrants.createdAt} desc`)
+        .limit(10),
       db
         .select()
         .from(auditEvents)
@@ -255,6 +298,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
       actor,
       passports: [passport],
       grants: grantRows.map((grant) => mapGrant(grant, passport.id)),
+      gymHandoffs: contextGrantRows.map((grant) => mapGymHandoff(grant)),
       auditEvents: eventRows.map((event) => ({
         id: event.id,
         action: event.action,
@@ -331,6 +375,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
     grants: authorized.flatMap(({ passport, grants }) =>
       grants.map((grant) => mapGrant(grant, passport.id)),
     ),
+    gymHandoffs: [],
     auditEvents: [],
     guidance: [],
     savedRoutines: [],

@@ -10,7 +10,7 @@ import { GYM_CONTEXT_PURPOSE, GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 export const ContextGrantInputSchema = z
   .object({
     expiresInMinutes: z.number().int().min(1).max(15).default(5),
-    preparationToken: z.string().min(80).max(2_048).optional(),
+    preparationToken: z.string().min(80).max(2_048),
   })
   .strict();
 

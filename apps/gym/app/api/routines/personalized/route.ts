@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     const routine = await createAndSavePersonalizedRoutine({
       active,
       templateId: parsed.data.templateId,
+      goal: parsed.data.goal,
       initiatedVia: parsed.data.initiatedVia,
     });
     return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);

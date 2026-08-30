@@ -8,12 +8,14 @@ import type {
 import { pendingPaymentMode, type PendingRoutineProOrder } from "./routine-pro-client-state";
 
 export type PreparedRoutineProConfirmation = Readonly<{
-  effectiveInput: CreatePersonalizedRoutineInput;
+  effectiveInput: CreatePersonalizedRoutineInput & {
+    templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
+  };
   preparation: WebMCPMutationPreparation;
 }>;
 
 export function routineTemplateConfirmationField(
-  templateId: CreatePersonalizedRoutineInput["templateId"],
+  templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>,
 ) {
   return { label: "Template ID", value: templateId } as const;
 }
@@ -21,18 +23,25 @@ export function routineTemplateConfirmationField(
 export function prepareRoutineProConfirmation({
   offer,
   requestedInput,
+  recommendedTemplateId,
   pending,
 }: {
   offer: RoutineProOffer;
   requestedInput: CreatePersonalizedRoutineInput;
+  recommendedTemplateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
   pending: PendingRoutineProOrder | null;
 }): PreparedRoutineProConfirmation {
-  const effectiveInput: CreatePersonalizedRoutineInput = pending
+  const effectiveInput = pending
     ? {
         templateId: pending.initialTemplateId,
+        goal: pending.initialGoal ?? requestedInput.goal.trim(),
         paymentMode: pendingPaymentMode(pending),
       }
-    : requestedInput;
+    : {
+        ...requestedInput,
+        goal: requestedInput.goal.trim(),
+        templateId: requestedInput.templateId ?? recommendedTemplateId,
+      };
   const payer = offer.entitled
     ? "Existing Passport entitlement"
     : (pending?.payerLabel ??
@@ -45,13 +54,21 @@ export function prepareRoutineProConfirmation({
     preparation: {
       confirmation: {
         title: pending
-          ? "Payment already in progress"
-          : "Create and save your personalized routine",
+          ? "Resume the existing sandbox payment?"
+          : offer.entitled
+            ? "Create and save your personalized routine"
+            : "Approve Routine Pro sandbox payment?",
         description: pending
-          ? "Resume the existing Routine Pro payment. Its payer and staff template are locked, so no second payment rail will be opened."
-          : "This uses the active minimum Gym context and a published staff template. It does not expand Passport access.",
+          ? "Resume the existing Routine Pro sandbox payment. Its payer, goal, and staff template are locked, so no second payment rail will be opened. Free Gym access remains unchanged."
+          : "Passport connection, context review, Gym profile, and equipment discovery are free. This confirmation is only for the Routine Pro action that creates and saves a personalized routine; it does not expand Passport access.",
         fields: [
+          {
+            label: "Free tier",
+            value: "Passport connection, context review, Gym profile, and equipment discovery",
+          },
+          { label: "Paid tier", value: "Routine creation and Passport saving" },
           { label: "Product", value: offer.displayName },
+          { label: "Your goal", value: effectiveInput.goal },
           routineTemplateConfirmationField(effectiveInput.templateId),
           { label: "Includes", value: "Personalized routine creation and Passport saving" },
           { label: "Payer", value: payer },

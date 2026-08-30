@@ -39,8 +39,9 @@ import {
   PreparedGymContextGrantResponseSchema,
   contextGrantConfirmationFields,
   type ContextGrantToolInput,
+  type PreparedGymContextGrant,
 } from "./context-grant-contract";
-import type { PortalBootstrap } from "./session";
+import type { GymHandoff, PortalBootstrap } from "./session";
 import {
   createMutationConfirmationGate,
   type MutationConfirmationGate,
@@ -76,13 +77,23 @@ type PortalContextValue = {
   passports: PortalBootstrap["passports"];
   patient: DigitalPassport | null;
   grants: readonly AccessGrant[];
+  gymHandoffs: readonly GymHandoff[];
+  prepareGymContextGrant: (
+    expiresInMinutes: number,
+    signal?: AbortSignal,
+  ) => Promise<PreparedGymContextGrant>;
   createDoctorAccessGrant: (scopes: PassportScope[], days: number) => Promise<void>;
-  createGymContextGrant: (expiresInMinutes: number) => Promise<{
+  createGymContextGrant: (
+    expiresInMinutes: number,
+    signal: AbortSignal | undefined,
+    preparationToken: string,
+  ) => Promise<{
     audience: "adaptive-gym";
     scopes: readonly ["gym.context.read", "gym.feedback.write"];
     expiresAt: string;
   }>;
   revokeGrant: (id: string) => Promise<void>;
+  revokeGymHandoff: (id: string) => Promise<void>;
   toast: ToastState;
   notify: (message: string) => void;
   webmcp: { status: WebMCPAvailability; error: unknown; toolNames: readonly string[] };
@@ -108,6 +119,9 @@ const GymContextResponseSchema = z
 const RevokeGrantResponseSchema = z
   .object({ revoked: z.literal(true), grantId: z.string().min(1).max(128) })
   .strict();
+const RevokeGymHandoffResponseSchema = RevokeGrantResponseSchema.extend({
+  sessionCancelled: z.boolean(),
+}).strict();
 const GuidanceResponseSchema = z
   .object({
     saved: z.literal(true),
@@ -133,6 +147,7 @@ export function PortalProvider({
   }
 
   const [grants, setGrants] = useState<AccessGrant[]>(bootstrap.grants);
+  const [gymHandoffs, setGymHandoffs] = useState<GymHandoff[]>(bootstrap.gymHandoffs);
   const [toast, setToast] = useState<ToastState>(null);
   const [confirmation, setConfirmation] = useState<MutationConfirmationRequest | null>(null);
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
@@ -178,14 +193,34 @@ export function PortalProvider({
     [notify],
   );
 
+  const prepareGymContextGrant = useCallback(
+    async (expiresInMinutes: number, signal?: AbortSignal) => {
+      const input = ContextGrantToolInputSchema.parse({
+        recipient: "adaptive-gym",
+        scopes: ["gym.context.read", "gym.feedback.write"],
+        expiresInMinutes,
+      });
+      const response = await callPassportWebMcp({ tool: "prepare_context_grant", input }, signal);
+      const prepared = PreparedGymContextGrantResponseSchema.safeParse(response);
+      if (!prepared.success) {
+        throw new WebMCPToolError(
+          "UNAVAILABLE",
+          "The Passport returned an invalid Gym projection preparation.",
+        );
+      }
+      return prepared.data;
+    },
+    [],
+  );
+
   const createGymContextGrant = useCallback(
-    async (expiresInMinutes: number, signal?: AbortSignal, preparationToken?: string) => {
+    async (expiresInMinutes: number, signal: AbortSignal | undefined, preparationToken: string) => {
       const response = await fetch("/api/context-grants", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
           expiresInMinutes,
-          ...(preparationToken ? { preparationToken } : {}),
+          preparationToken,
         }),
         signal,
       });
@@ -195,7 +230,9 @@ export function PortalProvider({
         "The one-use Gym context could not be created.",
       );
       notify("One-use Gym context approved. Continuing to Adaptive Gym…");
-      window.location.assign(result.exchangeUrl);
+      // Publish the WebMCP result before cross-app navigation tears down this
+      // route-scoped tool. The one-use code stays out of the tool result.
+      window.setTimeout(() => window.location.assign(result.exchangeUrl), 0);
       return {
         audience: result.audience,
         scopes: result.scopes,
@@ -225,6 +262,33 @@ export function PortalProvider({
         ),
       );
       notify("Access revoked in Neon");
+    },
+    [notify],
+  );
+
+  const revokeGymHandoff = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/context-grants/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { accept: "application/json" },
+      });
+      const result = await readPassportApiResponse(
+        response,
+        RevokeGymHandoffResponseSchema,
+        "The Gym handoff could not be revoked.",
+      );
+      setGymHandoffs((current) =>
+        current.map((handoff) =>
+          handoff.id === id
+            ? { ...handoff, status: "revoked", revokedAt: new Date().toISOString() }
+            : handoff,
+        ),
+      );
+      notify(
+        result.sessionCancelled
+          ? "Gym handoff revoked and its active session cancelled"
+          : "Gym handoff revoked",
+      );
     },
     [notify],
   );
@@ -427,9 +491,12 @@ export function PortalProvider({
       passports,
       patient,
       grants,
+      gymHandoffs,
+      prepareGymContextGrant,
       createDoctorAccessGrant,
       createGymContextGrant,
       revokeGrant,
+      revokeGymHandoff,
       toast,
       notify,
       webmcp,
@@ -449,10 +516,13 @@ export function PortalProvider({
       createDoctorAccessGrant,
       createGymContextGrant,
       grants,
+      gymHandoffs,
       notify,
       passports,
       patient,
+      prepareGymContextGrant,
       revokeGrant,
+      revokeGymHandoff,
       role,
       toast,
       toolCatalog,

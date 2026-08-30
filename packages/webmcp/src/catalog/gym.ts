@@ -27,7 +27,8 @@ export interface GetEquipmentInput {
 }
 
 export interface CreatePersonalizedRoutineInput {
-  readonly templateId:
+  readonly goal: string;
+  readonly templateId?:
     "first_visit_foundations" | "low_impact_orientation" | "accessible_equipment_tour";
   readonly paymentMode?: "human_checkout" | "agent_wallet";
 }
@@ -155,7 +156,7 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
         name: "get_routine_pro_offer",
         title: "Get Adaptive Routine Pro offer",
         description:
-          "Return the exact server-authoritative Adaptive Routine Pro offer for the active minimum Passport context.",
+          "Explain the free-versus-paid boundary and return the exact server-authoritative Adaptive Routine Pro offer for the active minimum Passport context. Passport connection, context review, Gym profile, and equipment discovery are free; only personalized routine creation and Passport saving require Routine Pro.",
         inputSchema: EMPTY_OBJECT_SCHEMA,
         readOnly: true,
       },
@@ -166,13 +167,21 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
         name: "create_personalized_routine",
         title: "Create and save a personalized routine",
         description:
-          "Create and save one grounded routine from a published template and the active minimum Passport context after exact confirmation.",
+          "Create and save one grounded routine for the person's stated natural-language goal and active minimum Passport context after exact confirmation. A published staff template is selected, never invented.",
         inputSchema: {
           type: "object",
           properties: {
+            goal: {
+              type: "string",
+              description:
+                "The person's requested outcome in their own words, for example long-term health without bodybuilding-style muscle gain.",
+              minLength: 2,
+              maxLength: 160,
+            },
             templateId: {
               type: "string",
-              description: "Published facility template identifier.",
+              description:
+                "Optional published facility template identifier. Omit it to let the Gym select the best match from the active context and stated goal.",
               enum: [
                 "first_visit_foundations",
                 "low_impact_orientation",
@@ -182,11 +191,11 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
             paymentMode: {
               type: "string",
               description:
-                "Required only when the server reports no active entitlement; selects the approved sandbox payer flow.",
+                "Optional sandbox payer. Omit it to use the demo agent wallet when available; every paid path still requires exact first-party confirmation.",
               enum: ["human_checkout", "agent_wallet"],
             },
           },
-          required: ["templateId"],
+          required: ["goal"],
           additionalProperties: false,
         },
         readOnly: false,

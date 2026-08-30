@@ -6,6 +6,7 @@ import { ConfirmRoutineRequestSchema, RoutineProOfferSchema } from "./commerce";
 void test("commerce requests reject client-selected authority fields", () => {
   const parsed = ConfirmRoutineRequestSchema.safeParse({
     templateId: "first_visit_foundations",
+    goal: "Support lifelong health",
     paymentMode: "human_checkout",
     quoteValidUntil: "2026-08-29T12:00:00.000Z",
     quoteDigest: "a".repeat(64),

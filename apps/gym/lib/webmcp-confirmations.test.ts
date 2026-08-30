@@ -46,30 +46,35 @@ describe("Gym WebMCP confirmations", () => {
     const prepared = prepareRoutineProConfirmation({
       offer,
       requestedInput: {
+        goal: "Build lifelong health without bodybuilding-style muscle gain",
         templateId: "accessible_equipment_tour",
         paymentMode: "agent_wallet",
       },
+      recommendedTemplateId: "low_impact_orientation",
       pending: {
         orderRef: `awrp_${"b".repeat(32)}`,
         orderStatus: "provider_pending",
         payerLabel: "Human test checkout",
         canResume: true,
         initialTemplateId: "first_visit_foundations",
+        initialGoal: "Keep the original payment goal",
       },
     });
 
     expect(prepared.effectiveInput).toEqual({
       templateId: "first_visit_foundations",
+      goal: "Keep the original payment goal",
       paymentMode: "human_checkout",
     });
     expect(prepared.preparation.confirmation).toMatchObject({
-      title: "Payment already in progress",
+      title: "Resume the existing sandbox payment?",
       confirmLabel: "Resume",
       riskClass: "payment",
     });
     expect(prepared.preparation.confirmation.fields).toEqual(
       expect.arrayContaining([
         { label: "Template ID", value: "first_visit_foundations" },
+        { label: "Your goal", value: "Keep the original payment goal" },
         { label: "Payer", value: "Human test checkout" },
       ]),
     );
@@ -79,9 +84,11 @@ describe("Gym WebMCP confirmations", () => {
     const prepared = prepareRoutineProConfirmation({
       offer,
       requestedInput: {
+        goal: "Support my long-term health",
         templateId: "low_impact_orientation",
         paymentMode: "agent_wallet",
       },
+      recommendedTemplateId: "low_impact_orientation",
       pending: null,
     });
     const request: MutationConfirmationRequest = {
@@ -91,7 +98,17 @@ describe("Gym WebMCP confirmations", () => {
     };
 
     expect(prepared.effectiveInput.paymentMode).toBe("agent_wallet");
+    expect(prepared.preparation.confirmation.title).toBe("Approve Routine Pro sandbox payment?");
     expect(prepared.preparation.confirmation.confirmLabel).toBe("Approve agent payment");
+    expect(prepared.preparation.confirmation.fields).toEqual(
+      expect.arrayContaining([
+        {
+          label: "Free tier",
+          value: "Passport connection, context review, Gym profile, and equipment discovery",
+        },
+        { label: "Paid tier", value: "Routine creation and Passport saving" },
+      ]),
+    );
     expect(webMcpMutationBusyLabel(request)).toBe("Paying with the Adaptive World demo agent…");
     expect(
       webMcpMutationBusyLabel({

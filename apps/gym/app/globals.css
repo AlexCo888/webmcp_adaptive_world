@@ -1347,6 +1347,36 @@ textarea:focus-visible {
   width: 100%;
   accent-color: var(--green);
 }
+.routine-goal-field {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+}
+.routine-goal-field > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.routine-goal-field textarea {
+  width: 100%;
+  min-height: 82px;
+  resize: vertical;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  line-height: 1.45;
+}
+.routine-goal-field > small {
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.4;
+}
 .active-context {
   margin: 2px 0 14px;
   padding: 11px;
@@ -3281,6 +3311,10 @@ textarea:focus-visible {
 }
 .webmcp-confirm {
   width: min(540px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 28px;
   border-radius: 22px;
   background: var(--surface);

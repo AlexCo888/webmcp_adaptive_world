@@ -13,12 +13,17 @@ const pending = {
   payerLabel: "Human test checkout",
   canResume: true,
   initialTemplateId: "first_visit_foundations",
+  initialGoal: "Support long-term health",
 };
 
 describe("Routine Pro client state", () => {
   it("accepts only a complete server-owned pending order projection", () => {
     const parsed = pendingRoutineProOrder(pending);
-    expect(parsed).toMatchObject({ orderRef: pending.orderRef, canResume: true });
+    expect(parsed).toMatchObject({
+      orderRef: pending.orderRef,
+      canResume: true,
+      initialGoal: "Support long-term health",
+    });
     expect(parsed && pendingPaymentMode(parsed)).toBe("human_checkout");
     expect(parsed && pendingOrderStatusLabel(parsed)).toBe("Ready to resume");
     expect(pendingRoutineProOrder({ ...pending, entitled: true })).toBeNull();

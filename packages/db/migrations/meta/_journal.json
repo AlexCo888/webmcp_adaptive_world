@@ -64,6 +64,13 @@
       "when": 1788063600000,
       "tag": "0009_functional_source_category",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788105600000,
+      "tag": "0010_redeem_alias_and_routine_goal",
+      "breakpoints": true
     }
   ]
 }

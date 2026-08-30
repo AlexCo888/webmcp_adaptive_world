@@ -45,12 +45,15 @@ import {
   prepareRoutineProConfirmation,
   webMcpMutationBusyLabel,
 } from "@/lib/webmcp-confirmations";
+import { recommendFacilityTemplate } from "@/lib/session-planner";
 
 type ExecutionEvent = { tool: string; at: string };
 type PreparedQuote = {
   offer: RoutineProOffer;
   requestedInput: CreatePersonalizedRoutineInput;
-  effectiveInput: CreatePersonalizedRoutineInput;
+  effectiveInput: CreatePersonalizedRoutineInput & {
+    templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
+  };
   pending: PendingRoutineProOrder | null;
 };
 type PreparedFeedback = {
@@ -62,7 +65,11 @@ function sameRoutineInput(
   left: CreatePersonalizedRoutineInput,
   right: CreatePersonalizedRoutineInput,
 ): boolean {
-  return left.templateId === right.templateId && left.paymentMode === right.paymentMode;
+  return (
+    left.goal.trim() === right.goal.trim() &&
+    left.templateId === right.templateId &&
+    left.paymentMode === right.paymentMode
+  );
 }
 
 function sameFeedbackInput(
@@ -108,7 +115,8 @@ function samePendingPayment(
     current.canResume &&
     prepared.orderRef === current.orderRef &&
     prepared.payerLabel === current.payerLabel &&
-    prepared.initialTemplateId === current.initialTemplateId
+    prepared.initialTemplateId === current.initialTemplateId &&
+    prepared.initialGoal === current.initialGoal
   );
 }
 
@@ -255,9 +263,7 @@ export function WebMcpBridge() {
         const item = EquipmentSchema.parse((data as { equipment?: unknown }).equipment);
         // Let the WebMCP promise publish its bounded result before this
         // route change tears down the route-scoped registration.
-        window.setTimeout(() => {
-          if (!context.signal?.aborted) openEquipment(item.slug);
-        }, 0);
+        window.setTimeout(() => openEquipment(item.slug), 0);
         trace("get_equipment");
         return { equipment: compactEquipmentForTool(item) };
       },
@@ -279,16 +285,29 @@ export function WebMcpBridge() {
         );
         const offer = RoutineProOfferSchema.parse(envelopeData(response));
         trace("get_routine_pro_offer");
-        return offer;
+        return {
+          ...offer,
+          tierBoundary: {
+            free: "Passport connection, context review, Gym profile, and equipment discovery",
+            paid: "Personalized routine creation and Passport saving",
+          },
+        };
       },
       create_personalized_routine: {
         prepare: async (input, context) => {
-          const [offerResponse, statusResponse] = await Promise.all([
+          const [offerResponse, statusResponse, contextResponse] = await Promise.all([
             fetchBoundedJson<unknown>("/api/commerce/routine-pro/offer", {}, context),
             fetchBoundedJson<unknown>("/api/commerce/routine-pro/status", {}, context),
+            fetchBoundedJson<unknown>("/api/context/current", {}, context),
           ]);
           const offer = RoutineProOfferSchema.parse(envelopeData(offerResponse));
           const status = parseRoutineProStatus(statusResponse);
+          if (!contextResponse || typeof contextResponse !== "object") {
+            throw new GymApiError("INVALID_RESPONSE", 502);
+          }
+          const projection = GymContextProjectionSchema.parse(
+            (contextResponse as Record<string, unknown>).projection,
+          );
           if (offer.entitled !== status.entitled) {
             throw new GymApiError(
               "QUOTE_CHANGED",
@@ -303,19 +322,26 @@ export function WebMcpBridge() {
               "The existing payment is being reconciled and cannot be resumed yet.",
             );
           }
+          if (!offer.entitled && offer.supportedModes.length === 0) {
+            throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
+          }
+          const requestedForConfirmation = {
+            ...input,
+            paymentMode:
+              input.paymentMode ??
+              (!offer.entitled
+                ? offer.supportedModes.includes("agent_wallet")
+                  ? "agent_wallet"
+                  : offer.supportedModes[0]
+                : undefined),
+          };
           const preparedConfirmation = prepareRoutineProConfirmation({
             offer,
-            requestedInput: input,
+            requestedInput: requestedForConfirmation,
+            recommendedTemplateId: recommendFacilityTemplate(projection, input.goal),
             pending: status.pending,
           });
           const effectiveMode = preparedConfirmation.effectiveInput.paymentMode;
-          if (!offer.entitled && !effectiveMode) {
-            throw new GymApiError(
-              "PAYMENT_MODE_REQUIRED",
-              402,
-              "Choose human_checkout or agent_wallet after reviewing the Pro offer.",
-            );
-          }
           if (!offer.entitled && effectiveMode && !offer.supportedModes.includes(effectiveMode)) {
             throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
           }

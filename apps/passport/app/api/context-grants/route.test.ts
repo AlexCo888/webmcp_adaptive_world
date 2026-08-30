@@ -6,20 +6,40 @@ import { testPassport } from "@/lib/test-passport-fixture";
 import { ContextGrantInputSchema, resolveContextGrantTiming } from "./route";
 
 describe("Gym context grant duration", () => {
+  const preparationToken = "p".repeat(80);
+
   it("defaults to five minutes and preserves accepted values", () => {
-    expect(ContextGrantInputSchema.parse({})).toEqual({ expiresInMinutes: 5 });
-    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 1 })).toEqual({ expiresInMinutes: 1 });
-    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 10 })).toEqual({
+    expect(ContextGrantInputSchema.parse({ preparationToken })).toEqual({
+      expiresInMinutes: 5,
+      preparationToken,
+    });
+    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 1, preparationToken })).toEqual({
+      expiresInMinutes: 1,
+      preparationToken,
+    });
+    expect(ContextGrantInputSchema.parse({ expiresInMinutes: 10, preparationToken })).toEqual({
       expiresInMinutes: 10,
+      preparationToken,
     });
   });
 
   it("rejects values outside 1-15 minutes and unknown fields", () => {
-    expect(ContextGrantInputSchema.safeParse({ expiresInMinutes: 0 }).success).toBe(false);
-    expect(ContextGrantInputSchema.safeParse({ expiresInMinutes: 16 }).success).toBe(false);
-    expect(ContextGrantInputSchema.safeParse({ expiresInMinutes: 1.5 }).success).toBe(false);
+    expect(ContextGrantInputSchema.safeParse({ expiresInMinutes: 5 }).success).toBe(false);
     expect(
-      ContextGrantInputSchema.safeParse({ expiresInMinutes: 5, scopes: ["anything"] }).success,
+      ContextGrantInputSchema.safeParse({ expiresInMinutes: 0, preparationToken }).success,
+    ).toBe(false);
+    expect(
+      ContextGrantInputSchema.safeParse({ expiresInMinutes: 16, preparationToken }).success,
+    ).toBe(false);
+    expect(
+      ContextGrantInputSchema.safeParse({ expiresInMinutes: 1.5, preparationToken }).success,
+    ).toBe(false);
+    expect(
+      ContextGrantInputSchema.safeParse({
+        expiresInMinutes: 5,
+        preparationToken,
+        scopes: ["anything"],
+      }).success,
     ).toBe(false);
   });
 

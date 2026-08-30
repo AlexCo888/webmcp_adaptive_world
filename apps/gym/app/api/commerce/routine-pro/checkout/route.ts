@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     const state = await createOrReuseRoutineProOrder({
       active,
       templateId: parsed.data.templateId,
+      goal: parsed.data.goal,
       paymentMode: "human_checkout",
       initiatedVia: parsed.data.initiatedVia,
     });
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       const routine = await createAndSavePersonalizedRoutine({
         active,
         templateId: parsed.data.templateId,
+        goal: parsed.data.goal,
         initiatedVia: parsed.data.initiatedVia,
       });
       return success({ entitled: true, ...routine }, id, 201);

@@ -95,6 +95,7 @@ entitlement path be tested without another payment.
 ## Database/provider invariants before enablement
 
 - one payable order per `patient_id + product_key` across all rails/templates;
+- immutable bounded natural-language goal and initial staff template on every new payable order;
 - one active entitlement per patient/product;
 - one nonterminal provider setup per order;
 - unique provider resource/event/receipt evidence;
@@ -136,6 +137,30 @@ Required observations:
 - payment endpoint tests prove all four rate-limit dimensions are enforced without storing raw identifiers.
 
 The deterministic shim is not native Chrome WebMCP or a model eval.
+
+## Authenticated deployed canary
+
+Run the authenticated suite only against a migrated, seeded synthetic stage.
+The agent-payment journey has its own opt-in because it contacts the configured
+sandbox/testnet provider and resets the synthetic fixture before and after the
+test:
+
+```bash
+RUN_AUTHENTICATED_E2E=true \
+ALLOW_SYNTHETIC_STATE_MUTATION=true \
+ALLOW_SYNTHETIC_DEMO_RESET_E2E=true \
+ALLOW_SYNTHETIC_AGENT_PAYMENT_E2E=true \
+PASSPORT_BASE_URL='https://<passport-deployment>' \
+GYM_BASE_URL='https://<gym-deployment>' \
+E2E_DEMO_PASSWORD='<approved synthetic credential>' \
+pnpm exec playwright test tests/e2e/passport-authenticated.spec.ts
+```
+
+The payment canary must observe `agent_wallet` in the live offer, approve the
+first-party **$4.99 test USD** confirmation, receive one saved routine, verify
+the exact natural-language goal in both the active Gym session and Passport,
+then prove the clinician-authorized reset succeeds. Never set the payment opt-in
+for a real-funds wallet or a non-synthetic account.
 
 ## Stripe Preview setup and smoke
 

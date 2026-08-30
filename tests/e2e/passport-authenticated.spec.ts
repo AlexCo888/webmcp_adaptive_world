@@ -14,6 +14,9 @@ const demoPassword = process.env.E2E_DEMO_PASSWORD ?? "AdaptiveWorld2026!";
 const runAuthenticated = process.env.RUN_AUTHENTICATED_E2E === "true";
 const allowStateMutation = process.env.ALLOW_SYNTHETIC_STATE_MUTATION === "true";
 const allowDemoReset = process.env.ALLOW_SYNTHETIC_DEMO_RESET_E2E === "true";
+const allowAgentPayment = process.env.ALLOW_SYNTHETIC_AGENT_PAYMENT_E2E === "true";
+
+const naturalLanguageGoal = "Support lifelong health without bodybuilding-style muscle gain";
 
 const ownerTools = ["get_my_passport_summary", "list_my_shares"];
 const ownerSharingTools = ["create_context_grant", "list_my_shares", "revoke_access_grant"];
@@ -23,6 +26,14 @@ const doctorTools = [
   "get_patient_section",
   "open_patient_source",
   "search_my_patients",
+];
+const gymSessionTools = [
+  "create_personalized_routine",
+  "get_active_context",
+  "get_equipment",
+  "get_gym_profile",
+  "get_routine_pro_offer",
+  "search_equipment",
 ];
 
 type DemoRole = "owner" | "doctor";
@@ -105,8 +116,40 @@ async function createFullDoctorGrant(context: BrowserContext): Promise<void> {
   expect(response.status()).toBe(201);
 }
 
+async function resetSyntheticDemo(context: BrowserContext): Promise<void> {
+  const response = await context.request.post(`${passportBaseUrl}/api/demo/reset`, { data: {} });
+  expect(response.ok()).toBeTruthy();
+  await expect(response.json()).resolves.toMatchObject({
+    ok: true,
+    data: { restored: true, restoredRelationships: 2 },
+  });
+}
+
+async function connectOwnerPassportToGym(page: Page): Promise<void> {
+  await page.goto(`${passportBaseUrl}/sharing`, { waitUntil: "domcontentloaded" });
+  await expect.poll(() => activeModelContextToolNames(page)).toEqual(ownerSharingTools);
+  const invocation = invokeModelContextTool(page, "create_context_grant", {
+    recipient: "adaptive-gym",
+    scopes: ["gym.context.read", "gym.feedback.write"],
+    expiresInMinutes: 5,
+  });
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Share minimum context with Adaptive Gym",
+  });
+  await expect(confirmation).toContainText("gym.context.read, gym.feedback.write");
+  await expect(confirmation).toContainText("Not shared");
+  await confirmation.getByRole("button", { name: "Share with Gym" }).click();
+  expect(
+    parseToolSuccess<{ created: boolean; handoffStarted: boolean }>(await invocation),
+  ).toMatchObject({ created: true, handoffStarted: true });
+  await page.waitForURL(
+    (url) => url.origin === new URL(gymBaseUrl).origin && url.pathname === "/passport",
+  );
+  await expect(page.getByText("One-use grant redeemed", { exact: true })).toBeVisible();
+}
+
 test.describe("authenticated Passport WebMCP release journeys", () => {
-  test.describe.configure({ mode: "serial" });
+  test.describe.configure({ mode: "serial", timeout: 120_000 });
   test.skip(
     !runAuthenticated,
     "Requires RUN_AUTHENTICATED_E2E=true and a migrated, seeded synthetic environment; no auth or database behavior is mocked.",
@@ -220,10 +263,7 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           recipient: "adaptive-gym",
           scopes: ["gym.context.read", "gym.feedback.write"],
           expiresInMinutes: 5,
-        }).then(
-          (output) => ({ status: "fulfilled" as const, output }),
-          (error: unknown) => ({ status: "navigation-interrupted" as const, error }),
-        );
+        });
         const confirmation = owner.page.getByRole("alertdialog", {
           name: "Share minimum context with Adaptive Gym",
         });
@@ -249,33 +289,102 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         const confirmedExpiresAt = await confirmation
           .getByText("Expires at", { exact: true })
           .locator("..")
-          .locator("dd")
+          .locator("strong")
           .textContent();
         expect(confirmedExpiresAt).toBeTruthy();
 
-        const grantResponsePromise = owner.page.waitForResponse(
-          (response) =>
-            response.url() === `${passportBaseUrl}/api/context-grants` &&
-            response.request().method() === "POST",
-        );
-        await confirmation.getByRole("button", { name: "Share with Gym" }).click();
-        const grantResponse = await grantResponsePromise;
-        expect(grantResponse.status()).toBe(201);
-        const grantEnvelope = (await grantResponse.json()) as {
-          ok: true;
-          data: { exchangeUrl: string; expiresAt: string; scopes: string[] };
-          meta: { asOf: string };
+        type GrantResponseCapture = {
+          body: {
+            ok: true;
+            data: { exchangeUrl: string; expiresAt: string; scopes: string[] };
+            meta: { asOf: string };
+          };
+          status: number;
         };
-        const exchangeUrl = new URL(grantEnvelope.data.exchangeUrl);
-        expect(exchangeUrl.origin).toBe(new URL(gymBaseUrl).origin);
-        expect(grantEnvelope.data.scopes).toEqual(["gym.context.read", "gym.feedback.write"]);
-        expect(grantEnvelope.data.expiresAt).toBe(confirmedExpiresAt);
-        const remainingMs =
-          Date.parse(grantEnvelope.data.expiresAt) - Date.parse(grantEnvelope.meta.asOf);
-        expect(remainingMs).toBeGreaterThanOrEqual(4 * 60_000 + 55_000);
-        expect(remainingMs).toBeLessThanOrEqual(5 * 60_000);
-        const code = new URLSearchParams(exchangeUrl.hash.slice(1)).get("code");
+        let resolveGrantResponse!: (capture: GrantResponseCapture) => void;
+        let rejectGrantResponse!: (reason: unknown) => void;
+        const grantResponsePromise = new Promise<GrantResponseCapture>((resolve, reject) => {
+          resolveGrantResponse = resolve;
+          rejectGrantResponse = reject;
+        });
+        let releaseGrantResponse: () => void = () => undefined;
+        const grantResponseRelease = new Promise<void>((resolve) => {
+          releaseGrantResponse = resolve;
+        });
+        await owner.page.route(
+          `${passportBaseUrl}/api/context-grants`,
+          async (route) => {
+            try {
+              const response = await route.fetch();
+              const body = (await response.json()) as GrantResponseCapture["body"];
+              resolveGrantResponse({ body, status: response.status() });
+              await grantResponseRelease;
+              await route.fulfill({ response });
+            } catch (error) {
+              await route.abort().catch(() => undefined);
+              rejectGrantResponse(error);
+            }
+          },
+          { times: 1 },
+        );
+        const approveGrantPromise = confirmation
+          .getByRole("button", { name: "Share with Gym" })
+          .click();
+        let grantEnvelope!: GrantResponseCapture["body"];
+        let code: string | null = null;
+        let readyStatePage: Page | null = null;
+        try {
+          const grantResponse = await grantResponsePromise;
+          expect(grantResponse.status).toBe(201);
+          grantEnvelope = grantResponse.body;
+          const exchangeUrl = new URL(grantEnvelope.data.exchangeUrl);
+          expect(exchangeUrl.origin).toBe(new URL(gymBaseUrl).origin);
+          expect(grantEnvelope.data.scopes).toEqual(["gym.context.read", "gym.feedback.write"]);
+          expect(grantEnvelope.data.expiresAt).toBe(confirmedExpiresAt);
+          const remainingMs =
+            Date.parse(grantEnvelope.data.expiresAt) - Date.parse(grantEnvelope.meta.asOf);
+          expect(remainingMs).toBeGreaterThanOrEqual(4 * 60_000 + 55_000);
+          expect(remainingMs).toBeLessThanOrEqual(5 * 60_000);
+          code = new URLSearchParams(exchangeUrl.hash.slice(1)).get("code");
+          expect(code?.length).toBeGreaterThanOrEqual(32);
+
+          readyStatePage = await owner.context.newPage();
+          await installModelContextShim(readyStatePage);
+          await readyStatePage.goto(`${passportBaseUrl}/sharing`, {
+            waitUntil: "domcontentloaded",
+          });
+          const readyHandoff = readyStatePage
+            .getByRole("table", { name: "Gym handoffs" })
+            .locator("tbody tr")
+            .first();
+          await expect(readyHandoff).toContainText("Adaptive Gym");
+          await expect(readyHandoff.getByText("awaiting Gym", { exact: true })).toBeVisible();
+          await expect(readyHandoff.getByRole("button", { name: "Revoke" })).toBeVisible();
+          await expect(readyStatePage.getByText("1 live", { exact: true })).toBeVisible();
+        } finally {
+          releaseGrantResponse();
+          await readyStatePage?.close().catch(() => undefined);
+        }
+        await approveGrantPromise;
         expect(code?.length).toBeGreaterThanOrEqual(32);
+
+        expect(
+          parseToolSuccess<{
+            created: boolean;
+            recipient: string;
+            scopes: string[];
+            expiresAt: string;
+            containsClinicalRecords: boolean;
+            handoffStarted: boolean;
+          }>(await invocation),
+        ).toEqual({
+          created: true,
+          recipient: "adaptive-gym",
+          scopes: ["gym.context.read", "gym.feedback.write"],
+          expiresAt: grantEnvelope.data.expiresAt,
+          containsClinicalRecords: false,
+          handoffStarted: true,
+        });
 
         await owner.page.waitForURL(
           (url) => url.origin === new URL(gymBaseUrl).origin && url.pathname === "/passport",
@@ -283,7 +392,6 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
         await expect(owner.page.getByText("One-use grant redeemed", { exact: true })).toBeVisible();
         await expect(owner.page).toHaveURL(`${gymBaseUrl}/passport`);
         await expect(owner.page.getByText("Passport member", { exact: true })).toBeVisible();
-        await invocation;
 
         const replay = await request.post(`${gymBaseUrl}/api/context/redeem`, {
           data: { code },
@@ -293,7 +401,28 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           error: expect.stringMatching(/invalid|expired|revoked|already used/i),
         });
 
-        await owner.page.getByRole("button", { name: "Disconnect" }).click();
+        const connectedStatePage = await owner.context.newPage();
+        await installModelContextShim(connectedStatePage);
+        try {
+          await connectedStatePage.goto(`${passportBaseUrl}/sharing`, {
+            waitUntil: "domcontentloaded",
+          });
+          const connectedHandoff = connectedStatePage
+            .getByRole("table", { name: "Gym handoffs" })
+            .locator("tbody tr")
+            .first();
+          await expect(connectedHandoff.getByText("connected", { exact: true })).toBeVisible();
+          await expect(connectedStatePage.getByText("1 live", { exact: true })).toBeVisible();
+          await connectedHandoff.getByRole("button", { name: "Revoke" }).click();
+          await expect(connectedHandoff.getByText("revoked", { exact: true })).toBeVisible();
+          await expect(connectedStatePage.getByText("0 live", { exact: true })).toBeVisible();
+        } finally {
+          await connectedStatePage.close();
+        }
+
+        const revokedContext = await owner.context.request.get(`${gymBaseUrl}/api/context/current`);
+        expect(revokedContext.status()).toBe(401);
+        await owner.page.reload({ waitUntil: "domcontentloaded" });
         await expect(
           owner.page.getByRole("heading", { name: "Start from your own Passport." }),
         ).toBeVisible();
@@ -341,6 +470,115 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
       } finally {
         await createFullDoctorGrant(owner.context);
         await Promise.all([owner.context.close(), doctor.context.close()]);
+      }
+    });
+
+    test("@authenticated goal-only WebMCP request pays once and saves the exact routine to Passport", async ({
+      browser,
+    }) => {
+      test.skip(
+        !allowDemoReset || !allowAgentPayment,
+        "Requires ALLOW_SYNTHETIC_DEMO_RESET_E2E=true and ALLOW_SYNTHETIC_AGENT_PAYMENT_E2E=true for the isolated sandbox-payment canary.",
+      );
+      test.setTimeout(180_000);
+
+      const doctor = await signIn(browser, "doctor");
+      let owner: SignedInActor | null = null;
+      try {
+        await resetSyntheticDemo(doctor.context);
+        owner = await signIn(browser, "owner");
+        await connectOwnerPassportToGym(owner.page);
+        await owner.page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
+        await expect.poll(() => activeModelContextToolNames(owner!.page)).toEqual(gymSessionTools);
+
+        const offer = parseToolSuccess<{
+          amountMinor: number;
+          currency: string;
+          sandbox: boolean;
+          entitled: boolean;
+          supportedModes: string[];
+          tierBoundary: { free: string; paid: string };
+        }>(await invokeModelContextTool(owner.page, "get_routine_pro_offer", {}));
+        expect(offer).toMatchObject({
+          amountMinor: 499,
+          currency: "usd",
+          sandbox: true,
+          entitled: false,
+          tierBoundary: {
+            free: "Passport connection, context review, Gym profile, and equipment discovery",
+            paid: "Personalized routine creation and Passport saving",
+          },
+        });
+        expect(offer.supportedModes).toContain("agent_wallet");
+
+        const routineInvocation = invokeModelContextTool(
+          owner.page,
+          "create_personalized_routine",
+          { goal: naturalLanguageGoal },
+        );
+        const paymentConfirmation = owner.page.getByRole("alertdialog", {
+          name: "Approve Routine Pro sandbox payment?",
+        });
+        await expect(paymentConfirmation).toContainText("Free tier");
+        await expect(paymentConfirmation).toContainText("Paid tier");
+        await expect(paymentConfirmation).toContainText("$4.99 test USD");
+        await expect(paymentConfirmation).toContainText("Adaptive World demo agent");
+        await expect(paymentConfirmation).toContainText(naturalLanguageGoal);
+        await expect(paymentConfirmation).toContainText("low_impact_orientation");
+        await paymentConfirmation.getByRole("button", { name: "Approve agent payment" }).click();
+
+        const created = parseToolSuccess<{
+          created: boolean;
+          savedToPassport: boolean;
+          savedRoutineRef: string;
+          routine: { template: string };
+        }>(await routineInvocation);
+        expect(created).toMatchObject({
+          created: true,
+          savedToPassport: true,
+          routine: { template: "low_impact_orientation@1.0" },
+        });
+        expect(created.savedRoutineRef).toMatch(/^[0-9a-f-]{36}$/u);
+
+        const gymSession = await owner.context.request.get(`${gymBaseUrl}/api/session`);
+        expect(gymSession.ok()).toBeTruthy();
+        await expect(gymSession.json()).resolves.toMatchObject({
+          session: {
+            goal: naturalLanguageGoal,
+            templateId: "low_impact_orientation",
+            createdVia: "webmcp",
+          },
+        });
+
+        const savedRoutine = await owner.context.request.get(
+          `${passportBaseUrl}/api/saved-routines/${encodeURIComponent(created.savedRoutineRef)}`,
+        );
+        expect(savedRoutine.ok()).toBeTruthy();
+        await expect(savedRoutine.json()).resolves.toMatchObject({
+          ok: true,
+          data: {
+            routine: {
+              id: created.savedRoutineRef,
+              goal: naturalLanguageGoal,
+              templateId: "low_impact_orientation",
+              createdVia: "webmcp",
+            },
+          },
+        });
+
+        await owner.page.goto(
+          `${passportBaseUrl}/routines/${encodeURIComponent(created.savedRoutineRef)}`,
+          { waitUntil: "domcontentloaded" },
+        );
+        const goalRow = owner.page.getByText("Your stated goal", { exact: true }).locator("..");
+        await expect(goalRow).toContainText(naturalLanguageGoal);
+        await expect(owner.page.getByText("WebMCP", { exact: true })).toBeVisible();
+      } finally {
+        try {
+          await resetSyntheticDemo(doctor.context);
+        } finally {
+          await Promise.all([owner?.context.close(), doctor.context.close()]);
+        }
       }
     });
 

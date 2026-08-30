@@ -562,8 +562,7 @@
         {
           "functionName": "create_personalized_routine",
           "arguments": {
-            "templateId": "low_impact_orientation",
-            "paymentMode": "agent_wallet"
+            "goal": "Support lifelong health without bodybuilding-style muscle gain"
           }
         }
       ],
@@ -578,6 +577,8 @@
         "requiresHumanConfirmation": true,
         "requiredConfirmationFields": [
           "product",
+          "goal",
+          "template",
           "amount",
           "payer",
           "sandbox",

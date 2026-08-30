@@ -9,7 +9,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 2,
+  expect: { timeout: 15_000 },
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   use: {
     trace: "retain-on-failure",

@@ -101,6 +101,7 @@ test("Gym exposes only verified products and refuses context-free walkthrough cr
     headers: { origin: gymBaseUrl },
     data: {
       templateId: "first_visit_foundations",
+      goal: "Support long-term health with a sustainable routine",
       initiatedVia: "site-ui",
       quoteValidUntil: "2026-08-29T10:00:00.000Z",
       quoteDigest: "a".repeat(64),

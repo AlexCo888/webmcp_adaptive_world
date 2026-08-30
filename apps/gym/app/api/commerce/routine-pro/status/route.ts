@@ -39,6 +39,7 @@ export async function GET(request: Request) {
                   : ("Adaptive World demo agent" as const),
               canResume: ["created", "provider_pending"].includes(order.status),
               initialTemplateId: order.initialTemplateId,
+              initialGoal: order.initialGoal,
             }
           : {}),
         ...(routine.success ? { routine: routine.data } : {}),

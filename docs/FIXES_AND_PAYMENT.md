@@ -112,7 +112,8 @@ Input:
 
 ```ts
 {
-  templateId:
+  goal: string;
+  templateId?:
     | "first_visit_foundations"
     | "low_impact_orientation"
     | "accessible_equipment_tour";

@@ -179,16 +179,98 @@ export const facilityTemplates: readonly FacilityTemplate[] = [
   },
 ] as const;
 
+function searchText(values: readonly string[]): string {
+  return values
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLowerCase();
+}
+
+function includesAny(value: string, terms: readonly string[]): boolean {
+  return terms.some((term) => value.includes(term));
+}
+
+export function defaultRoutineGoal(profile: GymContextProjection): string {
+  const goals = profile.goals.slice(0, 3).join("; ");
+  return (goals || "Support long-term health with a balanced, sustainable routine").slice(0, 160);
+}
+
+/** Deterministic staff-template selection; no model invents exercise content. */
+export function recommendFacilityTemplate(
+  profile: GymContextProjection,
+  goal: string,
+): FacilityTemplate["id"] {
+  const requestedGoal = searchText([goal]);
+  const passportContext = searchText([
+    ...profile.goals,
+    ...profile.preferredActivities,
+    ...profile.accessibilityNeeds,
+  ]);
+  const accessTerms = [
+    "accessible",
+    "accessibility",
+    "wheelchair",
+    "limited mobility",
+    "adaptive equipment",
+    "accesible",
+    "silla de ruedas",
+  ] as const;
+  const sustainableTerms = [
+    "health",
+    "healthy",
+    "long-term",
+    "longevity",
+    "balanced",
+    "wellness",
+    "cardio",
+    "gentle",
+    "low impact",
+    "mobility",
+    "not bodybuilding",
+    "without bodybuilding",
+    "bodybuilder",
+    "fisicocultur",
+    "fisicocultor",
+    "salud",
+    "saludable",
+    "sin exagerar musculo",
+  ] as const;
+  const foundationTerms = [
+    "first visit",
+    "orientation",
+    "strength equipment",
+    "training floor",
+    "free weights",
+    "primera visita",
+    "equipo de fuerza",
+  ] as const;
+  if (profile.accessibilityNeeds.length > 0 || includesAny(requestedGoal, accessTerms)) {
+    return "accessible_equipment_tour";
+  }
+  // The person's current words choose among safe staff-authored options first;
+  // Passport goals and preferences provide the fallback when the request is broad.
+  if (includesAny(requestedGoal, sustainableTerms)) {
+    return "low_impact_orientation";
+  }
+  if (includesAny(requestedGoal, foundationTerms)) return "first_visit_foundations";
+  if (includesAny(passportContext, accessTerms)) return "accessible_equipment_tour";
+  if (includesAny(passportContext, sustainableTerms)) return "low_impact_orientation";
+  return "first_visit_foundations";
+}
+
 export function createGroundedSession({
   profile,
   equipment,
   templateId,
+  goal,
   createdVia,
   sessionId,
 }: {
   profile: GymContextProjection;
   equipment: Equipment[];
   templateId: FacilityTemplate["id"];
+  goal: string;
   createdVia: "site-ui" | "webmcp";
   sessionId: string;
 }): GeneratedSession {
@@ -202,12 +284,22 @@ export function createGroundedSession({
     return { station, item };
   });
   const contextSignals = [...profile.movementConsiderations, ...profile.accessibilityNeeds];
+  const requestedGoal = goal.trim();
+  const safetyNotes = [
+    ...profile.stopSignals,
+    ...profile.movementConsiderations,
+    ...profile.avoid,
+    "Ask Gym staff to confirm every first-use setup and stop whenever the setup feels wrong.",
+  ]
+    .map((note) => note.slice(0, 200))
+    .filter((note, index, notes) => note.length >= 2 && notes.indexOf(note) === index)
+    .slice(0, 8);
 
   return {
     id: sessionId,
     projectionId: profile.projectionId,
     title: template.name,
-    goal: template.bestFor,
+    goal: requestedGoal,
     templateId: template.id,
     templateVersion: template.version,
     createdVia,
@@ -222,13 +314,12 @@ export function createGroundedSession({
       instructions: station.instructions,
       adaptationReason: station.reason,
     })),
-    safetyNotes: [
-      ...profile.stopSignals.slice(0, 4),
-      "Ask Gym staff to confirm every first-use setup and stop whenever the setup feels wrong.",
-    ],
+    safetyNotes,
     decisionTrace: [
+      `Preserved the person's stated goal: ${requestedGoal}`,
       `Loaded ${template.id}@${template.version}, authored by ${template.staffAuthor}.`,
       `Read the active Gym-only projection from the server session; the request contained no Passport profile.`,
+      `Considered approved Passport goals: ${profile.goals.slice(0, 3).join("; ")}.`.slice(0, 240),
       `Verified all ${selected.length} station IDs against catalog ${equipmentCatalogVersion}.`,
       contextSignals.length
         ? `Kept ${contextSignals.length} approved movement/access signals visible for human review.`

@@ -117,6 +117,10 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
             </div>
             <div className="data-list">
               <div className="data-row">
+                <span>Your stated goal</span>
+                <strong>{routine.goal}</strong>
+              </div>
+              <div className="data-row">
                 <span>Template</span>
                 <strong>{routine.templateId}</strong>
               </div>

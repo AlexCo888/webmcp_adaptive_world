@@ -20,17 +20,17 @@ is a secondary authorization proof, not part of the timed path.
 
 ## Timed path
 
-| Time      | Scene and proof                                                                                                                                                                                               |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0:00–0:18 | Explain the problem: agents either guess from pages or receive too much personal context. State the boundary—public Gym understanding is free; personal action is permissioned.                               |
-| 0:18–0:45 | At Gym, invoke `get_gym_profile` and `search_equipment`. The existing catalog controls and cards visibly update before any Passport or payment.                                                               |
-| 0:45–1:08 | At Passport, ask for a five-minute Adaptive Gym handoff. Pause on the first-party review, approve it, and show what is excluded. Redeem the one-use fragment at Gym.                                          |
-| 1:08–1:28 | Invoke `get_active_context`, `get_routine_pro_offer`, then request `create_personalized_routine`. Show the exact $4.99 test USD confirmation: product, payer, sandbox mode, effect, and unchanged data scope. |
-| 1:28–1:48 | Approve **Adaptive World demo agent** payment. Show only a redacted 402 → credential → verified receipt state; never reveal capability, credential, key, receipt, wallet address, or provider payload.        |
-| 1:48–2:18 | The existing Session Planner canvas fills with the grounded routine and displays **Saved to Passport ✓**. No second agent-results UI appears.                                                                 |
-| 2:18–2:38 | Show template/catalog versions, decision trace, safety notes, and manufacturer provenance. Explain that a published template was selected; no diagnosis or treatment was generated.                           |
-| 2:38–2:52 | Open Passport → **Saved routines** and show the same owner-authorized record.                                                                                                                                 |
-| 2:52–2:58 | Close: free public understanding, minimum context, explicit approval, one sandbox entitlement, and no broader health access.                                                                                  |
+| Time      | Scene and proof                                                                                                                                                                                                                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:18 | Explain the problem: agents either guess from pages or receive too much personal context. State the boundary—public Gym understanding is free; personal action is permissioned.                                                                                                                                              |
+| 0:18–0:45 | At Gym, invoke `get_gym_profile` and `search_equipment`. The existing catalog controls and cards visibly update before any Passport or payment.                                                                                                                                                                              |
+| 0:45–1:08 | At Passport, ask for a five-minute Adaptive Gym handoff. Pause on the first-party review, approve it, and show what is excluded. Redeem the one-use fragment at Gym.                                                                                                                                                         |
+| 1:08–1:28 | Ask naturally: “Create a routine from my Passport for lifelong health without bodybuilding-style muscle gain.” Invoke `get_active_context`, `get_routine_pro_offer`, then `create_personalized_routine`. Show the exact goal, selected staff template, $4.99 test USD payer, sandbox mode, effect, and unchanged data scope. |
+| 1:28–1:48 | Approve **Adaptive World demo agent** payment. Show only a redacted 402 → credential → verified receipt state; never reveal capability, credential, key, receipt, wallet address, or provider payload.                                                                                                                       |
+| 1:48–2:18 | The existing Session Planner canvas fills with the grounded routine and displays **Saved to Passport ✓**. No second agent-results UI appears.                                                                                                                                                                                |
+| 2:18–2:38 | Show template/catalog versions, decision trace, safety notes, and manufacturer provenance. Explain that a published template was selected; no diagnosis or treatment was generated.                                                                                                                                          |
+| 2:38–2:52 | Open Passport → **Saved routines** and show the same owner-authorized record.                                                                                                                                                                                                                                                |
+| 2:52–2:58 | Close: free public understanding, minimum context, explicit approval, one sandbox entitlement, and no broader health access.                                                                                                                                                                                                 |
 
 Expected primary chain:
 
@@ -45,6 +45,12 @@ get_gym_profile
 The first two tools require neither payment nor Passport. The final mutation
 must pause on the application-owned confirmation. Declining must create no
 order, provider setup, budget reservation, entitlement, or routine.
+
+The model should pass the person’s sentence as `goal`. It may omit `templateId`;
+Gym then selects the best matching published template from the active minimum
+context. It may also omit `paymentMode`; the WebMCP flow selects the demo agent
+sandbox wallet when available and still pauses for exact first-party approval.
+The saved plan and decision trace must preserve that exact goal.
 
 ## Backup human-payer proof
 

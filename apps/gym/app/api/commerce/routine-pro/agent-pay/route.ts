@@ -23,6 +23,7 @@ import {
   createOrReuseRoutineProOrder,
   getPayableOrder,
   hasRoutineProEntitlement,
+  routineInputForOrder,
 } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
@@ -63,10 +64,11 @@ export async function POST(request: Request) {
       if (!(await hasRoutineProEntitlement(active.row.patientId))) {
         throw new CommerceError("FULFILLMENT_PENDING", true);
       }
+      const recoveredInput = routineInputForOrder(recoverable, parsed.data.goal);
       const routine = await createAndSavePersonalizedRoutine({
         active,
-        templateId: parsed.data.templateId,
-        initiatedVia: parsed.data.initiatedVia,
+        ...recoveredInput,
+        initiatedVia: recoverable.initiatedVia,
       });
       return success(
         {
@@ -100,6 +102,7 @@ export async function POST(request: Request) {
     const state = await createOrReuseRoutineProOrder({
       active,
       templateId: parsed.data.templateId,
+      goal: parsed.data.goal,
       paymentMode: "agent_wallet",
       initiatedVia: parsed.data.initiatedVia,
     });
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
       const routine = await createAndSavePersonalizedRoutine({
         active,
         templateId: parsed.data.templateId,
+        goal: parsed.data.goal,
         initiatedVia: parsed.data.initiatedVia,
       });
       return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);
@@ -119,10 +123,11 @@ export async function POST(request: Request) {
       if (!(await hasRoutineProEntitlement(active.row.patientId))) {
         throw new CommerceError("FULFILLMENT_PENDING", true);
       }
+      const paidInput = routineInputForOrder(order, parsed.data.goal);
       const routine = await createAndSavePersonalizedRoutine({
         active,
-        templateId: parsed.data.templateId,
-        initiatedVia: parsed.data.initiatedVia,
+        ...paidInput,
+        initiatedVia: order.initiatedVia,
       });
       return success(
         {
@@ -164,10 +169,11 @@ export async function POST(request: Request) {
     if (!(await hasRoutineProEntitlement(active.row.patientId))) {
       throw new CommerceError("FULFILLMENT_PENDING", true);
     }
+    const paidInput = routineInputForOrder(order, parsed.data.goal);
     const routine = await createAndSavePersonalizedRoutine({
       active,
-      templateId: parsed.data.templateId,
-      initiatedVia: parsed.data.initiatedVia,
+      ...paidInput,
+      initiatedVia: order.initiatedVia,
     });
     return success(
       {

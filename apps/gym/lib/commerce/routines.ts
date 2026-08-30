@@ -21,10 +21,12 @@ type SavedRow = {
 export async function createAndSavePersonalizedRoutine({
   active,
   templateId,
+  goal,
   initiatedVia,
 }: {
   active: ActiveGymSession;
   templateId: FacilityTemplate["id"];
+  goal: string;
   initiatedVia: "site-ui" | "webmcp";
 }): Promise<{ session: GeneratedSession; savedRoutineRef: string; reused: boolean }> {
   const patientId = active.row.patientId;
@@ -64,6 +66,9 @@ export async function createAndSavePersonalizedRoutine({
             throw new CommerceError("RECONCILIATION_REQUIRED");
           }
           const session = GeneratedSessionSchema.parse(existing.rows[0].plan);
+          if (session.goal !== goal.trim()) {
+            throw new CommerceError("ROUTINE_CONFLICT");
+          }
           await client.query(
             "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
             [active.row.id, canonicalExisting],
@@ -80,6 +85,7 @@ export async function createAndSavePersonalizedRoutine({
             profile: toPublicGymContext(active.stored, active.row.id),
             equipment: equipmentCatalog,
             templateId,
+            goal,
             createdVia: initiatedVia,
             sessionId: toPublicGymRoutineId(active.row.id),
           }),
@@ -122,6 +128,7 @@ export async function createAndSavePersonalizedRoutine({
               templateVersion: session.templateVersion,
               catalogVersion: session.catalogVersion,
               initiatedVia,
+              naturalLanguageGoal: true,
               healthFields: false,
             }),
           ],

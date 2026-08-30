@@ -47,14 +47,17 @@ flowchart TD
 
 ## Context handoff
 
-1. The owner requests Adaptive Gym use and reviews an allowlisted projection.
-2. Passport creates a random 256-bit one-use code and stores only its digest.
-3. The code expires in the requested 1–15 minute window and appears only in a
+1. Passport prepares the exact allowlisted projection and a short-lived signed
+   proof; the owner reviews those server-owned fields before approval.
+2. The creation API requires that proof and rejects changed or expired
+   preparations, so neither a human client nor WebMCP can bypass the review.
+3. Passport creates a random 256-bit one-use code and stores only its digest.
+4. The code expires in the requested 1–15 minute window and appears only in a
    URL fragment, which Gym removes immediately.
-4. Gym atomically consumes the code and creates an anonymous persisted session.
-5. Gym receives goals, preferences, capabilities, avoidances, stop signals,
+5. Gym atomically consumes the code and creates an anonymous persisted session.
+6. Gym receives goals, preferences, capabilities, avoidances, stop signals,
    purpose, provenance class, and expiry—never identity or clinical sources.
-6. Creation, redemption, denial, replay, expiry, and revocation generate
+7. Creation, redemption, denial, replay, expiry, and revocation generate
    redacted audit metadata.
 
 ## Free and Pro boundary
@@ -68,6 +71,12 @@ personalized routine generation through either the existing human UI or
 `create_personalized_routine`, then saves the same result to Passport. It does
 not grant additional health scopes. The generic sample walkthrough remains
 staff-authored and non-personalized.
+
+Routine requests preserve a bounded person-stated natural-language goal. Gym
+matches that goal and the active minimum projection to one published staff
+template, then records the goal, template version, catalog version, safety
+signals, and decision trace. A pending payment stores the goal and template as
+immutable order authority so a redirect or retry cannot silently change them.
 
 ## Confirmation and fulfillment
 

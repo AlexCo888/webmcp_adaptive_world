@@ -502,6 +502,7 @@ export const commerceOrders = pgTable(
     provider: commerceProviderEnum("provider"),
     initiatedVia: varchar("initiated_via", { length: 24 }).notNull(),
     initialTemplateId: varchar("initial_template_id", { length: 96 }).notNull(),
+    initialGoal: text("initial_goal"),
     amountMinor: integer("amount_minor").notNull(),
     currency: varchar("currency", { length: 12 }).notNull(),
     status: commerceOrderStatusEnum("status").notNull().default("created"),
@@ -551,6 +552,10 @@ export const commerceOrders = pgTable(
     check(
       "commerce_orders_currency_lower_check",
       sql`${table.currency} = lower(${table.currency})`,
+    ),
+    check(
+      "commerce_orders_initial_goal_check",
+      sql`${table.initialGoal} IS NULL OR (${table.initialGoal} = btrim(${table.initialGoal}) AND length(${table.initialGoal}) BETWEEN 2 AND 160)`,
     ),
     check(
       "commerce_orders_capability_pair_check",

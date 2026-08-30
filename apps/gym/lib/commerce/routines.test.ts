@@ -94,6 +94,7 @@ describe("saved Routine Pro reuse", () => {
       createAndSavePersonalizedRoutine({
         active: active as never,
         templateId: "accessible_equipment_tour",
+        goal: "Review accessible station setup",
         initiatedVia: "site-ui",
       }),
     ).resolves.toEqual({
@@ -110,6 +111,38 @@ describe("saved Routine Pro reuse", () => {
       "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
       [active.row.id, canonicalPlan],
     );
+    expect(statements.some((statement) => statement.includes("INSERT INTO saved_routines"))).toBe(
+      false,
+    );
+  });
+
+  it("does not reuse a saved routine under a different confirmed goal", async () => {
+    const canonicalPlan = canonicalizeJson(plan);
+    const planHash = await sha256Hex(canonicalPlan);
+    mocks.query.mockImplementation((statement: string) => {
+      if (statement.includes("FROM entitlement_grants")) {
+        return Promise.resolve({ rowCount: 1, rows: [{ id: "entitlement-1" }] });
+      }
+      if (statement.includes("FROM saved_routines")) {
+        return Promise.resolve({
+          rowCount: 1,
+          rows: [{ id: "saved-routine-1", plan, plan_hash: planHash }],
+        });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [{ id: active.row.id }] });
+    });
+
+    await expect(
+      createAndSavePersonalizedRoutine({
+        active: active as never,
+        templateId: "accessible_equipment_tour",
+        goal: "Train for a different outcome",
+        initiatedVia: "webmcp",
+      }),
+    ).rejects.toMatchObject({ code: "ROUTINE_CONFLICT" });
+
+    const statements = mocks.query.mock.calls.map(([statement]) => String(statement));
+    expect(statements.some((statement) => statement.includes("UPDATE gym_sessions"))).toBe(false);
     expect(statements.some((statement) => statement.includes("INSERT INTO saved_routines"))).toBe(
       false,
     );

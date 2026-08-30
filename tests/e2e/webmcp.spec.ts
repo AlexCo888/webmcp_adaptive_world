@@ -17,6 +17,7 @@ const sessionTools = [
   "get_routine_pro_offer",
   "search_equipment",
 ];
+const naturalLanguageGoal = "Support lifelong health without bodybuilding-style muscle gain";
 
 const contextProjection = {
   projectionId: "gym_session_e2e",
@@ -30,7 +31,7 @@ const contextProjection = {
   movementConsiderations: ["Prefer gradual progression"],
   avoid: [],
   stopSignals: ["Stop for chest pain"],
-  accessibilityNeeds: ["Prefer seated setup"],
+  accessibilityNeeds: [],
   sourceCategories: ["self_reported", "clinician_guidance"],
   issuedAt: "2026-08-29T09:00:00.000Z",
   expiresAt: "2026-08-29T10:00:00.000Z",
@@ -53,7 +54,7 @@ const generatedRoutine = {
   id: "session_e2e_routine",
   projectionId: contextProjection.projectionId,
   title: "Low-impact first visit",
-  goal: "A gradual, equipment-grounded introduction",
+  goal: naturalLanguageGoal,
   templateId: "low_impact_orientation",
   templateVersion: "1.0",
   createdVia: "webmcp",
@@ -116,12 +117,21 @@ async function installRoutineApiStubs(page: Page): Promise<Array<Record<string, 
     }),
   );
   await page.route("**/api/commerce/routine-pro/agent-pay", async (route) => {
-    agentPayBodies.push((await route.request().postDataJSON()) as Record<string, unknown>);
+    const requestBody = (await route.request().postDataJSON()) as Record<string, unknown>;
+    agentPayBodies.push(requestBody);
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         ok: true,
-        data: { session: generatedRoutine, savedRoutineRef: "routine-e2e-1" },
+        data: {
+          session: {
+            ...generatedRoutine,
+            goal: requestBody.goal,
+            templateId: requestBody.templateId,
+            createdVia: requestBody.initiatedVia,
+          },
+          savedRoutineRef: "routine-e2e-1",
+        },
         requestId: "request-e2e-agent-pay",
       }),
     });
@@ -323,14 +333,17 @@ test("declining the exact Routine Pro confirmation makes no payment request", as
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
 
   const invocation = invokeModelContextTool(page, "create_personalized_routine", {
-    templateId: "low_impact_orientation",
-    paymentMode: "agent_wallet",
+    goal: naturalLanguageGoal,
   });
   const declined = expect(invocation).rejects.toThrow("The action was declined.");
 
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("$4.99 test USD");
   await expect(dialog).toContainText("Adaptive World demo agent");
+  await expect(dialog).toContainText(naturalLanguageGoal);
+  await expect(dialog).toContainText("Passport connection, context review, Gym profile");
+  await expect(dialog.getByText("Free tier", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Paid tier", { exact: true })).toBeVisible();
   await expect(dialog).toContainText("Unchanged; no additional health fields");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
@@ -343,17 +356,31 @@ test("approving Routine Pro executes once and fills the existing planner", async
   await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
 
+  const offerOutput = await invokeModelContextTool(page, "get_routine_pro_offer", {});
+  expect(JSON.parse(String(offerOutput))).toMatchObject({
+    ok: true,
+    data: {
+      amountMinor: 499,
+      currency: "usd",
+      sandbox: true,
+      tierBoundary: {
+        free: "Passport connection, context review, Gym profile, and equipment discovery",
+        paid: "Personalized routine creation and Passport saving",
+      },
+    },
+  });
+
   const invocation = invokeModelContextTool(page, "create_personalized_routine", {
-    templateId: "low_impact_orientation",
-    paymentMode: "agent_wallet",
+    goal: naturalLanguageGoal,
   });
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByRole("heading")).toHaveText("Create and save your personalized routine");
+  await expect(dialog.getByRole("heading")).toHaveText("Approve Routine Pro sandbox payment?");
   await dialog.getByRole("button", { name: "Approve agent payment" }).click();
   const output = await invocation;
 
   expect(agentPayBodies).toHaveLength(1);
   expect(agentPayBodies[0]).toEqual({
+    goal: naturalLanguageGoal,
     templateId: "low_impact_orientation",
     paymentMode: "agent_wallet",
     initiatedVia: "webmcp",
@@ -366,6 +393,47 @@ test("approving Routine Pro executes once and fills the existing planner", async
   });
   await expect(page.getByRole("heading", { name: generatedRoutine.title })).toBeVisible();
   await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
+});
+
+test("the human planner matches the same natural-language goal before explicit payment", async ({
+  page,
+}) => {
+  const agentPayBodies = await installRoutineApiStubs(page);
+  await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
+
+  const goalField = page.locator("#routine-goal");
+  await expect(goalField).toBeEnabled();
+  await goalField.fill(naturalLanguageGoal);
+  const matchedTemplate = page.getByRole("radio", {
+    name: /Low-impact cardio & guided strength/u,
+  });
+  await expect(matchedTemplate).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("button", { name: /Build my personalized routine/u }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("heading")).toHaveText("Approve Routine Pro sandbox payment?");
+  await expect(dialog.getByText("Free tier", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Paid tier", { exact: true })).toBeVisible();
+  await expect(dialog).toContainText("$4.99 test USD");
+  await expect(dialog).toContainText("Sandbox — no real funds");
+  await expect(dialog).toContainText(naturalLanguageGoal);
+  await expect(dialog).toContainText("low_impact_orientation");
+
+  await dialog.getByRole("radio", { name: "Adaptive World demo agent" }).check();
+  await dialog.getByRole("button", { name: "Approve agent payment" }).click();
+
+  await expect(page.getByRole("heading", { name: generatedRoutine.title })).toBeVisible();
+  await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
+  expect(agentPayBodies).toEqual([
+    {
+      goal: naturalLanguageGoal,
+      templateId: "low_impact_orientation",
+      paymentMode: "agent_wallet",
+      initiatedVia: "site-ui",
+      quoteValidUntil: routineProOffer.quoteValidUntil,
+      quoteDigest: routineProOffer.quoteDigest,
+    },
+  ]);
 });
 
 test("a cancelled human return exposes one locked resume path with its payer", async ({ page }) => {
@@ -383,6 +451,7 @@ test("a cancelled human return exposes one locked resume path with its payer", a
           payerLabel: "Human test checkout",
           canResume: true,
           initialTemplateId: "first_visit_foundations",
+          initialGoal: naturalLanguageGoal,
         },
         requestId: "request-e2e-status",
       }),
@@ -399,7 +468,7 @@ test("a cancelled human return exposes one locked resume path with its payer", a
   await page.getByRole("button", { name: "Resume human test checkout" }).click();
 
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByRole("heading")).toHaveText("Resume your existing payment");
+  await expect(dialog.getByRole("heading")).toHaveText("Resume your existing sandbox payment?");
   await expect(dialog.getByText("Human test checkout", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Resume secure test checkout" })).toBeVisible();
   await expect(dialog.getByRole("radio")).toHaveCount(0);

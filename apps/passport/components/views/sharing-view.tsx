@@ -1,15 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PassportScope } from "@adaptive-world/contracts";
 import { Icon } from "@/components/icon";
 import { PageHeading, PortalShell } from "@/components/shell";
-import {
-  GYM_CONTEXT_PURPOSE,
-  GYM_CONTEXT_SCOPES,
-  gymProjectionInput,
-  preferredMinutesFromProjection,
-} from "@/lib/gym-projection";
+import type { PreparedGymContextGrant } from "@/lib/context-grant-contract";
+import { GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 import { usePortal } from "@/lib/portal-context";
 
 const scopeOptions: Array<{ value: PassportScope; label: string; note: string }> = [
@@ -42,9 +38,31 @@ function formatDate(value: string) {
   );
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function gymHandoffStatus(status: "ready" | "connected" | "expired" | "revoked") {
+  if (status === "ready") return "awaiting Gym";
+  return status;
+}
+
 export function SharingView() {
-  const { patient, grants, revokeGrant, createDoctorAccessGrant, createGymContextGrant } =
-    usePortal();
+  const {
+    patient,
+    grants,
+    gymHandoffs,
+    revokeGrant,
+    revokeGymHandoff,
+    prepareGymContextGrant,
+    createDoctorAccessGrant,
+    createGymContextGrant,
+  } = usePortal();
   if (!patient) throw new Error("The owner Passport is unavailable.");
   const [showCreate, setShowCreate] = useState(false);
   const [recipient, setRecipient] = useState<"doctor" | "gym">("doctor");
@@ -52,8 +70,42 @@ export function SharingView() {
   const [days, setDays] = useState(30);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preparedGymGrant, setPreparedGymGrant] = useState<PreparedGymContextGrant | null>(null);
+  const [preparingGymGrant, setPreparingGymGrant] = useState(false);
+  const [preparationRevision, setPreparationRevision] = useState(0);
   const patientGrants = grants.filter((grant) => grant.passportId === patient.id);
-  const gymProjection = gymProjectionInput(patient);
+  const activeGymHandoffs = gymHandoffs.filter(
+    (handoff) => handoff.status === "ready" || handoff.status === "connected",
+  );
+
+  useEffect(() => {
+    if (!showCreate || recipient !== "gym") {
+      setPreparedGymGrant(null);
+      setPreparingGymGrant(false);
+      return;
+    }
+    const controller = new AbortController();
+    setPreparedGymGrant(null);
+    setPreparingGymGrant(true);
+    setError(null);
+    void prepareGymContextGrant(5, controller.signal)
+      .then((prepared) => {
+        if (!controller.signal.aborted) setPreparedGymGrant(prepared);
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "The live Gym projection could not be prepared.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPreparingGymGrant(false);
+      });
+    return () => controller.abort();
+  }, [preparationRevision, prepareGymContextGrant, recipient, showCreate]);
 
   const toggleScope = (scope: PassportScope) =>
     setSelectedScopes((current) =>
@@ -64,11 +116,17 @@ export function SharingView() {
     setPending(true);
     setError(null);
     try {
-      if (recipient === "gym") await createGymContextGrant(5);
-      else await createDoctorAccessGrant(scopes, days);
+      if (recipient === "gym") {
+        if (!preparedGymGrant) throw new Error("Review the live Gym projection before approval.");
+        await createGymContextGrant(5, undefined, preparedGymGrant.preparationToken);
+      } else await createDoctorAccessGrant(scopes, days);
       if (recipient === "doctor") setShowCreate(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The permission could not be created.");
+      if (recipient === "gym") {
+        setPreparedGymGrant(null);
+        setPreparationRevision((current) => current + 1);
+      }
       setPending(false);
     }
   };
@@ -96,7 +154,9 @@ export function SharingView() {
               </p>
             </div>
             <span className="pill">
-              {patientGrants.filter((grant) => grant.status === "active").length} active
+              {patientGrants.filter((grant) => grant.status === "active").length +
+                activeGymHandoffs.length}{" "}
+              active
             </span>
           </div>
           {patientGrants.length ? (
@@ -178,6 +238,84 @@ export function SharingView() {
               </button>
             </div>
           )}
+          <div style={{ borderTop: "1px solid var(--line)", marginTop: 24, paddingTop: 24 }}>
+            <div className="card-header">
+              <div>
+                <h3>Gym handoffs</h3>
+                <p className="card-subtitle">
+                  Live one-use application permissions and their resulting Gym sessions
+                </p>
+              </div>
+              <span className="pill">{activeGymHandoffs.length} live</span>
+            </div>
+            {gymHandoffs.length ? (
+              <div className="table-wrap">
+                <table className="data-table" aria-label="Gym handoffs">
+                  <thead>
+                    <tr>
+                      <th>Recipient</th>
+                      <th>Approved scopes</th>
+                      <th>Expires</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gymHandoffs.map((handoff) => {
+                      const live = handoff.status === "ready" || handoff.status === "connected";
+                      return (
+                        <tr key={handoff.id}>
+                          <td>
+                            <div className="person">
+                              <div
+                                className="avatar"
+                                style={{ "--avatar": "#4d5ca7" } as React.CSSProperties}
+                              >
+                                <Icon name="settings" width="14" />
+                              </div>
+                              <div>
+                                <strong>Adaptive Gym</strong>
+                                <small>{handoff.purpose}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="scope-tags">
+                              {handoff.scopes.map((scope) => (
+                                <span key={scope} className="scope-tag">
+                                  {scope}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td>{formatDateTime(handoff.expiresAt)}</td>
+                          <td>
+                            <span className={`pill ${live ? "" : "neutral"}`}>
+                              {gymHandoffStatus(handoff.status)}
+                            </span>
+                          </td>
+                          <td>
+                            {live ? (
+                              <button
+                                className="button danger small"
+                                onClick={() => void revokeGymHandoff(handoff.id)}
+                              >
+                                Revoke
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="card-subtitle">
+                No Gym handoff has been created yet. Its live state will appear here after approval.
+              </p>
+            )}
+          </div>
         </section>
         <aside className="stack">
           <section className="card">
@@ -290,85 +428,18 @@ export function SharingView() {
                   <div className="progressive-note">
                     <Icon name="shield" width="17" />
                     <span>
-                      This is the complete field-level preview for Adaptive Gym. The server fills
-                      the exact issue and expiry timestamps on approval; payment adds no data or
-                      scopes. The one-use exchange expires five minutes later.
+                      This live, server-prepared preview comes from the current Passport. Approval
+                      is bound to these exact fields and timestamps; payment adds no data or scopes.
                     </span>
                   </div>
-                  <div className="data-list" aria-label="Adaptive Gym projection field preview">
-                    <div className="data-row">
-                      <span>Grant purpose</span>
-                      <strong>{GYM_CONTEXT_PURPOSE}</strong>
+                  {preparingGymGrant ? (
+                    <div className="progressive-note" role="status">
+                      <Icon name="clock" width="17" />
+                      <span>Preparing the current minimum Gym projection…</span>
                     </div>
-                    <div className="data-row">
-                      <span>Granted scopes</span>
-                      <strong>{GYM_CONTEXT_SCOPES.join(", ")}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Projection purpose</span>
-                      <strong>adaptive_gym_session</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Subject alias</span>
-                      <strong>Passport member</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Anonymous projection reference</span>
-                      <strong>Assigned after one-use redemption</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Goals</span>
-                      <strong>{gymProjection.goals?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Experience</span>
-                      <strong>{gymProjection.experienceLevel}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Preferred session</span>
-                      <strong>{preferredMinutesFromProjection(gymProjection)} minutes</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Preferred activities</span>
-                      <strong>{gymProjection.preferredActivities?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Functional capabilities</span>
-                      <strong>{gymProjection.functionalCapabilities?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Movement considerations</span>
-                      <strong>{gymProjection.movementConsiderations?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Avoid</span>
-                      <strong>{gymProjection.avoid?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Stop signals</span>
-                      <strong>{gymProjection.stopSignals?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Accessibility needs</span>
-                      <strong>{gymProjection.accessibilityNeeds?.join("; ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Provenance classes</span>
-                      <strong>{gymProjection.sourceCategories?.join(", ") || "None"}</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Issued at</span>
-                      <strong>Server timestamp set on approval</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Expires at</span>
-                      <strong>Exactly five minutes after issue</strong>
-                    </div>
-                    <div className="data-row">
-                      <span>Synthetic</span>
-                      <strong>Yes</strong>
-                    </div>
-                  </div>
+                  ) : preparedGymGrant ? (
+                    <GymProjectionPreview prepared={preparedGymGrant} />
+                  ) : null}
                   <div className="progressive-note">
                     <Icon name="info" width="17" />
                     <span>
@@ -405,7 +476,11 @@ export function SharingView() {
               </button>
               <button
                 className="button primary"
-                disabled={pending || (recipient === "doctor" && selectedScopes.length === 0)}
+                disabled={
+                  pending ||
+                  (recipient === "doctor" && selectedScopes.length === 0) ||
+                  (recipient === "gym" && !preparedGymGrant)
+                }
                 onClick={submit}
               >
                 <Icon name="shield" width="14" />
@@ -420,5 +495,39 @@ export function SharingView() {
         </div>
       ) : null}
     </PortalShell>
+  );
+}
+
+function GymProjectionPreview({ prepared }: { prepared: PreparedGymContextGrant }) {
+  const projection = prepared.projection;
+  const rows: Array<[string, string]> = [
+    ["Grant purpose", prepared.purpose],
+    ["Granted scopes", prepared.scopes.join(", ")],
+    ["Projection purpose", projection.purpose],
+    ["Subject alias", projection.subjectAlias],
+    ["Anonymous projection reference", projection.projectionReference],
+    ["Goals", projection.goals.join("; ") || "None"],
+    ["Experience", projection.experienceLevel],
+    ["Preferred session", `${projection.preferredSessionMinutes} minutes`],
+    ["Preferred activities", projection.preferredActivities.join("; ") || "None"],
+    ["Functional capabilities", projection.functionalCapabilities.join("; ") || "None"],
+    ["Movement considerations", projection.movementConsiderations.join("; ") || "None"],
+    ["Avoid", projection.avoid.join("; ") || "None"],
+    ["Stop signals", projection.stopSignals.join("; ") || "None"],
+    ["Accessibility needs", projection.accessibilityNeeds.join("; ") || "None"],
+    ["Provenance classes", projection.sourceCategories.join(", ") || "None"],
+    ["Issued at", projection.issuedAt],
+    ["Expires at", projection.expiresAt],
+    ["Synthetic", projection.synthetic ? "Yes" : "No"],
+  ];
+  return (
+    <div className="data-list" aria-label="Adaptive Gym projection field preview">
+      {rows.map(([label, value]) => (
+        <div className="data-row" key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -146,6 +146,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "goal": { "type": "string", "minLength": 2, "maxLength": 160 },
             "templateId": {
               "enum": [
                 "first_visit_foundations",
@@ -158,7 +159,7 @@
               "enum": ["human_checkout", "agent_wallet"]
             }
           },
-          "required": ["templateId"]
+          "required": ["goal"]
         },
         "record_session_feedback": {
           "type": "object",

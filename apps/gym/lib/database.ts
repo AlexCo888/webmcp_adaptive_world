@@ -1,4 +1,4 @@
-import { createDatabase } from "@adaptive-world/db";
+import { createDatabase, createTransactionalDatabase } from "@adaptive-world/db";
 
 const buildOnly = process.env.NEXT_PHASE === "phase-production-build" || process.env.CI === "true";
 
@@ -12,6 +12,9 @@ const globalForDatabase = globalThis as typeof globalThis & {
   adaptiveGymDatabase?: ReturnType<typeof createDatabase>;
 };
 
-export const db = globalForDatabase.adaptiveGymDatabase ?? createDatabase(databaseUrl());
+const resolvedDatabaseUrl = databaseUrl();
+
+export const db = globalForDatabase.adaptiveGymDatabase ?? createDatabase(resolvedDatabaseUrl);
+export const transactionalDb = createTransactionalDatabase(resolvedDatabaseUrl);
 
 if (process.env.NODE_ENV !== "production") globalForDatabase.adaptiveGymDatabase = db;
