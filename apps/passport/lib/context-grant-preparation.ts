@@ -21,6 +21,7 @@ import {
   type PreparedGymContextGrant,
 } from "./context-grant-contract";
 import { GYM_CONTEXT_PURPOSE, GYM_CONTEXT_SCOPES, gymProjectionInput } from "./gym-projection";
+import { parsePersistedDigitalPassport } from "./persisted-passport";
 
 const PREPARATION_ISSUER = "adaptive-world-passport";
 const PREPARATION_AUDIENCE = "adaptive-world-context-grant";
@@ -82,7 +83,7 @@ export async function prepareLockedGymContextGrant(
   if (!lockedRow) return { kind: "not_found" };
   const lockedPatient = z.object({ id: z.string().uuid(), profile: z.unknown() }).parse(lockedRow);
 
-  const passport = DigitalPassportSchema.parse(lockedPatient.profile);
+  const passport = parsePersistedDigitalPassport(lockedPatient.profile);
   const verifiedPreparation = input.preparationToken
     ? await verifyPreparedGymContextGrant({
         passport,

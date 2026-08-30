@@ -7,7 +7,7 @@ Neon migration connection:
 pnpm --filter @adaptive-world/db migrate
 ```
 
-The current journal ends at `0008_patient_lock_order.sql`. Provisioning
+The current journal ends at `0009_functional_source_category.sql`. Provisioning
 must then:
 
 1. Create a non-owner runtime role.

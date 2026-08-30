@@ -8,7 +8,6 @@ import {
 } from "@adaptive-world/db/schema";
 import {
   AccessGrantSchema,
-  DigitalPassportSchema,
   type AccessGrant,
   type DigitalPassport,
 } from "@adaptive-world/contracts";
@@ -18,6 +17,7 @@ import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { db } from "./database";
 import { isDemoResetOperator } from "./demo-reset-authorization";
+import { parsePersistedDigitalPassport } from "./persisted-passport";
 import { listSavedRoutines, type SavedRoutineSummary } from "./saved-routines";
 
 export type PortalActor = {
@@ -227,7 +227,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
       .where(eq(patients.ownerUserId, actor.id))
       .limit(1);
     if (!owned) throw new Error("No Passport is linked to this account.");
-    const passport = DigitalPassportSchema.parse(owned.profile);
+    const passport = parsePersistedDigitalPassport(owned.profile);
     const [grantRows, eventRows, guidanceRows, routineRows] = await Promise.all([
       db.select().from(accessGrants).where(eq(accessGrants.patientId, owned.id)),
       db
@@ -309,7 +309,7 @@ export async function loadPortalBootstrap(actor: PortalActor): Promise<PortalBoo
     }
   >();
   for (const { patient, grant } of rows) {
-    const passport = DigitalPassportSchema.parse(patient.profile);
+    const passport = parsePersistedDigitalPassport(patient.profile);
     const existing = grouped.get(passport.id) ?? {
       passport,
       grants: [],

@@ -10,6 +10,10 @@ const patientLockMigrationUrl = new URL(
   "../migrations/0008_patient_lock_order.sql",
   import.meta.url,
 );
+const functionalSourceCategoryMigrationUrl = new URL(
+  "../migrations/0009_functional_source_category.sql",
+  import.meta.url,
+);
 
 describe("Adaptive Routine Pro migration safeguards", () => {
   it("binds each budget reservation to the immutable order amount", async () => {
@@ -76,5 +80,14 @@ describe("Adaptive Routine Pro migration safeguards", () => {
     expect(patientLock).toBeGreaterThan(-1);
     expect(grantClaim).toBeGreaterThan(patientLock);
     expect(migration).toContain("AND patient_id = target_patient_id");
+  });
+
+  it("backfills only missing functional provenance on synthetic demo profiles", async () => {
+    const migration = await readFile(functionalSourceCategoryMigrationUrl, "utf8");
+
+    expect(migration).toContain("to_jsonb('self_reported'::text)");
+    expect(migration).toContain("synthetic_demo = true");
+    expect(migration).toContain("jsonb_typeof(profile->'functional') = 'object'");
+    expect(migration).toContain("NOT (profile->'functional' ? 'sourceCategory')");
   });
 });

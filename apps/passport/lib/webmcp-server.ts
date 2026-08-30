@@ -1,8 +1,4 @@
-import {
-  DigitalPassportSchema,
-  type DigitalPassport,
-  type PassportScope,
-} from "@adaptive-world/contracts";
+import { type DigitalPassport, type PassportScope } from "@adaptive-world/contracts";
 import {
   accessGrants,
   auditEvents,
@@ -14,6 +10,7 @@ import { z } from "zod";
 import { ContextGrantToolInputSchema } from "./context-grant-contract";
 import { prepareGymContextGrant } from "./context-grant-preparation";
 import { db } from "./database";
+import { parsePersistedDigitalPassport } from "./persisted-passport";
 import type { ApiErrorCode } from "./api";
 import type { PortalActor } from "./session";
 
@@ -162,7 +159,7 @@ async function ownedPassport(
     .where(eq(patients.ownerUserId, actor.id))
     .limit(1);
   if (!row) throw new PassportWebMcpError("NOT_FOUND", "Passport not found.", 404);
-  return { rowId: row.id, passport: DigitalPassportSchema.parse(row.profile) };
+  return { rowId: row.id, passport: parsePersistedDigitalPassport(row.profile) };
 }
 
 async function authorizedDoctorPassport(
@@ -194,7 +191,7 @@ async function authorizedDoctorPassport(
       404,
     );
   }
-  return { rowId: row.id, passport: DigitalPassportSchema.parse(row.profile) };
+  return { rowId: row.id, passport: parsePersistedDigitalPassport(row.profile) };
 }
 
 export async function executePassportWebMcp(
@@ -272,7 +269,7 @@ export async function executePassportWebMcp(
         .limit(100);
       const deduplicated = new Map<string, ReturnType<typeof doctorPassportSummary>>();
       for (const row of rows) {
-        const passport = DigitalPassportSchema.parse(row.profile);
+        const passport = parsePersistedDigitalPassport(row.profile);
         if (!deduplicated.has(passport.id)) {
           deduplicated.set(passport.id, doctorPassportSummary(passport, now));
         }
