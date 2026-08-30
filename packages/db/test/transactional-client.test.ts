@@ -10,6 +10,13 @@ describe("transaction-capable database client", () => {
     expect(first.options.max).toBe(5);
   });
 
+  it("reuses the same pool after making a legacy TLS alias explicit", () => {
+    const legacyUrl = "postgresql://test:test@database.example.test/adaptive_world?sslmode=require";
+    const explicitUrl =
+      "postgresql://test:test@database.example.test/adaptive_world?sslmode=verify-full";
+    expect(createTransactionalPool(legacyUrl)).toBe(createTransactionalPool(explicitUrl));
+  });
+
   it("backs Drizzle with the same pool and exposes transaction support", () => {
     const databaseUrl = "postgresql://test:test@127.0.0.1:5432/adaptive_world_drizzle_test";
     const pool = createTransactionalPool(databaseUrl);

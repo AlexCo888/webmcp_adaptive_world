@@ -1,12 +1,10 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
+import { normalizePostgresConnectionUrl } from "./connection-url";
 
 export function createDatabase(databaseUrl: string) {
-  if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://")) {
-    throw new TypeError("A PostgreSQL connection URL is required");
-  }
-  return drizzle({ client: neon(databaseUrl), schema });
+  return drizzle({ client: neon(normalizePostgresConnectionUrl(databaseUrl)), schema });
 }
 
 export type Database = ReturnType<typeof createDatabase>;

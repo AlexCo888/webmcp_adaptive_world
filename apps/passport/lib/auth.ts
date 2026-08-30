@@ -1,3 +1,4 @@
+import { normalizePostgresConnectionUrl } from "@adaptive-world/db";
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 
@@ -10,9 +11,11 @@ function requiredEnvironment(name: string, buildFallback: string): string {
   throw new Error(`${name} is required at runtime`);
 }
 
-const databaseUrl = requiredEnvironment(
-  "DATABASE_URL",
-  "postgresql://build:build@127.0.0.1:5432/adaptive_world_build",
+const databaseUrl = normalizePostgresConnectionUrl(
+  requiredEnvironment(
+    "DATABASE_URL",
+    "postgresql://build:build@127.0.0.1:5432/adaptive_world_build",
+  ),
 );
 
 const globalForAuth = globalThis as typeof globalThis & { adaptiveAuthPool?: Pool };
