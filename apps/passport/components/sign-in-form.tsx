@@ -113,6 +113,7 @@ export function SignInForm() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={!interactive || pending}
               required
             />
           </label>
@@ -123,6 +124,7 @@ export function SignInForm() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              disabled={!interactive || pending}
               required
               minLength={12}
             />
