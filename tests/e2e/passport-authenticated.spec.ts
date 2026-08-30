@@ -55,23 +55,50 @@ type PassportShare = {
 
 async function signIn(browser: Browser, role: DemoRole): Promise<SignedInActor> {
   const context = await browser.newContext();
-  const page = await context.newPage();
-  await installModelContextShim(page);
-  await page.goto(`${passportBaseUrl}/sign-in`, { waitUntil: "domcontentloaded" });
-  await page
-    .getByLabel("Email")
-    .fill(role === "owner" ? "mateo.demo@adaptiveworld.test" : "elena.vargas@adaptiveworld.test");
-  await page.getByLabel("Password").fill(demoPassword);
+  try {
+    const page = await context.newPage();
+    await installModelContextShim(page);
+    await page.goto(`${passportBaseUrl}/sign-in`, { waitUntil: "domcontentloaded" });
+    await page
+      .getByLabel("Email")
+      .fill(role === "owner" ? "mateo.demo@adaptiveworld.test" : "elena.vargas@adaptiveworld.test");
+    await page.getByLabel("Password").fill(demoPassword);
 
-  await Promise.all([
-    page.waitForURL((url) =>
-      role === "owner"
-        ? url.origin === new URL(passportBaseUrl).origin && url.pathname === "/"
-        : url.origin === new URL(passportBaseUrl).origin && url.pathname === "/doctor",
-    ),
-    page.getByRole("button", { name: "Sign in securely" }).click(),
-  ]);
-  return { context, page };
+    const authEndpoint = new URL("/api/auth/sign-in/email", passportBaseUrl).toString();
+    const destinationPath = role === "owner" ? "/" : "/doctor";
+    const submit = page.getByRole("button", { name: "Sign in securely" });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const responsePromise = page.waitForResponse(
+        (response) => response.url() === authEndpoint && response.request().method() === "POST",
+      );
+      await submit.click();
+      const response = await responsePromise;
+
+      if (response.status() === 429 && attempt < 2) {
+        await expect(page.getByRole("alert")).toContainText("Too many sign-in attempts");
+        const retryAfterHeader = await response.headerValue("x-retry-after");
+        const parsedRetryAfter = Number.parseInt(retryAfterHeader ?? "", 10);
+        const retryAfterSeconds = Number.isFinite(parsedRetryAfter)
+          ? Math.min(Math.max(parsedRetryAfter, 1), 12)
+          : 10;
+        await page.waitForTimeout((retryAfterSeconds + 1) * 1_000);
+        await expect(submit).toBeEnabled();
+        continue;
+      }
+
+      expect(response.status(), `Unexpected ${role} sign-in response`).toBe(200);
+      await page.waitForURL(
+        (url) => url.origin === new URL(passportBaseUrl).origin && url.pathname === destinationPath,
+      );
+      return { context, page };
+    }
+
+    throw new Error(`${role} sign-in remained rate-limited after bounded retries.`);
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
 }
 
 function parseToolSuccess<T>(output: unknown): T {

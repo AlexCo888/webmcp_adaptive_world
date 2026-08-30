@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
+import { signInErrorMessage } from "@/lib/sign-in-error";
 
 const accounts = [
   {
@@ -38,7 +39,7 @@ export function SignInForm() {
       rememberMe: true,
     });
     if (result.error) {
-      setError("The email or password was not accepted.");
+      setError(signInErrorMessage(result.error.status));
       setPending(false);
     }
   }
