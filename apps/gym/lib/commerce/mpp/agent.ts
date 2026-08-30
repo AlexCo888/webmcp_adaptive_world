@@ -14,6 +14,7 @@ import {
 import type { EnabledMppProviderConfig, MppProviderConfig } from "./config";
 import { requireEnabledMppProvider } from "./config";
 import { MppAdapterError } from "./errors";
+import { receiptMatchesOrderReference } from "./receipt-order";
 import {
   assertSnapshotMatchesProvider,
   validateTempoChallenge,
@@ -163,7 +164,7 @@ function verifiedResult(orderRef: string, response: Response): SafeTempoAgentPay
       parsed.status !== "success" ||
       parsed.reference.length === 0 ||
       parsed.reference.length > 512 ||
-      parsed.externalId !== orderRef ||
+      !receiptMatchesOrderReference(parsed.externalId, orderRef) ||
       !Number.isFinite(paidAt.getTime())
     ) {
       return reconciliationRequired(orderRef);

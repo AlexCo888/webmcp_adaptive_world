@@ -26,7 +26,6 @@ test("pull credential is not attached or submitted before markSubmitted resolves
   const events: string[] = [];
   const credential = "credential-private-value";
   const rawReceipt = Receipt.serialize({
-    externalId: snapshot.publicRef,
     method: "tempo",
     reference: "0xreceipt-private-value",
     status: "success",

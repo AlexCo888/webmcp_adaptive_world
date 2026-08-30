@@ -63,7 +63,6 @@ test("merchant exposes the validated provider settlement timestamp as durable ev
   const capability = await regenerateOrderCapability(snapshot, TEST_CAPABILITY_SECRET);
   const capabilityDigest = await digestOrderCapability(capability);
   const rawReceipt = Receipt.serialize({
-    externalId: snapshot.publicRef,
     method: "tempo",
     reference: "0xprovider-payment-reference",
     status: "success",

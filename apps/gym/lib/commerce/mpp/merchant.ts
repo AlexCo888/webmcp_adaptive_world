@@ -8,6 +8,7 @@ import { MPP_RECEIPT_HEADER } from "./constants";
 import type { EnabledMppProviderConfig, MppProviderConfig } from "./config";
 import { requireEnabledMppProvider } from "./config";
 import { MppAdapterError, type MppDiagnosticStage } from "./errors";
+import { receiptMatchesOrderReference } from "./receipt-order";
 import {
   assertSnapshotMatchesProvider,
   buildTempoChargeOptions,
@@ -180,7 +181,7 @@ function receiptCarrier(
       receipt.status !== "success" ||
       receipt.reference.length === 0 ||
       receipt.reference.length > 512 ||
-      receipt.externalId !== expectedOrderRef ||
+      !receiptMatchesOrderReference(receipt.externalId, expectedOrderRef) ||
       !Number.isFinite(paidAt.getTime())
     ) {
       throw new TypeError("Invalid receipt");
