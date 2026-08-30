@@ -194,11 +194,12 @@ export async function prepareMppOrder(order: RoutineProOrder): Promise<PreparedM
          order_id, provider, version, status, idempotency_key, request_params,
          request_params_canonical, request_fingerprint, requested_expires_at,
          prepared_at, idempotency_replay_until
-       ) VALUES ($1,'mpp_tempo',1,'prepared',$2,$3::jsonb,$3,$4,$5,$6,$5)
+       ) VALUES ($1,'mpp_tempo',1,'prepared',$2,$3::jsonb,$4,$5,$6,$7,$6)
        RETURNING id`,
       [
         order.id,
         `routine_pro_${current.public_ref}_mpp_v1`,
+        canonical,
         canonical,
         fingerprint,
         capabilityExpiresAt,
