@@ -21,6 +21,7 @@ test("merchant issues a standards-based 402 without exposing capability material
     capabilityDigest,
     now: new Date("2026-08-29T12:00:00.000Z"),
     request: new Request(config.merchantUrl, {
+      body: "",
       headers: { authorization: `Bearer ${capability}` },
       method: "POST",
     }),

@@ -80,7 +80,10 @@ export interface TempoMerchantAdapter {
 
 function atStage(error: unknown, diagnosticStage: MppDiagnosticStage): MppAdapterError {
   return error instanceof MppAdapterError
-    ? new MppAdapterError(error.safeCode, { retryable: error.retryable, diagnosticStage })
+    ? new MppAdapterError(error.safeCode, {
+        retryable: error.retryable,
+        diagnosticStage: error.diagnosticStage ?? diagnosticStage,
+      })
     : new MppAdapterError("PROVIDER_UNAVAILABLE", { retryable: true, diagnosticStage });
 }
 
@@ -111,13 +114,50 @@ export function createMppxTempoMerchantProvider(
   };
 }
 
-function extractCapability(request: Request, merchantUrl: string): string {
-  if (request.method !== "POST" || request.url !== merchantUrl || request.body !== null) {
-    throw new MppAdapterError("PAYMENT_FAILED");
+async function requestContainsBytes(request: Request): Promise<boolean> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null) {
+    const parsed = Number(contentLength);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 0) return true;
+  }
+  const body = request.clone().body;
+  if (!body) return false;
+  const reader = body.getReader();
+  try {
+    for (let readCount = 0; readCount < 4; readCount += 1) {
+      const chunk = await reader.read();
+      if (chunk.done) return false;
+      if (chunk.value.byteLength > 0) return true;
+    }
+    return true;
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+async function extractCapability(request: Request, merchantUrl: string): Promise<string> {
+  if (request.method !== "POST") {
+    throw new MppAdapterError("PAYMENT_FAILED", {
+      diagnosticStage: "merchant_request_method",
+    });
+  }
+  if (request.url !== merchantUrl) {
+    throw new MppAdapterError("PAYMENT_FAILED", {
+      diagnosticStage: "merchant_request_url",
+    });
+  }
+  if (await requestContainsBytes(request)) {
+    throw new MppAdapterError("PAYMENT_FAILED", {
+      diagnosticStage: "merchant_request_body",
+    });
   }
   const authorization = request.headers.get("authorization");
   const matched = authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/u);
-  if (!matched?.[1]) throw new MppAdapterError("PAYMENT_FAILED");
+  if (!matched?.[1]) {
+    throw new MppAdapterError("PAYMENT_FAILED", {
+      diagnosticStage: "merchant_request_header",
+    });
+  }
   return matched[1];
 }
 
@@ -219,7 +259,7 @@ export function createTempoMerchantAdapter(
       }
       let capability: string;
       try {
-        capability = extractCapability(request, config.merchantUrl);
+        capability = await extractCapability(request, config.merchantUrl);
       } catch (error) {
         throw atStage(error, "merchant_capability_extract");
       }

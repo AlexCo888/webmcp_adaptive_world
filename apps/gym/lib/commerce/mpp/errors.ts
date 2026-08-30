@@ -12,6 +12,10 @@ export type MppDiagnosticStage =
   | "merchant_challenge_decode"
   | "merchant_challenge_validate"
   | "merchant_provider_handle"
+  | "merchant_request_body"
+  | "merchant_request_header"
+  | "merchant_request_method"
+  | "merchant_request_url"
   | "merchant_receipt_validate"
   | "merchant_snapshot_match";
 
