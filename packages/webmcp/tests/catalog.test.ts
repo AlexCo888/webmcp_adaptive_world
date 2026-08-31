@@ -85,6 +85,9 @@ describe("Adaptive World tool catalogs", () => {
     expect(
       tools.filter(({ annotations }) => !annotations.readOnlyHint).map(({ name }) => name),
     ).toEqual(["create_personalized_routine", "record_session_feedback"]);
+    expect(tools.find(({ name }) => name === "get_routine_pro_offer")?.description).toContain(
+      "Use this after inspecting the active context and relevant equipment",
+    );
     const createRoutine = tools.find(({ name }) => name === "create_personalized_routine");
     expect(createRoutine?.prepareMutation).toBe(prepare);
     expect(createRoutine?.inputSchema).toMatchObject({ required: ["goal"] });

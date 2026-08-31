@@ -291,6 +291,12 @@ export function WebMcpBridge() {
             free: "Passport connection, context review, Gym profile, and equipment discovery",
             paid: "Personalized routine creation and Passport saving",
           },
+          recommendedFlow: {
+            understand: "get_active_context",
+            ground: "search_equipment",
+            reviewOffer: "get_routine_pro_offer",
+            personalize: "create_personalized_routine — requires confirmation",
+          },
         };
       },
       create_personalized_routine: {

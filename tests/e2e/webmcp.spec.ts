@@ -367,8 +367,15 @@ test("approving Routine Pro executes once and fills the existing planner", async
         free: "Passport connection, context review, Gym profile, and equipment discovery",
         paid: "Personalized routine creation and Passport saving",
       },
+      recommendedFlow: {
+        understand: "get_active_context",
+        ground: "search_equipment",
+        reviewOffer: "get_routine_pro_offer",
+        personalize: "create_personalized_routine — requires confirmation",
+      },
     },
   });
+  expect(String(offerOutput).length).toBeLessThanOrEqual(1_500);
 
   const invocation = invokeModelContextTool(page, "create_personalized_routine", {
     goal: naturalLanguageGoal,

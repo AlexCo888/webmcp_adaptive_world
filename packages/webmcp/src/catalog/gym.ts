@@ -156,7 +156,7 @@ export function createGymToolCatalog(handlers: GymToolHandlers): readonly WebMCP
         name: "get_routine_pro_offer",
         title: "Get Adaptive Routine Pro offer",
         description:
-          "Explain the free-versus-paid boundary and return the exact server-authoritative Adaptive Routine Pro offer for the active minimum Passport context. Passport connection, context review, Gym profile, and equipment discovery are free; only personalized routine creation and Passport saving require Routine Pro.",
+          "Explain the free-versus-paid boundary and return the exact server-authoritative Adaptive Routine Pro offer for the active minimum Passport context. Passport connection, context review, Gym profile, and equipment discovery are free; only personalized routine creation and Passport saving require Routine Pro. Use this after inspecting the active context and relevant equipment, and before attempting personalized routine creation.",
         inputSchema: EMPTY_OBJECT_SCHEMA,
         readOnly: true,
       },
