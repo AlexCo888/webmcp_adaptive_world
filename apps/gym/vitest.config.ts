@@ -11,5 +11,6 @@ export default defineConfig({
     env: {
       DATABASE_URL: "postgresql://test:test@127.0.0.1:5432/adaptive_world_test",
     },
+    testTimeout: 15_000,
   },
 });

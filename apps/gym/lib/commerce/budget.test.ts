@@ -17,7 +17,10 @@ const setupId = "00000000-0000-4000-8000-000000000205";
 type QueryRecord = { sql: string; values: readonly unknown[] | undefined };
 
 function useClient(
-  respond: (sql: string, values?: readonly unknown[]) => {
+  respond: (
+    sql: string,
+    values?: readonly unknown[],
+  ) => {
     rowCount?: number;
     rows?: unknown[];
   },
@@ -84,7 +87,9 @@ describe("agent budget durability transitions", () => {
       sql.includes("UPDATE agent_budget_reservations"),
     );
     expect(reservationUpdate?.sql).toContain("$2::agent_budget_reservation_status");
-    const orderUpdate = queries.find(({ sql }) => sql.includes("UPDATE commerce_orders SET status"));
+    const orderUpdate = queries.find(({ sql }) =>
+      sql.includes("UPDATE commerce_orders SET status"),
+    );
     expect(orderUpdate?.sql).toContain("$2::commerce_order_status");
   });
 

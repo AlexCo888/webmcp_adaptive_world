@@ -168,7 +168,8 @@ export function DashboardView() {
                       <div>
                         <strong>{routine.title}</strong>
                         <small>
-                          Saved {formatPassportDate(routine.savedAt)} · Template {routine.templateVersion}
+                          Saved {formatPassportDate(routine.savedAt)} · Template{" "}
+                          {routine.templateVersion}
                         </small>
                       </div>
                     </div>
