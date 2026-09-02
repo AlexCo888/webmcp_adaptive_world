@@ -77,13 +77,13 @@ function validationReason(error: unknown): string | null {
   return null;
 }
 
-const RECOVERY_ORDER_STATES = new Set([
-  "created",
-  "provider_pending",
-  "payment_submitted",
-  "reconciliation_required",
-  "paid_unfulfilled",
-]);
+// A payment left the site and its outcome is unknown: read-only recovery only.
+const RECOVERY_ORDER_STATES = new Set(["payment_submitted", "reconciliation_required"]);
+// No payment was submitted (or it was verified but not yet fulfilled): calling
+// the mutation again with the exact same routine resumes the order server-side
+// without a second charge. Polling alone could never advance these states.
+const RESUMABLE_ORDER_STATES = new Set(["created", "provider_pending", "paid_unfulfilled"]);
+const NON_TERMINAL_ORDER_STATES = new Set([...RECOVERY_ORDER_STATES, ...RESUMABLE_ORDER_STATES]);
 
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue);
@@ -139,6 +139,29 @@ function isRecovering(status: RoutineStatus): boolean {
   return Boolean(status.orderStatus && RECOVERY_ORDER_STATES.has(status.orderStatus));
 }
 
+function isResumable(status: RoutineStatus): boolean {
+  return Boolean(
+    status.orderStatus && RESUMABLE_ORDER_STATES.has(status.orderStatus) && status.canResume,
+  );
+}
+
+function recoveryInstructionFor(status: RoutineStatus): string {
+  if (isRecovering(status)) {
+    return "Payment confirmation is being recovered. Do not submit another payment. Poll this read-only status tool only while the order remains non-terminal.";
+  }
+  if (status.orderStatus === "fulfilled") {
+    return "Payment and routine save are complete. Do not submit another payment.";
+  }
+  if (isResumable(status)) {
+    return status.orderScope === "earlier_session"
+      ? "An unpaid order from an earlier Gym session is open. Submitting the exact confirmed routine again releases it and starts this session's order; no second charge is created."
+      : status.orderStatus === "paid_unfulfilled"
+        ? "Payment was verified but fulfillment is pending. Submitting the exact confirmed routine again completes fulfillment without a second charge."
+        : "No payment has been submitted for this order. Submitting the exact confirmed routine again resumes it without a second charge.";
+  }
+  return "No payment recovery is currently in progress.";
+}
+
 function statusToolResult(status: RoutineStatus) {
   return {
     ...(status.orderRef ? { orderRef: status.orderRef } : {}),
@@ -155,12 +178,11 @@ function statusToolResult(status: RoutineStatus) {
     entitlementGranted: status.entitlementGranted,
     routineSaved: status.routineSaved,
     ...(status.savedRoutineRef ? { savedRoutineRef: status.savedRoutineRef } : {}),
-    terminal: status.orderStatus !== undefined && !RECOVERY_ORDER_STATES.has(status.orderStatus),
-    recoveryInstruction: isRecovering(status)
-      ? "Payment confirmation is being recovered. Do not submit another payment. Poll this read-only status tool only while the order remains non-terminal."
-      : status.orderStatus === "fulfilled"
-        ? "Payment and routine save are complete. Do not submit another payment."
-        : "No payment recovery is currently in progress.",
+    ...(status.orderScope ? { orderScope: status.orderScope } : {}),
+    terminal:
+      status.orderStatus !== undefined && !NON_TERMINAL_ORDER_STATES.has(status.orderStatus),
+    resumable: isResumable(status),
+    recoveryInstruction: recoveryInstructionFor(status),
   };
 }
 
@@ -482,6 +504,12 @@ export function WebMcpBridge() {
             requestedInput: effectiveInput,
             projection,
             equipment,
+            ...(isResumable(status) &&
+            status.orderRef &&
+            status.orderStatus &&
+            status.orderScope !== "earlier_session"
+              ? { existingOrder: { orderRef: status.orderRef, orderStatus: status.orderStatus } }
+              : {}),
           });
           for (const [key, prepared] of preparedQuotes.current) {
             if (Date.parse(prepared.offer.quoteValidUntil) <= Date.now()) {

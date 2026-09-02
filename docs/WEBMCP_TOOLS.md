@@ -151,6 +151,23 @@ the read to the same active session. Safe fields include:
 }
 ```
 
+Order states fall into three groups. `payment_submitted` and
+`reconciliation_required` mean a payment left the site with an unknown
+outcome: poll only, never resubmit. `created`, `provider_pending`, and
+`paid_unfulfilled` are resumable: no payment was submitted, or it was verified
+but not yet fulfilled, so calling `create_personalized_routine` again with the
+exact confirmed routine resumes the same order or completes fulfillment and
+never creates a second charge. `fulfilled` and the failed/voided/refunded
+states are terminal. The result carries `resumable`, `terminal`, and
+`recoveryInstruction` so the agent does not have to infer this.
+
+Only one payable order may exist per patient. When a person reconnects with a
+new one-use context, status also surfaces a payable order left by an earlier
+Gym session (`orderScope: "earlier_session"`). An unpaid earlier-session order
+is released automatically when the exact routine is submitted for the new
+session; a verified but unfulfilled one is fulfilled locally; a submitted
+payment with an unknown outcome still blocks until it is reconciled.
+
 It never returns private keys, credentials, capabilities, raw receipt headers,
 receipt digests, authorization headers, provider request snapshots, or payment
 secrets. After a timeout, call this read-only tool before any other payment

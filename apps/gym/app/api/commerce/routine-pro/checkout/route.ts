@@ -1,6 +1,7 @@
 import { ConfirmRoutineRequestSchema } from "@adaptive-world/contracts";
 import { getGymSession } from "@/lib/gym-session";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
 import {
   assertSameOrigin,
   CommerceError,
@@ -9,7 +10,11 @@ import {
   requestId,
   success,
 } from "@/lib/commerce/http";
-import { createOrReuseRoutineProOrder, hasRoutineProEntitlement } from "@/lib/commerce/orders";
+import {
+  createOrReuseRoutineProOrder,
+  getPayableOrder,
+  hasRoutineProEntitlement,
+} from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
 import { getRoutineProStatusForActiveSession } from "@/lib/commerce/routine-pro-status";
@@ -18,6 +23,7 @@ import {
   toRoutineIntent,
   validatePersonalizedRoutineRequest,
 } from "@/lib/commerce/routines";
+import { releaseStaleRoutineProOrder } from "@/lib/commerce/stale-orders";
 import { createOrResumeStripeCheckout } from "@/lib/commerce/stripe";
 
 export const runtime = "nodejs";
@@ -37,7 +43,19 @@ export async function POST(request: Request) {
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const validated = validatePersonalizedRoutineRequest({ active, intent });
-    const entitled = await hasRoutineProEntitlement(active.row.patientId);
+    let entitled = await hasRoutineProEntitlement(active.row.patientId);
+    if (!entitled) {
+      const payable = await getPayableOrder(active.row.patientId);
+      if (payable && payable.gymSessionId !== active.row.id) {
+        if (payable.status === "paid_unfulfilled") {
+          await retryPaidUnfulfilledOrder(payable.id);
+          entitled = await hasRoutineProEntitlement(active.row.patientId);
+          if (!entitled) throw new CommerceError("FULFILLMENT_PENDING", true);
+        } else {
+          await releaseStaleRoutineProOrder(payable, active.row.id);
+        }
+      }
+    }
     const supportedModes = [
       ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
       ...(config.agentEnabled ? (["agent_wallet"] as const) : []),

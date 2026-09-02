@@ -127,6 +127,7 @@ export const RoutineStatusSchema = z
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]).optional(),
     sandbox: z.literal(true).optional(),
     initiatedVia: RoutineInitiationSchema.optional(),
+    orderScope: z.enum(["active_session", "earlier_session"]).optional(),
     checkoutUrl: z.string().url().optional(),
     canResume: z.boolean().default(false),
     submittedAt: z.string().datetime({ offset: true }).optional(),

@@ -127,11 +127,14 @@ export function prepareRoutineProConfirmation({
   requestedInput,
   projection,
   equipment,
+  existingOrder,
 }: {
   offer: RoutineProOffer;
   requestedInput: CreatePersonalizedRoutineInput;
   projection: GymContextProjection;
   equipment: readonly Equipment[];
+  /** A payable order with no submitted payment that will be resumed, never duplicated. */
+  existingOrder?: Readonly<{ orderRef: string; orderStatus: string }>;
 }): PreparedRoutineProConfirmation {
   const effectiveInput: CreatePersonalizedRoutineInput = {
     ...requestedInput,
@@ -196,6 +199,14 @@ export function prepareRoutineProConfirmation({
             label: "Data access",
             value: "Unchanged; only the active consented Gym projection is used",
           },
+          ...(existingOrder
+            ? [
+                {
+                  label: "Existing order",
+                  value: `${existingOrder.orderRef} (${existingOrder.orderStatus}) is resumed for this exact routine; no second charge is created.`,
+                },
+              ]
+            : []),
         ],
         riskClass: offer.entitled ? "account-write" : "payment",
         confirmLabel: offer.entitled

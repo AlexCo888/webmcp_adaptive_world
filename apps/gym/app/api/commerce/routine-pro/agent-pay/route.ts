@@ -37,6 +37,7 @@ import {
   toRoutineIntent,
   validatePersonalizedRoutineRequest,
 } from "@/lib/commerce/routines";
+import { releaseStaleRoutineProOrder } from "@/lib/commerce/stale-orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,10 +71,22 @@ export async function POST(request: Request) {
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const validated = validatePersonalizedRoutineRequest({ active, intent });
-    const entitled = await hasRoutineProEntitlement(active.row.patientId);
-    const recoverable = entitled ? null : await getPayableOrder(active.row.patientId);
-    const recoveringPaidOrder =
-      recoverable?.provider === "mpp_tempo" && recoverable.status === "paid_unfulfilled";
+    let entitled = await hasRoutineProEntitlement(active.row.patientId);
+    let recoverable = entitled ? null : await getPayableOrder(active.row.patientId);
+    if (recoverable && (await releaseStaleRoutineProOrder(recoverable, active.row.id))) {
+      stage = "release_stale_order";
+      recoverable = null;
+    }
+    const recoveringPaidOrder = recoverable?.status === "paid_unfulfilled";
+    if (recoverable && recoveringPaidOrder && recoverable.gymSessionId !== active.row.id) {
+      // A verified payment from an earlier Gym session only needs local
+      // fulfillment; it never opens a payment rail again.
+      stage = "recover_fulfillment";
+      await retryPaidUnfulfilledOrder(recoverable.id);
+      entitled = await hasRoutineProEntitlement(active.row.patientId);
+      if (!entitled) throw new CommerceError("FULFILLMENT_PENDING", true);
+      recoverable = null;
+    }
 
     if (!recoveringPaidOrder) {
       if (!config.agentEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");

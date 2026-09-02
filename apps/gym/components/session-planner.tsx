@@ -43,13 +43,13 @@ type PlannerState =
 type PaymentMode = "human_checkout" | "agent_wallet";
 
 /** Payment left the site and its outcome is unknown until the provider confirms. */
-const RECOVERING_ORDER_STATES = new Set([
-  "payment_submitted",
-  "reconciliation_required",
-  "paid_unfulfilled",
-]);
-/** An order exists but no payment has been submitted yet; it can be resumed or cancelled. */
-const RESUMABLE_ORDER_STATES = new Set(["created", "provider_pending"]);
+const RECOVERING_ORDER_STATES = new Set(["payment_submitted", "reconciliation_required"]);
+/**
+ * No payment was submitted, or it was verified but not yet fulfilled. Resuming
+ * re-posts the exact same intent; the server reuses the order or completes
+ * fulfillment and never creates a second charge.
+ */
+const RESUMABLE_ORDER_STATES = new Set(["created", "provider_pending", "paid_unfulfilled"]);
 const NON_TERMINAL_ORDER_STATES = new Set([...RECOVERING_ORDER_STATES, ...RESUMABLE_ORDER_STATES]);
 const RECOVERY_MESSAGE =
   "Payment confirmation is being recovered. We will not submit another payment.";
@@ -318,8 +318,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
   }, [context, goal, templateManuallySelected]);
 
   const busy = state === "preparing" || state === "submitting" || state === "recovering";
-  const pendingSitePayment = isResumable(receipt) && receipt?.initiatedVia === "site-ui";
-  const pendingAgentPayment = isResumable(receipt) && receipt?.initiatedVia !== "site-ui";
+  const activeSessionOrder = isResumable(receipt) && receipt?.orderScope !== "earlier_session";
+  const pendingSitePayment = activeSessionOrder && receipt?.initiatedVia === "site-ui";
+  const pendingAgentPayment = activeSessionOrder && receipt?.initiatedVia !== "site-ui";
+  const earlierSessionOrder = isResumable(receipt) && receipt?.orderScope === "earlier_session";
   const selectedTemplate = useMemo(
     () => facilityTemplates.find((template) => template.id === templateId) ?? facilityTemplates[0]!,
     [templateId],
@@ -369,7 +371,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         setMessage(RECOVERY_MESSAGE);
         return;
       }
-      if (isResumable(current)) {
+      if (isResumable(current) && current.orderScope !== "earlier_session") {
         setState("idle");
         setMessage("A sandbox payment is already open for this Gym session. Resume or cancel it.");
         return;
@@ -626,6 +628,23 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             <div className="info-notice" role="status">
               {busy ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />}
               {message}
+            </div>
+          ) : null}
+          {earlierSessionOrder ? (
+            <div className="info-notice" role="status">
+              <ShieldCheck size={17} />
+              <span>
+                An unpaid order from an earlier Gym session is still open. Continuing releases it
+                and starts a fresh order for this session; no second charge is created.{" "}
+                <button
+                  type="button"
+                  className="button button--light button--small"
+                  disabled={busy}
+                  onClick={() => void cancelPendingPayment()}
+                >
+                  Cancel it now
+                </button>
+              </span>
             </div>
           ) : null}
           {pendingSitePayment || pendingAgentPayment ? (
