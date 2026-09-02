@@ -1,5 +1,25 @@
-import type { Equipment, GeneratedSession, GymContextProjection } from "@adaptive-world/contracts";
+import {
+  AgentGeneratedRoutineInputSchema,
+  GeneratedSessionSchema,
+  RoutineGoalSchema,
+  type AgentGeneratedRoutineInput,
+  type Equipment,
+  type GeneratedSession,
+  type GymContextProjection,
+} from "@adaptive-world/contracts";
 import { equipmentCatalogVersion } from "@adaptive-world/demo-data";
+
+export const AGENT_GENERATED_ROUTINE_MARKER = "webmcp_agent_generated" as const;
+export const AGENT_GENERATED_ROUTINE_VERSION = "1.0" as const;
+export const EXPERT_REVIEW_WARNING =
+  "AI-generated personalized draft. A physician or qualified physical therapist should review and approve this routine before it is performed.";
+
+export class AgentRoutineValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentRoutineValidationError";
+  }
+}
 
 type Station = {
   equipmentId: string;
@@ -191,13 +211,97 @@ function includesAny(value: string, terms: readonly string[]): boolean {
   return terms.some((term) => value.includes(term));
 }
 
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function uniqueNotes(values: readonly string[]): string[] {
+  return values
+    .map((value) => value.trim().slice(0, 200))
+    .filter((value, index, notes) => value.length >= 2 && notes.indexOf(value) === index);
+}
+
+function routineText(routine: AgentGeneratedRoutineInput): string {
+  return searchText([
+    routine.title,
+    ...(routine.warmup ?? []),
+    ...(routine.cooldown ?? []),
+    ...routine.safetyNotes,
+    ...(routine.expertReviewReason ? [routine.expertReviewReason] : []),
+    ...routine.exercises.flatMap((exercise) => [
+      ...exercise.instructions,
+      exercise.adaptationReason,
+    ]),
+  ]);
+}
+
+function containsMedicalApprovalClaim(value: string): boolean {
+  return [
+    /\b(?:doctor|physician|physical therapist|physiotherapist|clinician)\s+(?:has\s+)?(?:approved|recommended|cleared|authorized)\b/u,
+    /\b(?:approved|recommended|cleared|authorized)\s+by\s+(?:a\s+|the\s+|your\s+)?(?:doctor|physician|physical therapist|physiotherapist|clinician)\b/u,
+    /\b(?:medically|clinically)\s+cleared\b/u,
+    /\b(?:aprobado|recomendado|autorizado)\s+por\s+(?:un\s+|una\s+|el\s+|la\s+)?(?:medico|doctor|fisioterapeuta|profesional de salud)\b/u,
+    /\b(?:alta medica|medicamente autorizado)\b/u,
+  ].some((pattern) => pattern.test(value));
+}
+
+function contextRequiresExpertReview(
+  profile: GymContextProjection,
+  goal: string,
+  routine: AgentGeneratedRoutineInput,
+): boolean {
+  const value = searchText([
+    goal,
+    ...profile.movementConsiderations,
+    ...profile.avoid,
+    ...profile.functionalCapabilities,
+    ...profile.accessibilityNeeds,
+    ...(routine.expertReviewReason ? [routine.expertReviewReason] : []),
+  ]);
+  return includesAny(value, [
+    "injury",
+    "injured",
+    "fracture",
+    "broken leg",
+    "broken bone",
+    "post-op",
+    "postoperative",
+    "surgery",
+    "rehab",
+    "rehabilitation",
+    "recovering",
+    "recovery",
+    "weight-bearing",
+    "weight bearing",
+    "clearance undocumented",
+    "clearance unknown",
+    "not medically cleared",
+    "sprain",
+    "tendon tear",
+    "ligament tear",
+    "lesion",
+    "lesionado",
+    "fractura",
+    "pierna rota",
+    "pierna quebrada",
+    "cirugia",
+    "postoperatorio",
+    "rehabilitacion",
+    "recuperacion",
+    "apoyo de peso",
+    "carga de peso",
+    "alta medica no documentada",
+    "esguince",
+  ]);
+}
+
 export function defaultRoutineGoal(profile: GymContextProjection): string {
   if (profile.requestedRoutineGoal) return profile.requestedRoutineGoal;
   const goals = profile.goals.slice(0, 3).join("; ");
   return (goals || "Support long-term health with a balanced, sustainable routine").slice(0, 160);
 }
 
-/** Deterministic staff-template selection; no model invents exercise content. */
+/** Public staff walkthrough selection. Personalized Routine Pro never calls this function. */
 export function recommendFacilityTemplate(
   profile: GymContextProjection,
   goal: string,
@@ -249,11 +353,7 @@ export function recommendFacilityTemplate(
   if (profile.accessibilityNeeds.length > 0 || includesAny(requestedGoal, accessTerms)) {
     return "accessible_equipment_tour";
   }
-  // The person's current words choose among safe staff-authored options first;
-  // Passport goals and preferences provide the fallback when the request is broad.
-  if (includesAny(requestedGoal, sustainableTerms)) {
-    return "low_impact_orientation";
-  }
+  if (includesAny(requestedGoal, sustainableTerms)) return "low_impact_orientation";
   if (includesAny(requestedGoal, foundationTerms)) return "first_visit_foundations";
   if (includesAny(passportContext, accessTerms)) return "accessible_equipment_tour";
   if (includesAny(passportContext, sustainableTerms)) return "low_impact_orientation";
@@ -279,30 +379,25 @@ export function createGroundedSession({
   if (!template) throw new Error("That staff-authored walkthrough does not exist.");
   const selected = template.stations.map((station) => {
     const item = equipment.find((candidate) => candidate.id === station.equipmentId);
-    if (!item?.available) {
-      throw new Error(`The ${station.equipmentId} station is not currently available.`);
-    }
+    if (!item?.available) throw new Error(`The ${station.equipmentId} station is not available.`);
     return { station, item };
   });
-  const contextSignals = [...profile.movementConsiderations, ...profile.accessibilityNeeds];
   const requestedGoal = goal.trim();
-  const safetyNotes = [
+  const safetyNotes = uniqueNotes([
     ...profile.stopSignals,
     ...profile.movementConsiderations,
     ...profile.avoid,
     "Ask Gym staff to confirm every first-use setup and stop whenever the setup feels wrong.",
-  ]
-    .map((note) => note.slice(0, 200))
-    .filter((note, index, notes) => note.length >= 2 && notes.indexOf(note) === index)
-    .slice(0, 8);
+  ]).slice(0, 24);
 
-  return {
+  return GeneratedSessionSchema.parse({
     id: sessionId,
     projectionId: profile.projectionId,
     title: template.name,
     goal: requestedGoal,
     templateId: template.id,
     templateVersion: template.version,
+    generationMode: "staff_template",
     createdVia,
     catalogVersion: equipmentCatalogVersion,
     durationMinutes: template.durationMinutes,
@@ -315,18 +410,269 @@ export function createGroundedSession({
       instructions: station.instructions,
       adaptationReason: station.reason,
     })),
+    warmup: [],
+    cooldown: [],
     safetyNotes,
+    requiresExpertReview: false,
     decisionTrace: [
       `Preserved the person's stated goal: ${requestedGoal}`,
       `Loaded ${template.id}@${template.version}, authored by ${template.staffAuthor}.`,
       `Read the active Gym-only projection from the server session; the request contained no Passport profile.`,
-      `Considered approved Passport goals: ${profile.goals.slice(0, 3).join("; ")}.`.slice(0, 240),
       `Verified all ${selected.length} station IDs against catalog ${equipmentCatalogVersion}.`,
-      contextSignals.length
-        ? `Kept ${contextSignals.length} approved movement/access signals visible for human review.`
-        : "No additional movement or access signals were present in the minimum projection.",
-      `Invocation source recorded as ${createdVia}. WebMCP selected a template; it did not invent its contents.`,
+      `Invocation source recorded as ${createdVia}. This is a public staff walkthrough, not Routine Pro.`,
     ],
     createdAt: new Date().toISOString(),
+  });
+}
+
+export function createAgentGeneratedSession({
+  profile,
+  equipment,
+  goal,
+  routine,
+  sessionId,
+  createdAt = new Date().toISOString(),
+}: {
+  profile: GymContextProjection;
+  equipment: Equipment[];
+  goal: string;
+  routine: AgentGeneratedRoutineInput;
+  sessionId: string;
+  createdAt?: string;
+}): GeneratedSession {
+  const requestedGoal = RoutineGoalSchema.parse(goal);
+  const submitted = AgentGeneratedRoutineInputSchema.parse(routine);
+  const equipmentById = new Map(equipment.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  const exerciseMinutes = submitted.exercises.reduce(
+    (total, exercise) => total + exercise.durationMinutes,
+    0,
+  );
+  const maximumDuration = Math.min(120, Math.max(30, profile.preferredSessionMinutes + 30));
+
+  if (submitted.durationMinutes > maximumDuration) {
+    throw new AgentRoutineValidationError(
+      `Routine duration exceeds the active context bound of ${maximumDuration} minutes.`,
+    );
+  }
+  if (exerciseMinutes > submitted.durationMinutes || submitted.durationMinutes - exerciseMinutes > 30) {
+    throw new AgentRoutineValidationError(
+      "Exercise minutes must fit the declared routine duration with no more than 30 minutes reserved for warm-up, cooldown, and transitions.",
+    );
+  }
+
+  const hydratedExercises = submitted.exercises.map((exercise) => {
+    if (seen.has(exercise.equipmentId)) {
+      throw new AgentRoutineValidationError("Each equipment item may appear only once in a routine.");
+    }
+    seen.add(exercise.equipmentId);
+    const item = equipmentById.get(exercise.equipmentId);
+    if (!item) {
+      throw new AgentRoutineValidationError(
+        `Equipment ${exercise.equipmentId} is not in the current Gym catalog.`,
+      );
+    }
+    if (!item.available) {
+      throw new AgentRoutineValidationError(
+        `Equipment ${exercise.equipmentId} is not currently available.`,
+      );
+    }
+    return {
+      equipmentId: item.id,
+      name: item.name,
+      durationMinutes: exercise.durationMinutes,
+      intensity: exercise.intensity,
+      instructions: exercise.instructions,
+      adaptationReason: exercise.adaptationReason,
+    };
+  });
+
+  if (containsMedicalApprovalClaim(searchText([requestedGoal, routineText(submitted)]))) {
+    throw new AgentRoutineValidationError(
+      "The routine must not claim medical clearance, physician approval, or professional recommendation.",
+    );
+  }
+
+  const needsExpertReview = contextRequiresExpertReview(profile, requestedGoal, submitted);
+  if (needsExpertReview && !submitted.requiresExpertReview) {
+    throw new AgentRoutineValidationError(
+      "Injury, rehabilitation, or undocumented-clearance scenarios require requiresExpertReview=true.",
+    );
+  }
+  const expertReviewReason = submitted.requiresExpertReview
+    ? (submitted.expertReviewReason ??
+      "The approved context includes an injury, rehabilitation, or clearance uncertainty that requires professional review.")
+    : undefined;
+
+  const safetyNotes = uniqueNotes([
+    ...profile.stopSignals,
+    ...submitted.safetyNotes,
+    ...(submitted.requiresExpertReview ? [EXPERT_REVIEW_WARNING] : []),
+    "Stop immediately if a Passport stop signal appears or the setup feels unsafe.",
+  ]).slice(0, 24);
+  for (const signal of profile.stopSignals) {
+    if (!safetyNotes.includes(signal.slice(0, 200))) {
+      throw new AgentRoutineValidationError("All required Passport stop signals must be preserved.");
+    }
+  }
+
+  return GeneratedSessionSchema.parse({
+    id: sessionId,
+    projectionId: profile.projectionId,
+    title: submitted.title,
+    goal: requestedGoal,
+    templateId: AGENT_GENERATED_ROUTINE_MARKER,
+    templateVersion: AGENT_GENERATED_ROUTINE_VERSION,
+    generationMode: "agent_generated",
+    createdVia: "webmcp",
+    catalogVersion: equipmentCatalogVersion,
+    durationMinutes: submitted.durationMinutes,
+    status: "draft",
+    exercises: hydratedExercises,
+    warmup: submitted.warmup ?? [],
+    cooldown: submitted.cooldown ?? [],
+    safetyNotes,
+    requiresExpertReview: submitted.requiresExpertReview,
+    ...(expertReviewReason ? { expertReviewReason } : {}),
+    decisionTrace: [
+      `Preserved the exact confirmed goal: ${requestedGoal}`,
+      "The user-selected external agent generated the exercise content; Adaptive Gym called no AI model.",
+      `Used only consented projection ${profile.projectionId}; no full Passport or document content was submitted.`,
+      `Verified ${hydratedExercises.length} equipment IDs against catalog ${equipmentCatalogVersion}.`,
+      "Hydrated canonical equipment names and provenance from the Gym catalog rather than trusting agent-supplied product facts.",
+      `Preserved ${profile.stopSignals.length} required Passport stop signals.`,
+      submitted.requiresExpertReview
+        ? "Marked the draft for physician or qualified physical-therapist review before performance."
+        : "No injury, rehabilitation, or undocumented-clearance signal requiring expert review was detected.",
+      "Generation mode recorded as agent_generated and creation channel recorded as webmcp.",
+    ],
+    createdAt,
+  });
+}
+
+export function agentRoutineInputMatchesSession({
+  session,
+  goal,
+  routine,
+}: {
+  session: GeneratedSession;
+  goal: string;
+  routine: AgentGeneratedRoutineInput;
+}): boolean {
+  const submitted = AgentGeneratedRoutineInputSchema.safeParse(routine);
+  const parsedSession = GeneratedSessionSchema.safeParse(session);
+  const requestedGoal = RoutineGoalSchema.safeParse(goal);
+  if (!submitted.success || !parsedSession.success || !requestedGoal.success) return false;
+  const plan = parsedSession.data;
+  const input = submitted.data;
+  if (
+    plan.templateId !== AGENT_GENERATED_ROUTINE_MARKER ||
+    plan.templateVersion !== AGENT_GENERATED_ROUTINE_VERSION ||
+    plan.generationMode !== "agent_generated" ||
+    plan.createdVia !== "webmcp" ||
+    plan.goal !== requestedGoal.data ||
+    plan.title !== input.title ||
+    plan.durationMinutes !== input.durationMinutes ||
+    plan.requiresExpertReview !== input.requiresExpertReview ||
+    !sameStringArray(plan.warmup, input.warmup ?? []) ||
+    !sameStringArray(plan.cooldown, input.cooldown ?? []) ||
+    plan.exercises.length !== input.exercises.length
+  ) {
+    return false;
+  }
+  if (input.expertReviewReason && plan.expertReviewReason !== input.expertReviewReason) return false;
+  if (!input.safetyNotes.every((note) => plan.safetyNotes.includes(note))) return false;
+  return input.exercises.every((exercise, index) => {
+    const saved = plan.exercises[index];
+    return (
+      saved?.equipmentId === exercise.equipmentId &&
+      saved.durationMinutes === exercise.durationMinutes &&
+      saved.intensity === exercise.intensity &&
+      sameStringArray(saved.instructions, exercise.instructions) &&
+      saved.adaptationReason === exercise.adaptationReason
+    );
+  });
+}
+
+export function validateStagedAgentGeneratedSession({
+  session,
+  profile,
+  equipment,
+}: {
+  session: unknown;
+  profile: GymContextProjection;
+  equipment: Equipment[];
+}): GeneratedSession {
+  const plan = GeneratedSessionSchema.parse(session);
+  if (
+    plan.templateId !== AGENT_GENERATED_ROUTINE_MARKER ||
+    plan.templateVersion !== AGENT_GENERATED_ROUTINE_VERSION ||
+    plan.generationMode !== "agent_generated" ||
+    plan.createdVia !== "webmcp" ||
+    plan.projectionId !== profile.projectionId
+  ) {
+    throw new AgentRoutineValidationError("The staged plan is not an agent-generated WebMCP routine.");
+  }
+  const equipmentById = new Map(equipment.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  let exerciseMinutes = 0;
+  for (const exercise of plan.exercises) {
+    if (seen.has(exercise.equipmentId)) {
+      throw new AgentRoutineValidationError("The staged routine contains duplicate equipment.");
+    }
+    seen.add(exercise.equipmentId);
+    const item = equipmentById.get(exercise.equipmentId);
+    if (!item?.available || exercise.name !== item.name) {
+      throw new AgentRoutineValidationError(
+        `The staged equipment ${exercise.equipmentId} is unavailable or not canonically hydrated.`,
+      );
+    }
+    if (exercise.intensity !== "easy" && exercise.intensity !== "moderate") {
+      throw new AgentRoutineValidationError("Agent-generated routines are limited to easy or moderate intensity.");
+    }
+    exerciseMinutes += exercise.durationMinutes ?? 0;
+  }
+  if (exerciseMinutes > plan.durationMinutes || plan.durationMinutes - exerciseMinutes > 30) {
+    throw new AgentRoutineValidationError("The staged routine duration is inconsistent.");
+  }
+  for (const signal of profile.stopSignals) {
+    if (!plan.safetyNotes.includes(signal.slice(0, 200))) {
+      throw new AgentRoutineValidationError("A required Passport stop signal is missing.");
+    }
+  }
+  const stagedText = searchText([
+    plan.goal,
+    plan.title,
+    ...plan.warmup,
+    ...plan.cooldown,
+    ...plan.safetyNotes,
+    ...(plan.expertReviewReason ? [plan.expertReviewReason] : []),
+    ...plan.exercises.flatMap((exercise) => [
+      ...exercise.instructions,
+      exercise.adaptationReason,
+    ]),
+  ]);
+  if (containsMedicalApprovalClaim(stagedText)) {
+    throw new AgentRoutineValidationError("The staged routine contains a medical-approval claim.");
+  }
+  const stagedInput: AgentGeneratedRoutineInput = {
+    title: plan.title,
+    durationMinutes: plan.durationMinutes,
+    exercises: plan.exercises.map((exercise) => ({
+      equipmentId: exercise.equipmentId,
+      durationMinutes: exercise.durationMinutes ?? 1,
+      intensity: exercise.intensity === "moderate" ? "moderate" : "easy",
+      instructions: exercise.instructions,
+      adaptationReason: exercise.adaptationReason,
+    })),
+    warmup: plan.warmup,
+    cooldown: plan.cooldown,
+    safetyNotes: plan.safetyNotes.slice(0, 8),
+    requiresExpertReview: plan.requiresExpertReview,
+    expertReviewReason: plan.expertReviewReason,
   };
+  if (contextRequiresExpertReview(profile, plan.goal, stagedInput) && !plan.requiresExpertReview) {
+    throw new AgentRoutineValidationError("The staged routine must require expert review.");
+  }
+  return plan;
 }
