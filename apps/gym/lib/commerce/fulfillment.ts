@@ -1,5 +1,10 @@
-import { sha256Hex } from "@adaptive-world/security";
+import { GeneratedSessionSchema } from "@adaptive-world/contracts";
 import type { PoolClient } from "@adaptive-world/db";
+import { canonicalizeJson, sha256Hex, verifySha256Hex } from "@adaptive-world/security";
+import {
+  AGENT_GENERATED_TEMPLATE_ID,
+  AGENT_GENERATED_TEMPLATE_VERSION,
+} from "@/lib/session-planner";
 import { ROUTINE_PRO } from "./constants";
 import { commercePool, withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
@@ -237,6 +242,99 @@ async function settleAgentReservation(client: PoolClient, orderId: string): Prom
   );
 }
 
+async function persistStagedAgentRoutine(
+  client: PoolClient,
+  {
+    orderId,
+    patientId,
+    entitlementId,
+  }: { orderId: string; patientId: string; entitlementId: string },
+): Promise<string | null> {
+  const authority = await client.query<{
+    originating_gym_session_id: string | null;
+    initial_template_id: string;
+    initial_goal: string | null;
+  }>(
+    `SELECT originating_gym_session_id, initial_template_id, initial_goal
+     FROM commerce_orders WHERE id = $1 FOR UPDATE`,
+    [orderId],
+  );
+  const order = authority.rows[0];
+  if (!order || order.initial_template_id !== AGENT_GENERATED_TEMPLATE_ID) return null;
+  if (!order.originating_gym_session_id) throw new CommerceError("RECONCILIATION_REQUIRED");
+
+  const staged = await client.query<{ plan: unknown }>(
+    `SELECT plan FROM gym_sessions
+     WHERE id = $1 AND patient_id = $2 FOR UPDATE`,
+    [order.originating_gym_session_id, patientId],
+  );
+  const session = GeneratedSessionSchema.safeParse(staged.rows[0]?.plan);
+  if (
+    !session.success ||
+    session.data.createdVia !== "webmcp" ||
+    session.data.generationMode !== "agent_generated" ||
+    session.data.templateId !== AGENT_GENERATED_TEMPLATE_ID ||
+    session.data.templateVersion !== AGENT_GENERATED_TEMPLATE_VERSION ||
+    (order.initial_goal !== null && session.data.goal !== order.initial_goal)
+  ) {
+    throw new CommerceError("RECONCILIATION_REQUIRED");
+  }
+
+  const canonicalPlan = canonicalizeJson(session.data);
+  const existing = await client.query<{ id: string; plan: unknown; plan_hash: string }>(
+    `SELECT id, plan, plan_hash FROM saved_routines
+     WHERE patient_id = $1 AND source_gym_session_id = $2 AND template_id = $3
+     LIMIT 1 FOR UPDATE`,
+    [patientId, order.originating_gym_session_id, AGENT_GENERATED_TEMPLATE_ID],
+  );
+  const previous = existing.rows[0];
+  if (previous) {
+    const canonicalExisting = canonicalizeJson(previous.plan);
+    if (!(await verifySha256Hex(canonicalExisting, previous.plan_hash))) {
+      throw new CommerceError("RECONCILIATION_REQUIRED");
+    }
+    if (canonicalExisting !== canonicalPlan) throw new CommerceError("ROUTINE_CONFLICT");
+    return previous.id;
+  }
+
+  const planHash = await sha256Hex(canonicalPlan);
+  const inserted = await client.query<{ id: string }>(
+    `INSERT INTO saved_routines (
+       patient_id, source_gym_session_id, entitlement_grant_id, title, plan, plan_hash,
+       template_id, template_version, catalog_version, created_via, saved_at
+     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'webmcp',now()) RETURNING id`,
+    [
+      patientId,
+      order.originating_gym_session_id,
+      entitlementId,
+      session.data.title,
+      canonicalPlan,
+      planHash,
+      AGENT_GENERATED_TEMPLATE_ID,
+      AGENT_GENERATED_TEMPLATE_VERSION,
+      session.data.catalogVersion,
+    ],
+  );
+  const savedRoutineRef = inserted.rows[0]?.id;
+  if (!savedRoutineRef) throw new CommerceError("FULFILLMENT_PENDING", true);
+  await client.query(
+    `INSERT INTO audit_events (
+       patient_id, action, resource_type, resource_id, outcome, metadata
+     ) VALUES ($1,'routine.personalized.saved','saved_routine',$2,'success',$3::jsonb)`,
+    [
+      patientId,
+      savedRoutineRef,
+      JSON.stringify({
+        generationMode: "agent_generated",
+        templateId: AGENT_GENERATED_TEMPLATE_ID,
+        createdVia: "webmcp",
+        fulfilledWithOrder: true,
+      }),
+    ],
+  );
+  return savedRoutineRef;
+}
+
 export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<FulfillmentResult> {
   if (
     input.paidAmountMinor !== ROUTINE_PRO.amountMinor ||
@@ -310,6 +408,13 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
       if (!source || !order.provider_payment_ref || !order.receipt_digest || !order.paid_at) {
         throw new CommerceError("RECONCILIATION_REQUIRED");
       }
+      if (terminalSourceOrderId === order.id) {
+        await persistStagedAgentRoutine(client, {
+          orderId: order.id,
+          patientId,
+          entitlementId: source.id,
+        });
+      }
       await client.query(
         `UPDATE payment_provider_events SET processed_at = COALESCE(processed_at, now()),
            outcome = 'idempotent' WHERE provider = $1 AND provider_event_id = $2`,
@@ -341,6 +446,11 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
     );
     const active = entitlement.rows[0];
     if (active?.source_order_id === order.id) {
+      await persistStagedAgentRoutine(client, {
+        orderId: order.id,
+        patientId,
+        entitlementId: active.id,
+      });
       await client.query(
         `UPDATE payment_provider_events SET processed_at = COALESCE(processed_at, now()),
            outcome = 'idempotent' WHERE provider = $1 AND provider_event_id = $2`,
@@ -387,6 +497,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
     );
     const entitlementId = granted.rows[0]?.id;
     if (!entitlementId) throw new CommerceError("FULFILLMENT_PENDING", true);
+    await persistStagedAgentRoutine(client, { orderId: order.id, patientId, entitlementId });
     await client.query(
       `UPDATE commerce_orders SET status = 'fulfilled', provider_payment_ref = $2,
          receipt_digest = $3, paid_at = $4, fulfilled_at = now(), failure_code = NULL
