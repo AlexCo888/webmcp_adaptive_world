@@ -1,6 +1,7 @@
 import { ConfirmRoutineRequestSchema } from "@adaptive-world/contracts";
 import { getGymSession } from "@/lib/gym-session";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { ROUTINE_REQUEST_MAX_BYTES } from "@/lib/commerce/constants";
 import {
   assertSameOrigin,
   CommerceError,
@@ -21,7 +22,9 @@ export async function POST(request: Request) {
   const id = requestId(request);
   try {
     assertSameOrigin(request);
-    const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
+    const parsed = ConfirmRoutineRequestSchema.safeParse(
+      await parseBoundedJson(request, ROUTINE_REQUEST_MAX_BYTES),
+    );
     if (!parsed.success) throw new CommerceError("INVALID_REQUEST");
     const intent = toRoutineIntent(parsed.data);
     const active = await getGymSession();

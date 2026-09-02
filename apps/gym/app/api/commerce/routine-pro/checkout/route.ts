@@ -1,6 +1,7 @@
 import { ConfirmRoutineRequestSchema } from "@adaptive-world/contracts";
 import { getGymSession } from "@/lib/gym-session";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { ROUTINE_REQUEST_MAX_BYTES } from "@/lib/commerce/constants";
 import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
 import {
   assertSameOrigin,
@@ -35,7 +36,9 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const config = getCommerceConfig();
     if (!config.stripeEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");
-    const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
+    const parsed = ConfirmRoutineRequestSchema.safeParse(
+      await parseBoundedJson(request, ROUTINE_REQUEST_MAX_BYTES),
+    );
     if (!parsed.success || parsed.data.paymentMode !== "human_checkout") {
       throw new CommerceError("INVALID_REQUEST");
     }
@@ -44,16 +47,18 @@ export async function POST(request: Request) {
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const validated = validatePersonalizedRoutineRequest({ active, intent });
     let entitled = await hasRoutineProEntitlement(active.row.patientId);
+    let recoveredPaidOrder = false;
     if (!entitled) {
       const payable = await getPayableOrder(active.row.patientId);
-      if (payable && payable.gymSessionId !== active.row.id) {
-        if (payable.status === "paid_unfulfilled") {
-          await retryPaidUnfulfilledOrder(payable.id);
-          entitled = await hasRoutineProEntitlement(active.row.patientId);
-          if (!entitled) throw new CommerceError("FULFILLMENT_PENDING", true);
-        } else {
-          await releaseStaleRoutineProOrder(payable, active.row.id);
-        }
+      if (payable?.status === "paid_unfulfilled") {
+        // The webhook already verified this payment (this session or an
+        // earlier one). Complete local fulfillment; never reopen checkout.
+        await retryPaidUnfulfilledOrder(payable.id);
+        entitled = await hasRoutineProEntitlement(active.row.patientId);
+        if (!entitled) throw new CommerceError("FULFILLMENT_PENDING", true);
+        recoveredPaidOrder = true;
+      } else if (payable) {
+        await releaseStaleRoutineProOrder(payable, active.row.id);
       }
     }
     const supportedModes = [
@@ -61,6 +66,7 @@ export async function POST(request: Request) {
       ...(config.agentEnabled ? (["agent_wallet"] as const) : []),
     ];
     if (
+      !recoveredPaidOrder &&
       !verifyRoutineProQuote({
         sessionId: active.row.id,
         entitled,
@@ -84,6 +90,19 @@ export async function POST(request: Request) {
     }
     if (!state.order) throw new CommerceError("INTERNAL_ERROR", true);
     await rateLimitPaymentOrder(state.order.publicRef);
+    if (state.order.status === "paid_unfulfilled") {
+      // Verified after the reuse lock: fulfil locally instead of reopening checkout.
+      await retryPaidUnfulfilledOrder(state.order.id);
+      if (!(await hasRoutineProEntitlement(active.row.patientId))) {
+        throw new CommerceError("FULFILLMENT_PENDING", true);
+      }
+      await createAndSavePersonalizedRoutine({ active, intent });
+      return success(
+        await getRoutineProStatusForActiveSession(active, state.order.publicRef),
+        id,
+        200,
+      );
+    }
     const checkout = await createOrResumeStripeCheckout(state.order);
     return success(
       {

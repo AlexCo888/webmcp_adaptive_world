@@ -231,6 +231,17 @@ export async function getSavedRoutineForSession(
   return result.rows[0] ?? null;
 }
 
+export async function getSavedRoutineById(
+  patientId: string,
+  savedRoutineId: string,
+): Promise<{ id: string; plan: unknown } | null> {
+  const result = await commercePool.query<{ id: string; plan: unknown }>(
+    "SELECT id, plan FROM saved_routines WHERE id = $1 AND patient_id = $2 LIMIT 1",
+    [savedRoutineId, patientId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function createOrReuseRoutineProOrder({
   active,
   session,

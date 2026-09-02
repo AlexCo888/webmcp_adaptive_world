@@ -12,6 +12,7 @@ import {
   reserveAgentBudgetForOrder,
 } from "@/lib/commerce/budget";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { ROUTINE_REQUEST_MAX_BYTES } from "@/lib/commerce/constants";
 import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
 import {
   assertSameOrigin,
@@ -62,7 +63,9 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const config = getCommerceConfig();
-    const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
+    const parsed = ConfirmRoutineRequestSchema.safeParse(
+      await parseBoundedJson(request, ROUTINE_REQUEST_MAX_BYTES),
+    );
     if (!parsed.success || parsed.data.paymentMode !== "agent_wallet") {
       throw new CommerceError("INVALID_REQUEST");
     }
@@ -78,8 +81,8 @@ export async function POST(request: Request) {
       recoverable = null;
     }
     const recoveringPaidOrder = recoverable?.status === "paid_unfulfilled";
-    if (recoverable && recoveringPaidOrder && recoverable.gymSessionId !== active.row.id) {
-      // A verified payment from an earlier Gym session only needs local
+    if (recoverable && recoveringPaidOrder) {
+      // A verified payment (this session or an earlier one) only needs local
       // fulfillment; it never opens a payment rail again.
       stage = "recover_fulfillment";
       await retryPaidUnfulfilledOrder(recoverable.id);

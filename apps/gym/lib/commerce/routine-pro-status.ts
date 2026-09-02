@@ -12,6 +12,7 @@ import {
   getOrderByPublicRefForPatient,
   getPayableOrder,
   getRoutineProOrderOutcome,
+  getSavedRoutineById,
   getSavedRoutineForSession,
   hasRoutineProEntitlement,
 } from "./orders";
@@ -56,9 +57,25 @@ export async function getRoutineProStatusForActiveSession(
   const outcome = order
     ? await getRoutineProOrderOutcome(order.id)
     : { entitlementGranted: false, savedRoutineRef: null };
-  const savedRoutineRef = saved?.id ?? outcome.savedRoutineRef;
-  const savedPlan = GeneratedSessionSchema.safeParse(saved?.plan);
-  const stagedPlan = GeneratedSessionSchema.safeParse(currentPlan.rows[0]?.plan);
+
+  // The saved routine and plan must belong to the order being reported. A
+  // routine the selected order fulfilled always wins; the active session's own
+  // saved or staged plan is used only when the order is this session's (or no
+  // order exists), never for an earlier session's receipt.
+  const orderIsActiveSession = !order || order.gymSessionId === active.row.id;
+  const orderSaved =
+    outcome.savedRoutineRef && outcome.savedRoutineRef !== saved?.id
+      ? await getSavedRoutineById(patientId, outcome.savedRoutineRef)
+      : outcome.savedRoutineRef
+        ? saved
+        : null;
+  const savedRoutineRef = orderSaved?.id ?? (orderIsActiveSession ? saved?.id : undefined);
+  const savedPlan = GeneratedSessionSchema.safeParse(
+    orderSaved?.plan ?? (orderIsActiveSession ? saved?.plan : undefined),
+  );
+  const stagedPlan = GeneratedSessionSchema.safeParse(
+    orderIsActiveSession ? currentPlan.rows[0]?.plan : undefined,
+  );
   const routine = savedPlan.success
     ? savedPlan.data
     : stagedPlan.success

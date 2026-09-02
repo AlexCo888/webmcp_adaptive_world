@@ -10,6 +10,13 @@ export const ROUTINE_PRO = {
 export const STRIPE_IDEMPOTENCY_REPLAY_WINDOW_MS = 23 * 60 * 60 * 1_000;
 export const MPP_PAYMENT_WINDOW_MS = 5 * 60 * 1_000;
 export const QUOTE_WINDOW_MS = 5 * 60 * 1_000;
+/**
+ * Upper bound for a confirmed routine request body. A schema-valid agent
+ * routine (12 exercises, 5 instructions of 180 characters each, notes,
+ * warm-up, cooldown, and quote fields) can exceed 20 KB, so the routine
+ * endpoints accept more than the default 8 KB commerce body.
+ */
+export const ROUTINE_REQUEST_MAX_BYTES = 32 * 1_024;
 export const DEMO_AGENT_SUBJECT = "adaptive-demo-agent";
 
 export const payableOrderStatuses = [
