@@ -94,12 +94,11 @@ export function prepareRoutineProConfirmation({
           { label: "Payer", value: payer },
           {
             label: "Payment network",
-            value:
-              effectiveInput.paymentMode === "agent_wallet"
+            value: offer.entitled
+              ? "No new payment"
+              : effectiveInput.paymentMode === "agent_wallet"
                 ? "MPP / Tempo testnet — sandbox transaction"
-                : offer.entitled
-                  ? "No new payment"
-                  : "Stripe test mode — sandbox transaction",
+                : "Stripe test mode — sandbox transaction",
           },
           { label: "Destination", value: "Save this exact routine to Passport" },
           {
