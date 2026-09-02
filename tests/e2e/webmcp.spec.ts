@@ -397,9 +397,7 @@ test("approving executes the exact routine once and displays the fulfilled recei
     routine: proposedRoutine,
   });
   const dialog = page.getByRole("alertdialog");
-  await dialog
-    .getByRole("button", { name: "Approve exact routine and agent payment" })
-    .click();
+  await dialog.getByRole("button", { name: "Approve exact routine and agent payment" }).click();
   const output = await invocation;
 
   expect(agentPayBodies).toHaveLength(1);
@@ -487,5 +485,7 @@ test("an uncertain paid mutation recovers through read-only status and never pay
     }),
   ).rejects.toThrow("Payment confirmation is being recovered. We will not submit another payment.");
   expect(agentPayBodies).toHaveLength(1);
-  await expect(page.getByText("Payment confirmation is being recovered", { exact: false }).first()).toBeVisible();
+  await expect(
+    page.getByText("Payment confirmation is being recovered", { exact: false }).first(),
+  ).toBeVisible();
 });

@@ -136,18 +136,19 @@ describe("agent-generated personalized routines", () => {
     });
     expect(session.exercises.map((exercise) => exercise.name)).toEqual(
       routine.exercises.map(
-        (exercise) =>
-          equipmentCatalog.find((item) => item.id === exercise.equipmentId)?.name,
+        (exercise) => equipmentCatalog.find((item) => item.id === exercise.equipmentId)?.name,
       ),
     );
     expect(session.safetyNotes).toEqual(
       expect.arrayContaining([...mateoProjection.stopSignals, EXPERT_REVIEW_WARNING]),
     );
-    expect(agentRoutineInputMatchesSession({
-      session,
-      goal: session.goal,
-      routine,
-    })).toBe(true);
+    expect(
+      agentRoutineInputMatchesSession({
+        session,
+        goal: session.goal,
+        routine,
+      }),
+    ).toBe(true);
   });
 
   it("requires professional review for injury and undocumented-clearance scenarios", () => {

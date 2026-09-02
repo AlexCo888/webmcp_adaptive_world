@@ -1,7 +1,4 @@
-import type {
-  GymContextProjection,
-  RoutineProOffer,
-} from "@adaptive-world/contracts";
+import type { GymContextProjection, RoutineProOffer } from "@adaptive-world/contracts";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import type {
   CreatePersonalizedRoutineInput,
@@ -127,9 +124,9 @@ describe("Gym WebMCP confirmations", () => {
         { label: "Destination", value: "Save this exact routine to Passport" },
       ]),
     );
-    expect(fields.find((field) => field.label === "Approved Passport context used")?.value).toContain(
-      "Weight-bearing clearance is undocumented",
-    );
+    expect(
+      fields.find((field) => field.label === "Approved Passport context used")?.value,
+    ).toContain("Weight-bearing clearance is undocumented");
     expect(fields.find((field) => field.label === "Exercise 1")?.value).toContain(
       selectedEquipment.find((item) => item.id === "scifit_pro2_total_body")!.name,
     );

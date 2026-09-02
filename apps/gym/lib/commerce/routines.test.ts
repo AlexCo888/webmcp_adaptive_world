@@ -1,10 +1,7 @@
 import type { AgentGeneratedRoutineInput } from "@adaptive-world/contracts";
 import { canonicalizeJson, sha256Hex } from "@adaptive-world/security";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createAndSavePersonalizedRoutine,
-  validatePersonalizedRoutineRequest,
-} from "./routines";
+import { createAndSavePersonalizedRoutine, validatePersonalizedRoutineRequest } from "./routines";
 
 const mocks = vi.hoisted(() => ({
   authority: vi.fn(),

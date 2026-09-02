@@ -164,13 +164,7 @@ const routineSchema = {
       maxLength: 240,
     },
   },
-  required: [
-    "title",
-    "durationMinutes",
-    "exercises",
-    "safetyNotes",
-    "requiresExpertReview",
-  ],
+  required: ["title", "durationMinutes", "exercises", "safetyNotes", "requiresExpertReview"],
   additionalProperties: false,
 } as const;
 

@@ -42,16 +42,16 @@ scope, expiry, and revocation. Unauthorized IDs use an indistinguishable
 
 ## Adaptive Gym: eight tools total
 
-| Tool                          | Type                       | Payment                                         | Route/state behavior                                                         |
-| ----------------------------- | -------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| `get_gym_profile`             | Public read                | Never                                           | Public home, catalog, and routine surfaces                                   |
-| `search_equipment`            | Public read, untrusted     | Never                                           | Updates the existing catalog controls/cards                                  |
-| `get_equipment`               | Public read, untrusted     | Never                                           | Opens an existing `/equipment/[slug]` record                                 |
-| `get_active_context`          | Read                       | Never                                           | Only after a valid one-use Passport handoff                                  |
-| `get_routine_pro_offer`       | Read                       | Never                                           | Active context; bounded server-authoritative offer                           |
-| `get_routine_pro_status`      | Read, untrusted            | Never                                           | Active context; pending and fulfilled order recovery                         |
-| `create_personalized_routine` | Confirmed mutation         | Existing entitlement or approved sandbox payer | Existing Session Planner exact-preview/result canvas only                    |
-| `record_session_feedback`     | Confirmed write, untrusted | No new purchase                                 | Active completed-session feedback route                                      |
+| Tool                          | Type                       | Payment                                        | Route/state behavior                                      |
+| ----------------------------- | -------------------------- | ---------------------------------------------- | --------------------------------------------------------- |
+| `get_gym_profile`             | Public read                | Never                                          | Public home, catalog, and routine surfaces                |
+| `search_equipment`            | Public read, untrusted     | Never                                          | Updates the existing catalog controls/cards               |
+| `get_equipment`               | Public read, untrusted     | Never                                          | Opens an existing `/equipment/[slug]` record              |
+| `get_active_context`          | Read                       | Never                                          | Only after a valid one-use Passport handoff               |
+| `get_routine_pro_offer`       | Read                       | Never                                          | Active context; bounded server-authoritative offer        |
+| `get_routine_pro_status`      | Read, untrusted            | Never                                          | Active context; pending and fulfilled order recovery      |
+| `create_personalized_routine` | Confirmed mutation         | Existing entitlement or approved sandbox payer | Existing Session Planner exact-preview/result canvas only |
+| `record_session_feedback`     | Confirmed write, untrusted | No new purchase                                | Active completed-session feedback route                   |
 
 Public profile and equipment access must continue to work when every payment
 feature flag is false. Connecting and inspecting the minimum context is free.

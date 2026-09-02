@@ -446,8 +446,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
           amountMinor: ROUTINE_PRO.amountMinor,
           currency: ROUTINE_PRO.currency,
           sandbox: true,
-          agentRoutineSavedAtomically:
-            order.initial_template_id === AGENT_GENERATED_ROUTINE_MARKER,
+          agentRoutineSavedAtomically: order.initial_template_id === AGENT_GENERATED_ROUTINE_MARKER,
         }),
       ],
     );

@@ -138,11 +138,7 @@ export async function POST(request: Request) {
         goal: parsed.data.goal,
         routine: parsed.data.routine,
       });
-      return success(
-        await getRoutineProStatusForActiveSession(active, order.publicRef),
-        id,
-        200,
-      );
+      return success(await getRoutineProStatusForActiveSession(active, order.publicRef), id, 200);
     }
     if (["payment_submitted", "reconciliation_required"].includes(order.status)) {
       throw new CommerceError("RECONCILIATION_REQUIRED");
@@ -190,11 +186,7 @@ export async function POST(request: Request) {
       goal: parsed.data.goal,
       routine: parsed.data.routine,
     });
-    return success(
-      await getRoutineProStatusForActiveSession(active, order.publicRef),
-      id,
-      201,
-    );
+    return success(await getRoutineProStatusForActiveSession(active, order.publicRef), id, 201);
   } catch (error) {
     let safeError = asCommerceError(error);
     if (cleanupOrderId && !submissionClaimed) {

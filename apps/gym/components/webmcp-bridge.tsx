@@ -134,8 +134,7 @@ function statusToolResult(status: RoutineStatus) {
     entitlementGranted: status.entitlementGranted,
     routineSaved: status.routineSaved,
     ...(status.savedRoutineRef ? { savedRoutineRef: status.savedRoutineRef } : {}),
-    terminal:
-      status.orderStatus !== undefined && !RECOVERY_ORDER_STATES.has(status.orderStatus),
+    terminal: status.orderStatus !== undefined && !RECOVERY_ORDER_STATES.has(status.orderStatus),
     recoveryInstruction: isRecovering(status)
       ? "Payment confirmation is being recovered. Do not submit another payment. Poll this read-only status tool only while the order remains non-terminal."
       : status.orderStatus === "fulfilled"
@@ -392,7 +391,9 @@ export function WebMcpBridge() {
             goal: input.goal.trim(),
             ...(paymentMode ? { paymentMode } : {}),
           };
-          const equipmentIds = [...new Set(input.routine.exercises.map((item) => item.equipmentId))];
+          const equipmentIds = [
+            ...new Set(input.routine.exercises.map((item) => item.equipmentId)),
+          ];
           const equipment = await Promise.all(
             equipmentIds.map(async (equipmentId) => {
               const response = await fetchBoundedJson<unknown>(
@@ -448,11 +449,7 @@ export function WebMcpBridge() {
             }
             preparedQuotes.current.delete(digest);
             const currentStatus = parseRoutineProStatus(
-              await fetchBoundedJson<unknown>(
-                "/api/commerce/routine-pro/status",
-                {},
-                context,
-              ),
+              await fetchBoundedJson<unknown>("/api/commerce/routine-pro/status", {}, context),
             );
             if (
               statusFingerprint(currentStatus) !== prepared.statusFingerprint ||
@@ -625,13 +622,7 @@ export function WebMcpBridge() {
         },
       },
     }),
-    [
-      applyEquipmentSearch,
-      applyRecoveredRoutine,
-      finishMutationExecution,
-      openEquipment,
-      trace,
-    ],
+    [applyEquipmentSearch, applyRecoveredRoutine, finishMutationExecution, openEquipment, trace],
   );
 
   const completeCatalog = useMemo(() => createGymToolCatalog(handlers), [handlers]);

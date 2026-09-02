@@ -92,18 +92,18 @@ validation.
 
 ## What is real versus synthetic
 
-| Element                                                                            | Status                                                                                                  |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Better Auth password/session flow                                                  | Real implementation; demo identities are synthetic                                                      |
-| Neon persistence, grants, audit events, sessions, entitlements, and saved routines | Real implementation; data is synthetic                                                                  |
-| One-use 256-bit context token, digest at rest, and atomic redemption               | Real implementation                                                                                     |
-| WebMCP registration and handler execution                                          | Real only when the browser exposes `document.modelContext`                                              |
-| Life Fitness, SCIFIT, Rogue, and Eleiko models and cited sources                   | Real public product references; no endorsement claimed                                                  |
-| Passport identities and clinical records                                           | Synthetic                                                                                               |
-| Gym ownership, inventory, availability, and visits                                 | Synthetic                                                                                               |
-| Personalized routine intelligence                                                  | Supplied by the user-selected external agent; Gym validates and hydrates authoritative catalog facts    |
-| Public staff walkthroughs                                                          | Fixed, versioned, staff-authored demo content; separate from personalized Routine Pro                   |
-| Stripe and MPP activity                                                            | Designed for test mode/testnet; external smoke is not yet recorded                                      |
+| Element                                                                            | Status                                                                                               |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Better Auth password/session flow                                                  | Real implementation; demo identities are synthetic                                                   |
+| Neon persistence, grants, audit events, sessions, entitlements, and saved routines | Real implementation; data is synthetic                                                               |
+| One-use 256-bit context token, digest at rest, and atomic redemption               | Real implementation                                                                                  |
+| WebMCP registration and handler execution                                          | Real only when the browser exposes `document.modelContext`                                           |
+| Life Fitness, SCIFIT, Rogue, and Eleiko models and cited sources                   | Real public product references; no endorsement claimed                                               |
+| Passport identities and clinical records                                           | Synthetic                                                                                            |
+| Gym ownership, inventory, availability, and visits                                 | Synthetic                                                                                            |
+| Personalized routine intelligence                                                  | Supplied by the user-selected external agent; Gym validates and hydrates authoritative catalog facts |
+| Public staff walkthroughs                                                          | Fixed, versioned, staff-authored demo content; separate from personalized Routine Pro                |
+| Stripe and MPP activity                                                            | Designed for test mode/testnet; external smoke is not yet recorded                                   |
 
 ## Consent and fulfillment flow
 
@@ -135,11 +135,11 @@ discoverability—not authorization. Protected Passport and clinician reads
 resolve the current server session, relationship, scopes, expiry, and
 revocation on every invocation.
 
-| Surface        |       Catalog | Route behavior                                                                                          |
-| -------------- | ------------: | ------------------------------------------------------------------------------------------------------- |
-| Passport owner |       4 tools | Summary, shares, one-use context grant, revocation                                                      |
-| Clinician      |       5 tools | My Patients search, overview, progressive section, source, confirmed guidance                           |
-| Adaptive Gym   | 8 tools total | Public discovery; active context/offer/status/routine; feedback, exposed only where relevant            |
+| Surface        |       Catalog | Route behavior                                                                               |
+| -------------- | ------------: | -------------------------------------------------------------------------------------------- |
+| Passport owner |       4 tools | Summary, shares, one-use context grant, revocation                                           |
+| Clinician      |       5 tools | My Patients search, overview, progressive section, source, confirmed guidance                |
+| Adaptive Gym   | 8 tools total | Public discovery; active context/offer/status/routine; feedback, exposed only where relevant |
 
 Every tool uses a closed schema and bounded safe output. Mutations require an
 application-owned confirmation. The full registry is documented in

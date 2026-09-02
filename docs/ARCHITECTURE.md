@@ -6,10 +6,10 @@ Status: implementation contract for the synthetic WebMCP hackathon MVP.
 
 One monorepo produces two independently deployed, human-first applications:
 
-| Vercel project            | Root            | Audience                                     | Responsibility                                                                                                                                  |
-| ------------------------- | --------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician      | Identity, consent, sources, grants, audit history, one-use Gym projection, and owner saved routines                                             |
-| `adaptive-world-gym`      | `apps/gym`      | Public visitor and connected synthetic owner | Free verified discovery, temporary minimum context, untrusted-routine validation, Routine Pro sandbox payment, receipt recovery, and feedback   |
+| Vercel project            | Root            | Audience                                     | Responsibility                                                                                                                                |
+| ------------------------- | --------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician      | Identity, consent, sources, grants, audit history, one-use Gym projection, and owner saved routines                                           |
+| `adaptive-world-gym`      | `apps/gym`      | Public visitor and connected synthetic owner | Free verified discovery, temporary minimum context, untrusted-routine validation, Routine Pro sandbox payment, receipt recovery, and feedback |
 
 They share typed contracts, security primitives, demo fixtures, and the same
 environment's Neon database. They do not share browser cookies. Passport health
@@ -160,17 +160,17 @@ is not a release strategy.
 
 ## Data ownership and retention
 
-| Data                                 | Canonical owner               | Gym/payment copy                                               | Retention rule                          |
-| ------------------------------------ | ----------------------------- | -------------------------------------------------------------- | --------------------------------------- |
-| Identity, contacts, clinical sources | Passport                      | Never                                                          | Synthetic demo lifecycle                |
-| Consent and clinician relationships  | Passport                      | Reference only                                                 | Current state plus audit history        |
-| Minimum Gym projection               | Passport-issued / Gym session | Allowlisted projection only                                    | Expiry/revocation policy                |
-| Equipment catalog                    | Gym                           | Public                                                         | Product-data lifecycle                  |
-| Agent-generated routine input        | User-selected external agent  | Validated, canonically hydrated staged/saved plan               | Synthetic demo lifecycle                |
-| Order/setup/event/receipt digests    | Gym commerce service          | Provider-minimum metadata only                                 | Preserve replay/reconciliation evidence |
-| Entitlement and saved routine        | Passport owner                | Gym validates and saves; Passport reads owner-only             | Synthetic demo lifecycle                |
-| Budget ledger                        | Gym commerce service          | No browser/model copy                                          | Preserve settled/submitted history      |
-| Audit events                         | Shared database               | Redacted metadata only                                         | Append-only demo evidence               |
+| Data                                 | Canonical owner               | Gym/payment copy                                   | Retention rule                          |
+| ------------------------------------ | ----------------------------- | -------------------------------------------------- | --------------------------------------- |
+| Identity, contacts, clinical sources | Passport                      | Never                                              | Synthetic demo lifecycle                |
+| Consent and clinician relationships  | Passport                      | Reference only                                     | Current state plus audit history        |
+| Minimum Gym projection               | Passport-issued / Gym session | Allowlisted projection only                        | Expiry/revocation policy                |
+| Equipment catalog                    | Gym                           | Public                                             | Product-data lifecycle                  |
+| Agent-generated routine input        | User-selected external agent  | Validated, canonically hydrated staged/saved plan  | Synthetic demo lifecycle                |
+| Order/setup/event/receipt digests    | Gym commerce service          | Provider-minimum metadata only                     | Preserve replay/reconciliation evidence |
+| Entitlement and saved routine        | Passport owner                | Gym validates and saves; Passport reads owner-only | Synthetic demo lifecycle                |
+| Budget ledger                        | Gym commerce service          | No browser/model copy                              | Preserve settled/submitted history      |
+| Audit events                         | Shared database               | Redacted metadata only                             | Append-only demo evidence               |
 
 Synthetic reset may restore user-visible demo state, but it must not erase
 successful payment references, receipt digests, immutable provider snapshots,

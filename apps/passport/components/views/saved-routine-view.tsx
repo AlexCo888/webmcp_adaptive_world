@@ -76,8 +76,8 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
                       <small>
                         {exercise.durationMinutes
                           ? `${exercise.durationMinutes} minutes`
-                          : `${exercise.sets ?? "—"} sets · ${exercise.reps ?? "guided reps"}`} ·{" "}
-                        {exercise.intensity}
+                          : `${exercise.sets ?? "—"} sets · ${exercise.reps ?? "guided reps"}`}{" "}
+                        · {exercise.intensity}
                       </small>
                       <div className="scope-list" style={{ marginTop: 8 }}>
                         {exercise.instructions.map((instruction) => (
@@ -94,7 +94,12 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
                     <strong>{exercise.manufacturer}</strong>
                     <small style={{ display: "block" }}>{exercise.model}</small>
                     {exercise.sourceUrl ? (
-                      <a className="text-link" href={exercise.sourceUrl} target="_blank" rel="noreferrer">
+                      <a
+                        className="text-link"
+                        href={exercise.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         Manufacturer source
                       </a>
                     ) : null}
@@ -104,16 +109,26 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
             </div>
           </section>
 
-          {routine.cooldown.length ? <RoutineSteps title="Cooldown" values={routine.cooldown} /> : null}
+          {routine.cooldown.length ? (
+            <RoutineSteps title="Cooldown" values={routine.cooldown} />
+          ) : null}
 
           <section className="card">
             <div className="card-header">
-              <div><h2>Safety notes</h2><p className="card-subtitle">Keep these visible throughout the routine</p></div>
+              <div>
+                <h2>Safety notes</h2>
+                <p className="card-subtitle">Keep these visible throughout the routine</p>
+              </div>
             </div>
             <div className="scope-list">
               {routine.safetyNotes.map((note) => (
                 <div className="scope" key={note}>
-                  <div className="scope-main"><div className="scope-icon"><Icon name="shield" width="15" /></div><strong>{note}</strong></div>
+                  <div className="scope-main">
+                    <div className="scope-icon">
+                      <Icon name="shield" width="15" />
+                    </div>
+                    <strong>{note}</strong>
+                  </div>
                 </div>
               ))}
             </div>
@@ -123,25 +138,64 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
         <aside className="stack">
           <section className="card">
             <div className="card-header">
-              <div><h2>Provenance</h2><p className="card-subtitle">Authoritative context and catalog metadata saved with this snapshot</p></div>
+              <div>
+                <h2>Provenance</h2>
+                <p className="card-subtitle">
+                  Authoritative context and catalog metadata saved with this snapshot
+                </p>
+              </div>
             </div>
             <div className="data-list">
-              <div className="data-row"><span>Your stated goal</span><strong>{routine.goal}</strong></div>
-              <div className="data-row"><span>Generation</span><strong>{agentGenerated ? "Agent-generated via WebMCP" : "Public staff walkthrough"}</strong></div>
-              {agentGenerated ? null : <div className="data-row"><span>Walkthrough</span><strong>{routine.templateId}</strong></div>}
-              <div className="data-row"><span>Provenance version</span><strong>{routine.templateVersion}</strong></div>
-              <div className="data-row"><span>Catalog version</span><strong>{routine.catalogVersion}</strong></div>
-              <div className="data-row"><span>Created via</span><strong>{routine.createdVia === "webmcp" ? "WebMCP" : "Gym site"}</strong></div>
+              <div className="data-row">
+                <span>Your stated goal</span>
+                <strong>{routine.goal}</strong>
+              </div>
+              <div className="data-row">
+                <span>Generation</span>
+                <strong>
+                  {agentGenerated ? "Agent-generated via WebMCP" : "Public staff walkthrough"}
+                </strong>
+              </div>
+              {agentGenerated ? null : (
+                <div className="data-row">
+                  <span>Walkthrough</span>
+                  <strong>{routine.templateId}</strong>
+                </div>
+              )}
+              <div className="data-row">
+                <span>Provenance version</span>
+                <strong>{routine.templateVersion}</strong>
+              </div>
+              <div className="data-row">
+                <span>Catalog version</span>
+                <strong>{routine.catalogVersion}</strong>
+              </div>
+              <div className="data-row">
+                <span>Created via</span>
+                <strong>{routine.createdVia === "webmcp" ? "WebMCP" : "Gym site"}</strong>
+              </div>
             </div>
           </section>
 
           <section className="card">
             <div className="card-header">
-              <div><h2>Validation trace</h2><p className="card-subtitle">Why Adaptive Gym accepted and saved this exact routine</p></div>
+              <div>
+                <h2>Validation trace</h2>
+                <p className="card-subtitle">
+                  Why Adaptive Gym accepted and saved this exact routine
+                </p>
+              </div>
             </div>
             <div className="scope-list">
               {routine.decisionTrace.map((reason) => (
-                <div className="scope" key={reason}><div className="scope-main"><div className="scope-icon"><Icon name="check" width="14" /></div><small>{reason}</small></div></div>
+                <div className="scope" key={reason}>
+                  <div className="scope-main">
+                    <div className="scope-icon">
+                      <Icon name="check" width="14" />
+                    </div>
+                    <small>{reason}</small>
+                  </div>
+                </div>
               ))}
             </div>
           </section>
@@ -164,10 +218,21 @@ export function SavedRoutineView({ routine }: { routine: SavedRoutineDetail }) {
 function RoutineSteps({ title, values }: { title: string; values: readonly string[] }) {
   return (
     <section className="card">
-      <div className="card-header"><div><h2>{title}</h2></div></div>
+      <div className="card-header">
+        <div>
+          <h2>{title}</h2>
+        </div>
+      </div>
       <div className="scope-list">
         {values.map((value) => (
-          <div className="scope" key={value}><div className="scope-main"><div className="scope-icon"><Icon name="check" width="14" /></div><strong>{value}</strong></div></div>
+          <div className="scope" key={value}>
+            <div className="scope-main">
+              <div className="scope-icon">
+                <Icon name="check" width="14" />
+              </div>
+              <strong>{value}</strong>
+            </div>
+          </div>
         ))}
       </div>
     </section>

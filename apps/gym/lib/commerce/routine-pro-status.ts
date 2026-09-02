@@ -64,9 +64,7 @@ export async function getRoutineProStatusForActiveSession(
           ...(order.submittedAt ? { submittedAt: order.submittedAt.toISOString() } : {}),
           ...(order.paidAt ? { paidAt: order.paidAt.toISOString() } : {}),
           ...(order.fulfilledAt ? { fulfilledAt: order.fulfilledAt.toISOString() } : {}),
-          ...(order.providerPaymentRef
-            ? { providerPaymentRef: order.providerPaymentRef }
-            : {}),
+          ...(order.providerPaymentRef ? { providerPaymentRef: order.providerPaymentRef } : {}),
           initialGoal: order.initialGoal,
         }
       : { canResume: false }),

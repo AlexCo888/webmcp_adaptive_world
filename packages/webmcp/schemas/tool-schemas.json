@@ -255,13 +255,7 @@
         "requiresExpertReview": { "type": "boolean" },
         "expertReviewReason": { "type": "string", "minLength": 3, "maxLength": 240 }
       },
-      "required": [
-        "title",
-        "durationMinutes",
-        "exercises",
-        "safetyNotes",
-        "requiresExpertReview"
-      ]
+      "required": ["title", "durationMinutes", "exercises", "safetyNotes", "requiresExpertReview"]
     }
   }
 }

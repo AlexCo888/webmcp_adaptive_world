@@ -214,7 +214,9 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
     if (!experience.personalizedRoutine || !experience.savedRoutineRef) return;
     setSession(experience.personalizedRoutine);
     setSavedRoutineRef(experience.savedRoutineRef);
-    void readStatus().then(adoptStatus).catch(() => undefined);
+    void readStatus()
+      .then(adoptStatus)
+      .catch(() => undefined);
     window.setTimeout(
       () => document.querySelector(".session-canvas")?.scrollIntoView({ behavior: "smooth" }),
       0,
@@ -235,23 +237,34 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
     <div className="planner-grid planner-grid--templates">
       <aside className="planner-controls card">
         <div className="panel-heading">
-          <span className="panel-heading__icon"><ClipboardCheck size={19} /></span>
-          <div><p>Adaptive Routine Pro</p><h2>Agent-generated through WebMCP</h2></div>
+          <span className="panel-heading__icon">
+            <ClipboardCheck size={19} />
+          </span>
+          <div>
+            <p>Adaptive Routine Pro</p>
+            <h2>Agent-generated through WebMCP</h2>
+          </div>
         </div>
         {context ? (
           <div className="active-context">
             <Fingerprint size={16} />
             <span>
               <strong>{context.subjectAlias}</strong>
-              {context.movementConsiderations.length} movement signals · {context.stopSignals.length} stop signals
+              {context.movementConsiderations.length} movement signals ·{" "}
+              {context.stopSignals.length} stop signals
             </span>
             <Link href="/passport">Review</Link>
           </div>
         ) : (
           <div className="context-required">
             <Fingerprint size={19} />
-            <div><strong>Passport context required</strong><p>Only an explicitly consented Gym projection can be used.</p></div>
-            <Link href="/passport" className="button button--dark button--small">Connect</Link>
+            <div>
+              <strong>Passport context required</strong>
+              <p>Only an explicitly consented Gym projection can be used.</p>
+            </div>
+            <Link href="/passport" className="button button--dark button--small">
+              Connect
+            </Link>
           </div>
         )}
         <div className="decision-trace">
@@ -260,7 +273,10 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             <li>The user-selected agent reads the active minimum Passport projection.</li>
             <li>The agent inspects verified, currently available Gym equipment.</li>
             <li>The agent creates a new structured routine in its own reasoning context.</li>
-            <li>Adaptive Gym shows the exact proposal, validates it, processes the sandbox payment, and saves it.</li>
+            <li>
+              Adaptive Gym shows the exact proposal, validates it, processes the sandbox payment,
+              and saves it.
+            </li>
           </ol>
         </div>
         <p className="fine-print">
@@ -270,17 +286,27 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         </p>
         <div className="info-notice" role="status">
           <ShieldCheck size={17} />
-          Use <code>get_active_context</code>, <code>search_equipment</code>, <code>get_equipment</code>, then <code>create_personalized_routine</code>.
+          Use <code>get_active_context</code>, <code>search_equipment</code>,{" "}
+          <code>get_equipment</code>, then <code>create_personalized_routine</code>.
         </div>
         <section aria-labelledby="staff-walkthroughs-heading">
           <p className="eyebrow">Separate public option</p>
           <h3 id="staff-walkthroughs-heading">Staff walkthroughs</h3>
-          <p className="fine-print">These public examples remain visible, but Routine Pro never uses them to create a personalized result.</p>
+          <p className="fine-print">
+            These public examples remain visible, but Routine Pro never uses them to create a
+            personalized result.
+          </p>
           <div className="template-list">
             {facilityTemplates.map((template) => (
               <article className="template-option" key={template.id}>
-                <span><strong>{template.name}</strong><small>{template.durationMinutes} min · v{template.version}</small></span>
-                <p>{template.summary}</p><em>{template.bestFor}</em>
+                <span>
+                  <strong>{template.name}</strong>
+                  <small>
+                    {template.durationMinutes} min · v{template.version}
+                  </small>
+                </span>
+                <p>{template.summary}</p>
+                <em>{template.bestFor}</em>
               </article>
             ))}
           </div>
@@ -288,16 +314,38 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
       </aside>
 
       <section className="session-canvas" aria-live="polite">
-        {state === "recovering" ? <div className="info-notice" role="status"><LoaderCircle className="spin" size={18} />{message}</div> : null}
-        {state === "error" ? <div className="error-notice"><AlertTriangle size={18} />{message}</div> : null}
+        {state === "recovering" ? (
+          <div className="info-notice" role="status">
+            <LoaderCircle className="spin" size={18} />
+            {message}
+          </div>
+        ) : null}
+        {state === "error" ? (
+          <div className="error-notice">
+            <AlertTriangle size={18} />
+            {message}
+          </div>
+        ) : null}
         {session ? (
-          <SessionResult session={session} equipment={equipment} savedRoutineRef={savedRoutineRef} receipt={receipt} onReset={() => setSession(null)} />
+          <SessionResult
+            session={session}
+            equipment={equipment}
+            savedRoutineRef={savedRoutineRef}
+            receipt={receipt}
+            onReset={() => setSession(null)}
+          />
         ) : (
           <div className="session-empty">
-            <div className="session-empty__orbit"><Dumbbell size={38} /></div>
+            <div className="session-empty__orbit">
+              <Dumbbell size={38} />
+            </div>
             <p className="eyebrow">External intelligence · first-party validation</p>
             <h2>Your agent-generated proposal will appear here.</h2>
-            <p>The selected agent must inspect the approved context and real equipment, show the complete routine, and obtain confirmation for that exact routine before the paid write.</p>
+            <p>
+              The selected agent must inspect the approved context and real equipment, show the
+              complete routine, and obtain confirmation for that exact routine before the paid
+              write.
+            </p>
             {receipt ? <RoutineReceipt status={receipt} savedRoutineRef={savedRoutineRef} /> : null}
           </div>
         )}
@@ -306,66 +354,160 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
   );
 }
 
-function RoutineReceipt({ status, savedRoutineRef }: { status: RoutineStatus; savedRoutineRef: string | null }) {
+function RoutineReceipt({
+  status,
+  savedRoutineRef,
+}: {
+  status: RoutineStatus;
+  savedRoutineRef: string | null;
+}) {
   if (!status.orderRef || !status.orderStatus) return null;
   const explorerUrl = tempoExplorerUrl(status);
   return (
     <section className="decision-trace" aria-labelledby="routine-receipt-heading">
       <p className="eyebrow">Adaptive Routine Pro receipt</p>
-      <h3 id="routine-receipt-heading">{status.orderStatus === "fulfilled" ? "Payment confirmed" : "Payment status"}</h3>
+      <h3 id="routine-receipt-heading">
+        {status.orderStatus === "fulfilled" ? "Payment confirmed" : "Payment status"}
+      </h3>
       {isNonTerminal(status) ? (
-        <div className="info-notice" role="status"><LoaderCircle className="spin" size={17} />Payment confirmation is being recovered. We will not submit another payment.</div>
+        <div className="info-notice" role="status">
+          <LoaderCircle className="spin" size={17} />
+          Payment confirmation is being recovered. We will not submit another payment.
+        </div>
       ) : null}
       <dl className="confirmation-fields">
-        <div><dt>Product</dt><dd>Adaptive Routine Pro</dd></div>
-        <div><dt>Amount</dt><dd>$4.99 test USD</dd></div>
-        <div><dt>Payer</dt><dd>{status.payerLabel ?? "Not recorded"}</dd></div>
-        <div><dt>Provider</dt><dd>{providerLabel(status)}</dd></div>
-        <div><dt>Order reference</dt><dd>{status.orderRef}</dd></div>
-        <div><dt>Transaction / payment reference</dt><dd>{status.providerPaymentRef ?? "Pending"}</dd></div>
-        <div><dt>Paid</dt><dd>{formattedTimestamp(status.paidAt)}</dd></div>
-        <div><dt>Fulfilled</dt><dd>{formattedTimestamp(status.fulfilledAt)}</dd></div>
-        <div><dt>Entitlement granted</dt><dd>{status.entitlementGranted ? "Yes" : "No"}</dd></div>
-        <div><dt>Routine saved to Passport</dt><dd>{status.routineSaved ? "Yes" : "No"}</dd></div>
+        <div>
+          <dt>Product</dt>
+          <dd>Adaptive Routine Pro</dd>
+        </div>
+        <div>
+          <dt>Amount</dt>
+          <dd>$4.99 test USD</dd>
+        </div>
+        <div>
+          <dt>Payer</dt>
+          <dd>{status.payerLabel ?? "Not recorded"}</dd>
+        </div>
+        <div>
+          <dt>Provider</dt>
+          <dd>{providerLabel(status)}</dd>
+        </div>
+        <div>
+          <dt>Order reference</dt>
+          <dd>{status.orderRef}</dd>
+        </div>
+        <div>
+          <dt>Transaction / payment reference</dt>
+          <dd>{status.providerPaymentRef ?? "Pending"}</dd>
+        </div>
+        <div>
+          <dt>Paid</dt>
+          <dd>{formattedTimestamp(status.paidAt)}</dd>
+        </div>
+        <div>
+          <dt>Fulfilled</dt>
+          <dd>{formattedTimestamp(status.fulfilledAt)}</dd>
+        </div>
+        <div>
+          <dt>Entitlement granted</dt>
+          <dd>{status.entitlementGranted ? "Yes" : "No"}</dd>
+        </div>
+        <div>
+          <dt>Routine saved to Passport</dt>
+          <dd>{status.routineSaved ? "Yes" : "No"}</dd>
+        </div>
       </dl>
-      {explorerUrl ? <a href={explorerUrl} target="_blank" rel="noreferrer" className="button button--light">View on Tempo Explorer <ArrowRight size={15} /></a> : null}
+      {explorerUrl ? (
+        <a href={explorerUrl} target="_blank" rel="noreferrer" className="button button--light">
+          View on Tempo Explorer <ArrowRight size={15} />
+        </a>
+      ) : null}
       {status.routineSaved && savedRoutineRef ? (
-        <a className="button button--dark" href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}>Open saved routine in Passport <ArrowRight size={15} /></a>
+        <a
+          className="button button--dark"
+          href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}
+        >
+          Open saved routine in Passport <ArrowRight size={15} />
+        </a>
       ) : null}
     </section>
   );
 }
 
-function SessionResult({ session, equipment, savedRoutineRef, receipt, onReset }: {
+function SessionResult({
+  session,
+  equipment,
+  savedRoutineRef,
+  receipt,
+  onReset,
+}: {
   session: GeneratedSession;
   equipment: Equipment[];
   savedRoutineRef: string | null;
   receipt: RoutineStatus | null;
   onReset: () => void;
 }) {
-  const equipmentById = useMemo(() => new Map(equipment.map((item) => [item.id, item])), [equipment]);
+  const equipmentById = useMemo(
+    () => new Map(equipment.map((item) => [item.id, item])),
+    [equipment],
+  );
   const agentGenerated = session.generationMode === "agent_generated";
   return (
     <div className="session-result">
       <div className="session-result__header">
         <div>
-          <p className="eyebrow">{agentGenerated ? "Agent-generated via WebMCP" : "Public staff walkthrough"}</p>
+          <p className="eyebrow">
+            {agentGenerated ? "Agent-generated via WebMCP" : "Public staff walkthrough"}
+          </p>
           <h2>{session.title}</h2>
-          <span><Clock3 size={15} /> {session.durationMinutes} minutes · {session.exercises.length} equipment blocks</span>
+          <span>
+            <Clock3 size={15} /> {session.durationMinutes} minutes · {session.exercises.length}{" "}
+            equipment blocks
+          </span>
         </div>
-        <button type="button" className="icon-button" onClick={onReset} aria-label="Hide routine"><RotateCcw size={17} /></button>
+        <button type="button" className="icon-button" onClick={onReset} aria-label="Hide routine">
+          <RotateCcw size={17} />
+        </button>
       </div>
       <div className="session-provenance">
-        <span><UserCheck size={15} />{agentGenerated ? "Agent-generated via WebMCP" : `Staff walkthrough ${session.templateId}@${session.templateVersion}`}</span>
-        <span><Fingerprint size={15} /> Validated by Adaptive Gym</span>
-        <span><ShieldCheck size={15} /> Catalog {session.catalogVersion}</span>
+        <span>
+          <UserCheck size={15} />
+          {agentGenerated
+            ? "Agent-generated via WebMCP"
+            : `Staff walkthrough ${session.templateId}@${session.templateVersion}`}
+        </span>
+        <span>
+          <Fingerprint size={15} /> Validated by Adaptive Gym
+        </span>
+        <span>
+          <ShieldCheck size={15} /> Catalog {session.catalogVersion}
+        </span>
       </div>
-      <div className="active-context"><Fingerprint size={16} /><span><strong>Confirmed goal</strong>{session.goal}</span></div>
+      <div className="active-context">
+        <Fingerprint size={16} />
+        <span>
+          <strong>Confirmed goal</strong>
+          {session.goal}
+        </span>
+      </div>
       {session.requiresExpertReview ? (
-        <div className="error-notice" role="alert"><AlertTriangle size={19} /><div><strong>{EXPERT_REVIEW_WARNING}</strong>{session.expertReviewReason ? <p>{session.expertReviewReason}</p> : null}</div></div>
+        <div className="error-notice" role="alert">
+          <AlertTriangle size={19} />
+          <div>
+            <strong>{EXPERT_REVIEW_WARNING}</strong>
+            {session.expertReviewReason ? <p>{session.expertReviewReason}</p> : null}
+          </div>
+        </div>
       ) : null}
       {savedRoutineRef ? (
-        <p className="saved-routine-state"><Check size={15} /> Saved to Passport ✓<a href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}>Open in Passport</a></p>
+        <p className="saved-routine-state">
+          <Check size={15} /> Saved to Passport ✓
+          <a
+            href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}
+          >
+            Open in Passport
+          </a>
+        </p>
       ) : null}
       {receipt ? <RoutineReceipt status={receipt} savedRoutineRef={savedRoutineRef} /> : null}
       {session.warmup.length ? <RoutineList title="Warm-up" values={session.warmup} /> : null}
@@ -376,11 +518,28 @@ function SessionResult({ session, equipment, savedRoutineRef, receipt, onReset }
             <li key={exercise.equipmentId}>
               <span className="exercise-number">{String(index + 1).padStart(2, "0")}</span>
               <div className="exercise-content">
-                <div><h3>{exercise.name}</h3><span className="tag">{exercise.intensity}</span></div>
+                <div>
+                  <h3>{exercise.name}</h3>
+                  <span className="tag">{exercise.intensity}</span>
+                </div>
                 <p className="exercise-prescription">{exercise.durationMinutes} minutes</p>
-                <ul>{exercise.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}</ul>
-                <div className="adaptation-reason"><Check size={14} />{exercise.adaptationReason}</div>
-                {item ? <div className="station-source"><Link href={`/equipment/${item.slug}`}>Gym record</Link><a href={item.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source <ArrowRight size={12} /></a></div> : null}
+                <ul>
+                  {exercise.instructions.map((instruction) => (
+                    <li key={instruction}>{instruction}</li>
+                  ))}
+                </ul>
+                <div className="adaptation-reason">
+                  <Check size={14} />
+                  {exercise.adaptationReason}
+                </div>
+                {item ? (
+                  <div className="station-source">
+                    <Link href={`/equipment/${item.slug}`}>Gym record</Link>
+                    <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                      Manufacturer source <ArrowRight size={12} />
+                    </a>
+                  </div>
+                ) : null}
               </div>
             </li>
           );
@@ -388,14 +547,36 @@ function SessionResult({ session, equipment, savedRoutineRef, receipt, onReset }
       </ol>
       {session.cooldown.length ? <RoutineList title="Cooldown" values={session.cooldown} /> : null}
       <RoutineList title="Routine provenance" values={session.decisionTrace} />
-      <div className="safety-callout"><AlertTriangle size={19} /><div><strong>Keep these signals visible</strong><ul>{session.safetyNotes.map((note) => <li key={note}>{note}</li>)}</ul></div></div>
+      <div className="safety-callout">
+        <AlertTriangle size={19} />
+        <div>
+          <strong>Keep these signals visible</strong>
+          <ul>
+            {session.safetyNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
       <Link href="/session/feedback" className="button button--dark button--block">
-        {session.requiresExpertReview ? "Record feedback after professional approval" : "Start routine and record feedback"} <ArrowRight size={17} />
+        {session.requiresExpertReview
+          ? "Record feedback after professional approval"
+          : "Start routine and record feedback"}{" "}
+        <ArrowRight size={17} />
       </Link>
     </div>
   );
 }
 
 function RoutineList({ title, values }: { title: string; values: readonly string[] }) {
-  return <div className="decision-trace"><h3>{title}</h3><ol>{values.map((value) => <li key={value}>{value}</li>)}</ol></div>;
+  return (
+    <div className="decision-trace">
+      <h3>{title}</h3>
+      <ol>
+        {values.map((value) => (
+          <li key={value}>{value}</li>
+        ))}
+      </ol>
+    </div>
+  );
 }

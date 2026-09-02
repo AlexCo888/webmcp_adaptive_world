@@ -455,7 +455,10 @@ export function createAgentGeneratedSession({
       `Routine duration exceeds the active context bound of ${maximumDuration} minutes.`,
     );
   }
-  if (exerciseMinutes > submitted.durationMinutes || submitted.durationMinutes - exerciseMinutes > 30) {
+  if (
+    exerciseMinutes > submitted.durationMinutes ||
+    submitted.durationMinutes - exerciseMinutes > 30
+  ) {
     throw new AgentRoutineValidationError(
       "Exercise minutes must fit the declared routine duration with no more than 30 minutes reserved for warm-up, cooldown, and transitions.",
     );
@@ -463,7 +466,9 @@ export function createAgentGeneratedSession({
 
   const hydratedExercises = submitted.exercises.map((exercise) => {
     if (seen.has(exercise.equipmentId)) {
-      throw new AgentRoutineValidationError("Each equipment item may appear only once in a routine.");
+      throw new AgentRoutineValidationError(
+        "Each equipment item may appear only once in a routine.",
+      );
     }
     seen.add(exercise.equipmentId);
     const item = equipmentById.get(exercise.equipmentId);
@@ -512,7 +517,9 @@ export function createAgentGeneratedSession({
   ]).slice(0, 24);
   for (const signal of profile.stopSignals) {
     if (!safetyNotes.includes(signal.slice(0, 200))) {
-      throw new AgentRoutineValidationError("All required Passport stop signals must be preserved.");
+      throw new AgentRoutineValidationError(
+        "All required Passport stop signals must be preserved.",
+      );
     }
   }
 
@@ -580,7 +587,8 @@ export function agentRoutineInputMatchesSession({
   ) {
     return false;
   }
-  if (input.expertReviewReason && plan.expertReviewReason !== input.expertReviewReason) return false;
+  if (input.expertReviewReason && plan.expertReviewReason !== input.expertReviewReason)
+    return false;
   if (!input.safetyNotes.every((note) => plan.safetyNotes.includes(note))) return false;
   return input.exercises.every((exercise, index) => {
     const saved = plan.exercises[index];
@@ -611,7 +619,9 @@ export function validateStagedAgentGeneratedSession({
     plan.createdVia !== "webmcp" ||
     plan.projectionId !== profile.projectionId
   ) {
-    throw new AgentRoutineValidationError("The staged plan is not an agent-generated WebMCP routine.");
+    throw new AgentRoutineValidationError(
+      "The staged plan is not an agent-generated WebMCP routine.",
+    );
   }
   const equipmentById = new Map(equipment.map((item) => [item.id, item]));
   const seen = new Set<string>();
@@ -628,7 +638,9 @@ export function validateStagedAgentGeneratedSession({
       );
     }
     if (exercise.intensity !== "easy" && exercise.intensity !== "moderate") {
-      throw new AgentRoutineValidationError("Agent-generated routines are limited to easy or moderate intensity.");
+      throw new AgentRoutineValidationError(
+        "Agent-generated routines are limited to easy or moderate intensity.",
+      );
     }
     exerciseMinutes += exercise.durationMinutes ?? 0;
   }
@@ -647,10 +659,7 @@ export function validateStagedAgentGeneratedSession({
     ...plan.cooldown,
     ...plan.safetyNotes,
     ...(plan.expertReviewReason ? [plan.expertReviewReason] : []),
-    ...plan.exercises.flatMap((exercise) => [
-      ...exercise.instructions,
-      exercise.adaptationReason,
-    ]),
+    ...plan.exercises.flatMap((exercise) => [...exercise.instructions, exercise.adaptationReason]),
   ]);
   if (containsMedicalApprovalClaim(stagedText)) {
     throw new AgentRoutineValidationError("The staged routine contains a medical-approval claim.");

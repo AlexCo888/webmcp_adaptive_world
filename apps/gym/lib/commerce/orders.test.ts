@@ -1,13 +1,7 @@
-import type {
-  AgentGeneratedRoutineInput,
-  GymContextProjection,
-} from "@adaptive-world/contracts";
+import type { AgentGeneratedRoutineInput, GymContextProjection } from "@adaptive-world/contracts";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { describe, expect, it } from "vitest";
-import {
-  AGENT_GENERATED_ROUTINE_MARKER,
-  createAgentGeneratedSession,
-} from "@/lib/session-planner";
+import { AGENT_GENERATED_ROUTINE_MARKER, createAgentGeneratedSession } from "@/lib/session-planner";
 import { assertRoutineOrderInput, type RoutineProOrder } from "./orders";
 
 const goal = "Support a cautious return to activity while clearance remains undocumented";

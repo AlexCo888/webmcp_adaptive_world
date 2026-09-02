@@ -96,10 +96,10 @@ async function persistRoutinePlan(
     if (!parsed.success || canonicalizeJson(parsed.data) !== canonicalizeJson(session)) {
       throw new CommerceError("ROUTINE_CONFLICT");
     }
-    await client.query(
-      "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
-      [gymSessionId, canonicalExisting],
-    );
+    await client.query("UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1", [
+      gymSessionId,
+      canonicalExisting,
+    ]);
     return {
       session: parsed.data,
       savedRoutineRef: existing.rows[0].id,
@@ -128,10 +128,10 @@ async function persistRoutinePlan(
   );
   const savedRoutineRef = saved.rows[0]?.id;
   if (!savedRoutineRef) throw new CommerceError("INTERNAL_ERROR", true);
-  await client.query(
-    "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
-    [gymSessionId, canonicalPlan],
-  );
+  await client.query("UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1", [
+    gymSessionId,
+    canonicalPlan,
+  ]);
   await client.query(
     `INSERT INTO audit_events (
        patient_id, action, resource_type, resource_id, outcome, metadata
@@ -185,10 +185,7 @@ export async function persistStagedAgentRoutineInTransaction(
     [orderId, patientId, gymSessionId],
   );
   const orderRow = order.rows[0];
-  if (
-    orderRow?.initial_template_id !== AGENT_GENERATED_ROUTINE_MARKER ||
-    !orderRow.initial_goal
-  ) {
+  if (orderRow?.initial_template_id !== AGENT_GENERATED_ROUTINE_MARKER || !orderRow.initial_goal) {
     throw new CommerceError("RECONCILIATION_REQUIRED");
   }
   const staged = await client.query<{
