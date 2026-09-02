@@ -19,6 +19,7 @@ export type SavedRoutineDetail = SavedRoutineSummary & {
   templateId: string;
   catalogVersion: string;
   createdVia: "site-ui" | "webmcp";
+  generationMode: GeneratedSession["generationMode"];
   exercises: Array<
     GeneratedSession["exercises"][number] & {
       manufacturer: string;
@@ -26,7 +27,11 @@ export type SavedRoutineDetail = SavedRoutineSummary & {
       sourceUrl: string | null;
     }
   >;
+  warmup: string[];
+  cooldown: string[];
   safetyNotes: string[];
+  requiresExpertReview: boolean;
+  expertReviewReason?: string;
   decisionTrace: string[];
   synthetic: true;
 };
@@ -110,6 +115,7 @@ export async function getSavedRoutineDetail(
     templateVersion: row.routine.templateVersion,
     catalogVersion: row.routine.catalogVersion,
     createdVia: row.routine.createdVia === "webmcp" ? "webmcp" : "site-ui",
+    generationMode: plan.generationMode,
     durationMinutes: plan.durationMinutes,
     exercises: plan.exercises.map((exercise) => {
       const source = provenance.get(exercise.equipmentId);
@@ -120,7 +126,11 @@ export async function getSavedRoutineDetail(
         sourceUrl: source?.sourceUrl ?? null,
       };
     }),
+    warmup: plan.warmup,
+    cooldown: plan.cooldown,
     safetyNotes: plan.safetyNotes,
+    requiresExpertReview: plan.requiresExpertReview,
+    ...(plan.expertReviewReason ? { expertReviewReason: plan.expertReviewReason } : {}),
     decisionTrace: plan.decisionTrace,
     synthetic: true,
   };

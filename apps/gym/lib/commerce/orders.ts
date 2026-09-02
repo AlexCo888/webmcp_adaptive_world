@@ -1,11 +1,14 @@
 import {
+  GeneratedSessionSchema,
   RoutineGoalSchema,
-  RoutineTemplateIdSchema,
+  type GeneratedSession,
   type RoutinePaymentModeSchema,
+  type RoutineProIntent,
 } from "@adaptive-world/contracts";
 import type { PoolClient } from "@adaptive-world/db";
 import type { z } from "zod";
 import type { getGymSession } from "@/lib/gym-session";
+import { routineIntentMatchesSession, routineIntentProvenanceId } from "@/lib/session-planner";
 import { ROUTINE_PRO } from "./constants";
 import { commercePool, withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
@@ -41,6 +44,10 @@ export type RoutineProOrder = {
     | "refunded";
   providerPaymentRef: string | null;
   refundReference: string | null;
+  submittedAt: Date | null;
+  paidAt: Date | null;
+  fulfilledAt: Date | null;
+  createdAt: Date;
   capabilityVersion: number | null;
   capabilityDigest: string | null;
   capabilityExpiresAt: Date | null;
@@ -61,6 +68,10 @@ type OrderRow = {
   status: RoutineProOrder["status"];
   provider_payment_ref: string | null;
   refund_reference: string | null;
+  submitted_at: Date | null;
+  paid_at: Date | null;
+  fulfilled_at: Date | null;
+  created_at: Date;
   capability_version: number | null;
   capability_digest: string | null;
   capability_expires_at: Date | null;
@@ -82,27 +93,36 @@ function mapOrder(row: OrderRow): RoutineProOrder {
     status: row.status,
     providerPaymentRef: row.provider_payment_ref,
     refundReference: row.refund_reference,
+    submittedAt: row.submitted_at,
+    paidAt: row.paid_at,
+    fulfilledAt: row.fulfilled_at,
+    createdAt: row.created_at,
     capabilityVersion: row.capability_version,
     capabilityDigest: row.capability_digest,
     capabilityExpiresAt: row.capability_expires_at,
   };
 }
 
-export function routineInputForOrder(order: RoutineProOrder, fallbackGoal: string) {
-  return {
-    templateId: RoutineTemplateIdSchema.parse(order.initialTemplateId),
-    goal: RoutineGoalSchema.parse(order.initialGoal ?? fallbackGoal),
-  };
-}
-
+/**
+ * An existing payable order may only be reused for the exact intent it was
+ * created for: same Gym session, same channel, same provenance, same goal, and
+ * the same staged plan content. Anything else must read status, never pay.
+ */
 export function assertRoutineOrderInput(
   order: RoutineProOrder,
-  input: { templateId: string; goal: string },
+  input: {
+    gymSessionId: string;
+    intent: RoutineProIntent;
+    stagedSession: GeneratedSession;
+  },
 ): void {
-  const requestedGoal = RoutineGoalSchema.parse(input.goal);
+  const requestedGoal = RoutineGoalSchema.parse(input.intent.goal);
   if (
-    order.initialTemplateId !== input.templateId ||
-    (order.initialGoal !== null && order.initialGoal !== requestedGoal)
+    order.initiatedVia !== input.intent.initiatedVia ||
+    order.initialTemplateId !== routineIntentProvenanceId(input.intent) ||
+    order.initialGoal !== requestedGoal ||
+    order.gymSessionId !== input.gymSessionId ||
+    !routineIntentMatchesSession({ session: input.stagedSession, intent: input.intent })
   ) {
     throw new CommerceError("ORDER_PENDING", true);
   }
@@ -152,21 +172,110 @@ export async function getPayableOrder(patientId: string): Promise<RoutineProOrde
   return result.rows[0] ? mapOrder(result.rows[0]) : null;
 }
 
+export async function getLatestRoutineProOrderForSession(
+  patientId: string,
+  gymSessionId: string,
+): Promise<RoutineProOrder | null> {
+  const result = await commercePool.query<OrderRow>(
+    `SELECT * FROM commerce_orders
+     WHERE patient_id = $1 AND product_key = $2 AND originating_gym_session_id = $3
+     ORDER BY created_at DESC LIMIT 1`,
+    [patientId, ROUTINE_PRO.productKey, gymSessionId],
+  );
+  return result.rows[0] ? mapOrder(result.rows[0]) : null;
+}
+
+/**
+ * The routine an order fulfilled is the one saved from the same Gym session
+ * with the order's own provenance and channel. A later routine saved under the
+ * same entitlement (for example a staff walkthrough after an agent routine)
+ * must never be attributed to this order's receipt.
+ */
+export async function getRoutineProOrderOutcome(orderId: string): Promise<{
+  entitlementGranted: boolean;
+  savedRoutineRef: string | null;
+}> {
+  const result = await commercePool.query<{
+    entitlement_granted: boolean;
+    saved_routine_ref: string | null;
+  }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM entitlement_grants
+       WHERE source_order_id = co.id AND entitlement_key = $2 AND status = 'active'
+     ) AS entitlement_granted,
+     (
+       SELECT sr.id FROM entitlement_grants eg
+       INNER JOIN saved_routines sr ON sr.entitlement_grant_id = eg.id
+       WHERE eg.source_order_id = co.id AND eg.entitlement_key = $2
+         AND eg.status = 'active' AND sr.source_gym_session_id = co.originating_gym_session_id
+         AND sr.template_id = co.initial_template_id AND sr.created_via = co.initiated_via
+       ORDER BY sr.saved_at DESC LIMIT 1
+     ) AS saved_routine_ref
+     FROM commerce_orders co WHERE co.id = $1 LIMIT 1`,
+    [orderId, ROUTINE_PRO.entitlementKey],
+  );
+  return {
+    entitlementGranted: result.rows[0]?.entitlement_granted === true,
+    savedRoutineRef: result.rows[0]?.saved_routine_ref ?? null,
+  };
+}
+
+/**
+ * Returns the most recent routine saved from this Gym session, independent of
+ * which order (if any) funded the entitlement. An already-entitled person on a
+ * fresh session has no order for that session, but may still have a saved plan.
+ */
+export async function getSavedRoutineForSession(
+  patientId: string,
+  gymSessionId: string,
+): Promise<{ id: string; plan: unknown } | null> {
+  const result = await commercePool.query<{ id: string; plan: unknown }>(
+    `SELECT id, plan FROM saved_routines
+     WHERE patient_id = $1 AND source_gym_session_id = $2
+     ORDER BY saved_at DESC LIMIT 1`,
+    [patientId, gymSessionId],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function getSavedRoutineById(
+  patientId: string,
+  savedRoutineId: string,
+): Promise<{ id: string; plan: unknown } | null> {
+  const result = await commercePool.query<{ id: string; plan: unknown }>(
+    "SELECT id, plan FROM saved_routines WHERE id = $1 AND patient_id = $2 LIMIT 1",
+    [savedRoutineId, patientId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function createOrReuseRoutineProOrder({
   active,
-  templateId,
-  goal,
+  session,
+  intent,
   paymentMode,
-  initiatedVia,
 }: {
   active: ActiveGymSession;
-  templateId: string;
-  goal: string;
+  session: GeneratedSession;
+  intent: RoutineProIntent;
   paymentMode: PaymentMode;
-  initiatedVia: "site-ui" | "webmcp";
-}): Promise<{ entitled: boolean; order: RoutineProOrder | null; reused: boolean }> {
+}): Promise<{
+  entitled: boolean;
+  order: RoutineProOrder | null;
+  reused: boolean;
+  session: GeneratedSession;
+}> {
   const patientId = active.row.patientId;
   if (!patientId) throw new CommerceError("CONTEXT_REQUIRED");
+  const requestedGoal = RoutineGoalSchema.parse(intent.goal);
+  const provenanceId = routineIntentProvenanceId(intent);
+  if (
+    session.templateId !== provenanceId ||
+    session.createdVia !== intent.initiatedVia ||
+    !routineIntentMatchesSession({ session, intent })
+  ) {
+    throw new CommerceError("INVALID_REQUEST");
+  }
   const provider = paymentMode === "human_checkout" ? "stripe_checkout" : "mpp_tempo";
   const payerKind = paymentMode === "human_checkout" ? "human" : "agent";
 
@@ -184,7 +293,7 @@ export async function createOrReuseRoutineProOrder({
       },
       async () => {
         if (await hasRoutineProEntitlement(patientId, client)) {
-          return { entitled: true, order: null, reused: true };
+          return { entitled: true, order: null, reused: true, session };
         }
 
         const existing = await client.query<OrderRow>(
@@ -197,11 +306,25 @@ export async function createOrReuseRoutineProOrder({
         const row = existing.rows[0];
         if (row) {
           if (row.provider !== provider) throw new CommerceError("ORDER_PENDING", true);
+          const staged = await client.query<{ plan: unknown }>(
+            "SELECT plan FROM gym_sessions WHERE id = $1 LIMIT 1",
+            [active.row.id],
+          );
+          const parsed = GeneratedSessionSchema.safeParse(staged.rows[0]?.plan);
+          if (!parsed.success) throw new CommerceError("RECONCILIATION_REQUIRED");
           const order = mapOrder(row);
-          assertRoutineOrderInput(order, { templateId, goal });
-          return { entitled: false, order, reused: true };
+          assertRoutineOrderInput(order, {
+            gymSessionId: active.row.id,
+            intent,
+            stagedSession: parsed.data,
+          });
+          return { entitled: false, order, reused: true, session: parsed.data };
         }
 
+        await client.query(
+          "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
+          [active.row.id, JSON.stringify(session)],
+        );
         const publicRef = `awrp_${crypto.randomUUID().replaceAll("-", "")}`;
         const inserted = await client.query<OrderRow>(
           `INSERT INTO commerce_orders (
@@ -217,9 +340,9 @@ export async function createOrReuseRoutineProOrder({
             ROUTINE_PRO.productKey,
             payerKind,
             provider,
-            initiatedVia,
-            templateId,
-            goal,
+            intent.initiatedVia,
+            provenanceId,
+            requestedGoal,
             ROUTINE_PRO.amountMinor,
             ROUTINE_PRO.currency,
           ],
@@ -238,13 +361,15 @@ export async function createOrReuseRoutineProOrder({
               productKey: ROUTINE_PRO.productKey,
               payerKind,
               provider,
-              initiatedVia,
+              initiatedVia: intent.initiatedVia,
+              generationMode: session.generationMode,
+              exactRoutineStaged: true,
               naturalLanguageGoal: true,
               sandbox: true,
             }),
           ],
         );
-        return { entitled: false, order: mapOrder(created), reused: false };
+        return { entitled: false, order: mapOrder(created), reused: false, session };
       },
     );
   });

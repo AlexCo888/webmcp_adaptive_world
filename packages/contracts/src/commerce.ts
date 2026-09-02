@@ -1,12 +1,17 @@
 import { z } from "zod";
 
-import { GeneratedSessionSchema } from "./equipment";
+import { AgentGeneratedRoutineInputSchema, GeneratedSessionSchema } from "./equipment";
 
 export const RoutineProProductKeySchema = z.literal("adaptive_world.routine_pro.v1");
 export const RoutineTemplateIdSchema = z.enum([
   "first_visit_foundations",
   "low_impact_orientation",
   "accessible_equipment_tour",
+]);
+export const AgentGeneratedRoutineMarkerSchema = z.literal("webmcp_agent_generated");
+export const RoutineProvenanceIdSchema = z.union([
+  RoutineTemplateIdSchema,
+  AgentGeneratedRoutineMarkerSchema,
 ]);
 export const RoutinePaymentModeSchema = z.enum(["human_checkout", "agent_wallet"]);
 export const RoutineInitiationSchema = z.enum(["site-ui", "webmcp"]);
@@ -26,19 +31,47 @@ export const RoutineProOfferSchema = z
   })
   .strict();
 
-export const PrepareRoutineRequestSchema = z
+const RoutineQuoteFieldsSchema = z.object({
+  quoteValidUntil: z.string().datetime({ offset: true }),
+  quoteDigest: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+/**
+ * WebMCP intent: the user-selected external agent generated the exact routine
+ * and the person confirmed that exact routine before submission.
+ */
+export const AgentRoutineIntentSchema = z
   .object({
-    templateId: RoutineTemplateIdSchema,
+    initiatedVia: z.literal("webmcp"),
     goal: RoutineGoalSchema,
+    routine: AgentGeneratedRoutineInputSchema,
     paymentMode: RoutinePaymentModeSchema.optional(),
-    initiatedVia: RoutineInitiationSchema.default("site-ui"),
   })
   .strict();
 
-export const ConfirmRoutineRequestSchema = PrepareRoutineRequestSchema.extend({
-  quoteValidUntil: z.string().datetime({ offset: true }),
-  quoteDigest: z.string().regex(/^[0-9a-f]{64}$/),
-}).strict();
+/**
+ * Site-UI intent: a person without an agent chooses a published staff
+ * walkthrough. Gym grounds it in the active projection and verified inventory;
+ * it is never presented as agent-generated or AI-personalized.
+ */
+export const StaffWalkthroughIntentSchema = z
+  .object({
+    initiatedVia: z.literal("site-ui"),
+    goal: RoutineGoalSchema,
+    templateId: RoutineTemplateIdSchema,
+    paymentMode: RoutinePaymentModeSchema.optional(),
+  })
+  .strict();
+
+export const PrepareRoutineRequestSchema = z.discriminatedUnion("initiatedVia", [
+  AgentRoutineIntentSchema,
+  StaffWalkthroughIntentSchema,
+]);
+
+export const ConfirmRoutineRequestSchema = z.discriminatedUnion("initiatedVia", [
+  AgentRoutineIntentSchema.extend(RoutineQuoteFieldsSchema.shape).strict(),
+  StaffWalkthroughIntentSchema.extend(RoutineQuoteFieldsSchema.shape).strict(),
+]);
 
 export const CommerceOrderStateSchema = z.enum([
   "created",
@@ -54,6 +87,8 @@ export const CommerceOrderStateSchema = z.enum([
   "refund_pending",
   "refunded",
 ]);
+
+export const CommerceProviderSchema = z.enum(["mpp_tempo", "stripe_checkout"]);
 
 export const CommerceSafeCodeSchema = z.enum([
   "AUTH_REQUIRED",
@@ -83,11 +118,23 @@ export const CommerceSafeCodeSchema = z.enum([
 export const RoutineStatusSchema = z
   .object({
     entitled: z.boolean(),
+    entitlementGranted: z.boolean().default(false),
     orderRef: z.string().max(64).optional(),
     orderStatus: CommerceOrderStateSchema.optional(),
+    amountMinor: z.literal(499).optional(),
+    currency: z.literal("usd").optional(),
+    provider: CommerceProviderSchema.optional(),
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]).optional(),
+    sandbox: z.literal(true).optional(),
+    initiatedVia: RoutineInitiationSchema.optional(),
+    orderScope: z.enum(["active_session", "earlier_session"]).optional(),
     checkoutUrl: z.string().url().optional(),
     canResume: z.boolean().default(false),
+    submittedAt: z.string().datetime({ offset: true }).optional(),
+    paidAt: z.string().datetime({ offset: true }).optional(),
+    fulfilledAt: z.string().datetime({ offset: true }).optional(),
+    providerPaymentRef: z.string().min(1).max(255).optional(),
+    routineSaved: z.boolean().default(false),
     routine: GeneratedSessionSchema.optional(),
     savedRoutineRef: z.string().max(64).optional(),
     initialGoal: RoutineGoalSchema.nullable().optional(),
@@ -98,7 +145,7 @@ export const SavedRoutineSummarySchema = z
   .object({
     ref: z.string().max(64),
     title: z.string().min(2).max(120),
-    templateId: RoutineTemplateIdSchema,
+    templateId: RoutineProvenanceIdSchema,
     templateVersion: z.string().min(1).max(24),
     savedAt: z.string().datetime({ offset: true }),
   })
@@ -133,7 +180,8 @@ export const SafeErrorEnvelopeSchema = z
   .strict();
 
 export type RoutineProOffer = z.infer<typeof RoutineProOfferSchema>;
-export type PrepareRoutineRequest = z.infer<typeof PrepareRoutineRequestSchema>;
+export type RoutineProIntent = z.infer<typeof PrepareRoutineRequestSchema>;
+export type PrepareRoutineRequest = RoutineProIntent;
 export type ConfirmRoutineRequest = z.infer<typeof ConfirmRoutineRequestSchema>;
 export type RoutineStatus = z.infer<typeof RoutineStatusSchema>;
 export type CommerceSafeCode = z.infer<typeof CommerceSafeCodeSchema>;

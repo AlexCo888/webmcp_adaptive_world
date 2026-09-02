@@ -54,9 +54,10 @@ export default function HomePage() {
             Your first visit, already <em>better prepared.</em>
           </h1>
           <p className="page-intro">
-            Browse the club normally, or bring a minimum projection from your Digital Passport. We
-            match it to published staff walkthroughs and manufacturer-verified equipment—not an
-            invented AI routine.
+            Browse the club normally, or bring a minimum projection from your Digital Passport. Your
+            chosen agent can generate a routine from that projection and our manufacturer-verified
+            equipment, or you can save a published staff walkthrough. The Gym itself never invents
+            an AI routine.
           </p>
           <div className="hero__actions">
             <Link href="/passport" className="button button--lime">
@@ -268,8 +269,9 @@ export default function HomePage() {
             <div>
               <strong>Want this shaped around your approved context?</strong>
               <p>
-                Routine Pro rebuilds this walkthrough from the projection you approve, then saves it
-                back to your Passport. One confirmed sandbox write · {routineProPrice}.
+                Routine Pro saves a routine to your Passport: one your agent generates from the
+                projection you approve and our verified inventory, or this staff walkthrough
+                grounded in that projection. One confirmed sandbox write · {routineProPrice}.
               </p>
             </div>
             <Link className="button button--dark button--small" href="/session">
@@ -319,10 +321,13 @@ export default function HomePage() {
                 02
               </span>
             </div>
-            <h3>Choose a staff walkthrough</h3>
-            <p>Select a published orientation; context helps keep relevant setup notes visible.</p>
+            <h3>Bring your agent, or choose a walkthrough</h3>
+            <p>
+              Your agent generates a personalized routine through WebMCP; without one, select a
+              published walkthrough. Context keeps relevant setup notes visible.
+            </p>
             <Link href="/session">
-              View walkthroughs <ArrowRight size={14} aria-hidden="true" />
+              Build a session <ArrowRight size={14} aria-hidden="true" />
             </Link>
           </li>
           <li className="experience-card">

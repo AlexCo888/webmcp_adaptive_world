@@ -6,14 +6,17 @@ Status: implementation contract for the synthetic WebMCP hackathon MVP.
 
 One monorepo produces two independently deployed, human-first applications:
 
-| Vercel project            | Root            | Audience                                     | Responsibility                                                                                                                      |
-| ------------------------- | --------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician      | Identity, consent, sources, grants, audit history, one-use Gym projection, and owner saved routines                                 |
-| `adaptive-world-gym`      | `apps/gym`      | Public visitor and connected synthetic owner | Free verified discovery, temporary minimum context, Routine Pro entitlement, sandbox payer adapters, routine creation, and feedback |
+| Vercel project            | Root            | Audience                                     | Responsibility                                                                                                                                |
+| ------------------------- | --------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adaptive-world-passport` | `apps/passport` | Passport owner and authorized clinician      | Identity, consent, sources, grants, audit history, one-use Gym projection, and owner saved routines                                           |
+| `adaptive-world-gym`      | `apps/gym`      | Public visitor and connected synthetic owner | Free verified discovery, temporary minimum context, untrusted-routine validation, Routine Pro sandbox payment, receipt recovery, and feedback |
 
 They share typed contracts, security primitives, demo fixtures, and the same
 environment's Neon database. They do not share browser cookies. Passport health
 data never appears in a Gym URL, payment provider request, or provider metadata.
+Neither application calls an AI model, installs a model SDK, or holds model API
+credentials. The user-selected external WebMCP agent supplies the personalized
+routine intelligence.
 
 ```mermaid
 flowchart TD
@@ -21,29 +24,38 @@ flowchart TD
     D["Authorized clinician"] --> P
     P --> DB["Neon · synthetic data"]
     P -->|"one-use minimum projection"| G["Adaptive Gym"]
-    A["Browser agent"] -->|"route-scoped WebMCP"| P
-    A -->|"free discovery + confirmed action"| G
-    G --> C["Routine Pro order"]
+    A["User-selected external agent"] -->|"read consented projection"| G
+    A -->|"inspect verified inventory"| G
+    A --> N["Generate new structured routine in agent context"]
+    N --> X["First-party exact-routine confirmation"]
+    X --> G
+    G --> V["Validate + hydrate canonical Gym facts"]
+    V --> C["Routine Pro order"]
     C --> S["Stripe test Checkout"]
     C --> M["Bounded MPP testnet wallet"]
-    S --> E["One entitlement"]
+    S --> E["One entitlement + exact saved routine"]
     M --> E
-    E --> R["Grounded saved routine"]
-    R --> DB
+    E --> DB
+    G -->|"read-only status recovery"| A
 ```
 
 ## Trust boundaries
 
-1. Browser, WebMCP input, redirects, and tool registrations are untrusted.
+1. Browser, WebMCP input, redirects, tool registrations, and submitted routines
+   are untrusted.
 2. Authentication proves a session identity; protected authorization is
    recomputed on every server invocation.
 3. Tool presence expresses availability, not authority.
-4. Manufacturer data, documents, and user-authored text are untrusted content.
-5. Price, currency, payer/provider, entitlement, merchant, wallet, chain,
+4. Manufacturer data, documents, user-authored text, and agent-authored exercise
+   instructions are untrusted content.
+5. Equipment IDs must exist and be available in the current Gym catalog.
+   Canonical names, models, source links, and specifications are hydrated by Gym
+   and never accepted from the agent.
+6. Price, currency, payer/provider, entitlement, merchant, wallet, chain,
    destination, and patient identity are derived server-side.
-6. Provider success requires verified webhook/credential/receipt evidence, not
+7. Provider success requires verified webhook/credential/receipt evidence, not
    a redirect, URL, model statement, or browser flag.
-7. Database/provider/wallet/capability credentials remain server-only.
+8. Database/provider/wallet/capability credentials remain server-only.
 
 ## Context handoff
 
@@ -67,30 +79,62 @@ verified equipment catalog. A Passport is optional for discovery. Connecting
 and reading the minimum projection is free.
 
 `adaptive_world.routine_pro.v1` is one Passport-linked entitlement. It permits
-personalized routine generation through either the existing human UI or
-`create_personalized_routine`, then saves the same result to Passport. It does
-not grant additional health scopes. The generic sample walkthrough remains
-staff-authored and non-personalized.
+Gym to validate, purchase, and save the exact structured routine produced by
+the user-selected external agent through `create_personalized_routine`. It does
+not grant additional health scopes.
 
-Routine requests preserve a bounded person-stated natural-language goal. Gym
-matches that goal and the active minimum projection to one published staff
-template, then records the goal, template version, catalog version, safety
-signals, and decision trace. A pending payment stores the goal and template as
-immutable order authority so a redirect or retry cannot silently change them.
+Every Routine Pro request carries one of two closed intents, discriminated by
+`initiatedVia`:
+
+- `webmcp`: the exact agent-generated routine (`routine`). Provenance marker
+  `webmcp_agent_generated@1.0`; `generationMode: agent_generated`.
+- `site-ui`: a published staff walkthrough (`templateId`) chosen by a person on
+  the Gym site without an agent. Provenance is the walkthrough id and version;
+  `generationMode: staff_template`. It is labeled as a staff walkthrough chosen
+  on the Gym site and is never presented as agent-generated.
+
+Both intents are grounded in the same active projection, staged on the bound
+Gym session before any provider submission, confirmed exactly as shown, and
+saved with the same validation, payment, and recovery machinery. An order is
+reused only for the identical intent, channel, goal, and staged content.
+
+The external agent must first inspect the active projection and relevant Gym
+equipment, then generate a new routine in its own reasoning context. The
+submitted goal and routine are shown together during confirmation. Gym enforces
+closed schemas, duration and text bounds, current catalog availability, exact
+goal matching, preserved Passport stop signals, no medical-clearance claims,
+and mandatory professional review for injury, rehabilitation, or undocumented-
+clearance scenarios.
+
+The existing order records the active Gym session, exact confirmed goal, and
+`webmcp_agent_generated` provenance marker. The validated plan is staged on that
+bound server session before any provider submission. No predefined routine is
+loaded from the marker.
 
 ## Confirmation and fulfillment
 
 A consequential WebMCP mutation first performs a read-only server preparation.
-The first-party UI displays the current product, amount, payer, sandbox status,
-effect, and unchanged data scope. Decline performs no write. After approval, the
-server recomputes the quote and authority before creating or reusing one
-patient/product order.
+The first-party UI displays the complete proposed routine, approved Passport
+projection, canonical selected equipment, product, **$4.99 test USD** amount,
+payer, sandbox network, Passport save destination, and professional-review
+warning when applicable. Decline performs no write. After approval, the server
+recomputes the quote and authority before creating or reusing one patient/product
+order.
 
 At most one payable order and one provider window/submitted attempt may exist
-for a patient and product, across templates, routes, sessions, and payer rails.
-Verified payment grants at most one entitlement. Routine generation is a
-separate idempotent operation, so paid-but-unfulfilled state can recover without
-another payment.
+for a patient and product, across routes, sessions, and payer rails. Verified
+payment grants at most one entitlement. Entitlement grant and exact staged
+routine persistence occur in the same transaction, so a fulfilled result is
+recoverable without another payment. If the staged plan no longer validates at
+fulfillment time (for example a station became unavailable), the verified
+payment still grants the entitlement, the deferral is audited, and status
+reports `routineSaved: false` so the routine can be resubmitted without paying.
+
+The read-only `get_routine_pro_status` tool returns bounded receipt and outcome
+fields for the active session, including fulfilled orders. After any timeout or
+ambiguous response, the caller must read status and poll only while the order is
+non-terminal. It never returns secrets, keys, credentials, capabilities, raw
+receipt headers, or provider request snapshots.
 
 Payment initiation is guarded by durable 10-minute counters whose database keys
 are HMAC hashes of the Gym session, public order, client IP, and—when
@@ -133,16 +177,17 @@ is not a release strategy.
 
 ## Data ownership and retention
 
-| Data                                 | Canonical owner               | Gym/payment copy                         | Retention rule                          |
-| ------------------------------------ | ----------------------------- | ---------------------------------------- | --------------------------------------- |
-| Identity, contacts, clinical sources | Passport                      | Never                                    | Synthetic demo lifecycle                |
-| Consent and clinician relationships  | Passport                      | Reference only                           | Current state plus audit history        |
-| Minimum Gym projection               | Passport-issued / Gym session | Allowlisted projection only              | Expiry/revocation policy                |
-| Equipment catalog                    | Gym                           | Public                                   | Product-data lifecycle                  |
-| Order/setup/event/receipt digests    | Gym commerce service          | Provider-minimum metadata only           | Preserve replay/reconciliation evidence |
-| Entitlement and saved routine        | Passport owner                | Gym generates; Passport reads owner-only | Synthetic demo lifecycle                |
-| Budget ledger                        | Gym commerce service          | No browser/model copy                    | Preserve settled/submitted history      |
-| Audit events                         | Shared database               | Redacted metadata only                   | Append-only demo evidence               |
+| Data                                 | Canonical owner               | Gym/payment copy                                   | Retention rule                          |
+| ------------------------------------ | ----------------------------- | -------------------------------------------------- | --------------------------------------- |
+| Identity, contacts, clinical sources | Passport                      | Never                                              | Synthetic demo lifecycle                |
+| Consent and clinician relationships  | Passport                      | Reference only                                     | Current state plus audit history        |
+| Minimum Gym projection               | Passport-issued / Gym session | Allowlisted projection only                        | Expiry/revocation policy                |
+| Equipment catalog                    | Gym                           | Public                                             | Product-data lifecycle                  |
+| Agent-generated routine input        | User-selected external agent  | Validated, canonically hydrated staged/saved plan  | Synthetic demo lifecycle                |
+| Order/setup/event/receipt digests    | Gym commerce service          | Provider-minimum metadata only                     | Preserve replay/reconciliation evidence |
+| Entitlement and saved routine        | Passport owner                | Gym validates and saves; Passport reads owner-only | Synthetic demo lifecycle                |
+| Budget ledger                        | Gym commerce service          | No browser/model copy                              | Preserve settled/submitted history      |
+| Audit events                         | Shared database               | Redacted metadata only                             | Append-only demo evidence               |
 
 Synthetic reset may restore user-visible demo state, but it must not erase
 successful payment references, receipt digests, immutable provider snapshots,
@@ -156,6 +201,8 @@ settled budget, or unresolved submitted state.
 - Strict Zod/JSON Schema at trust boundaries.
 - Stripe test mode and MPP testnet only for the judged payment proof.
 - Standard accessible UI remains authoritative when WebMCP is absent.
+- No Vercel AI SDK, OpenAI API call, model credential, or server-side routine
+  generation in Gym or Passport.
 
 This MVP is not a clinical system, medical device, emergency service, payment
 institution, money transmitter, custody product, or compliance certification.

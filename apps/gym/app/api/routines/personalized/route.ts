@@ -1,6 +1,7 @@
 import { ConfirmRoutineRequestSchema } from "@adaptive-world/contracts";
 import { getGymSession } from "@/lib/gym-session";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { ROUTINE_REQUEST_MAX_BYTES } from "@/lib/commerce/constants";
 import {
   assertSameOrigin,
   CommerceError,
@@ -11,7 +12,8 @@ import {
 } from "@/lib/commerce/http";
 import { hasRoutineProEntitlement } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import { getRoutineProStatusForActiveSession } from "@/lib/commerce/routine-pro-status";
+import { createAndSavePersonalizedRoutine, toRoutineIntent } from "@/lib/commerce/routines";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +22,11 @@ export async function POST(request: Request) {
   const id = requestId(request);
   try {
     assertSameOrigin(request);
-    const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
+    const parsed = ConfirmRoutineRequestSchema.safeParse(
+      await parseBoundedJson(request, ROUTINE_REQUEST_MAX_BYTES),
+    );
     if (!parsed.success) throw new CommerceError("INVALID_REQUEST");
+    const intent = toRoutineIntent(parsed.data);
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
@@ -42,13 +47,8 @@ export async function POST(request: Request) {
     ) {
       throw new CommerceError("QUOTE_CHANGED");
     }
-    const routine = await createAndSavePersonalizedRoutine({
-      active,
-      templateId: parsed.data.templateId,
-      goal: parsed.data.goal,
-      initiatedVia: parsed.data.initiatedVia,
-    });
-    return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);
+    const saved = await createAndSavePersonalizedRoutine({ active, intent });
+    return success(await getRoutineProStatusForActiveSession(active), id, saved.reused ? 200 : 201);
   } catch (error) {
     return failure(error, id);
   }

@@ -143,24 +143,29 @@
         },
         "get_active_context": { "$ref": "#/$defs/emptyInput" },
         "get_routine_pro_offer": { "$ref": "#/$defs/emptyInput" },
+        "get_routine_pro_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "orderRef": {
+              "type": "string",
+              "pattern": "^awrp_[a-f0-9]{32}$",
+              "maxLength": 64
+            }
+          }
+        },
         "create_personalized_routine": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "goal": { "type": "string", "minLength": 2, "maxLength": 160 },
-            "templateId": {
-              "enum": [
-                "first_visit_foundations",
-                "low_impact_orientation",
-                "accessible_equipment_tour"
-              ]
-            },
             "paymentMode": {
               "type": "string",
               "enum": ["human_checkout", "agent_wallet"]
-            }
+            },
+            "routine": { "$ref": "#/$defs/agentRoutine" }
           },
-          "required": ["goal"]
+          "required": ["goal", "routine"]
         },
         "record_session_feedback": {
           "type": "object",
@@ -180,6 +185,7 @@
         "get_equipment",
         "get_active_context",
         "get_routine_pro_offer",
+        "get_routine_pro_status",
         "create_personalized_routine",
         "record_session_feedback"
       ]
@@ -194,6 +200,62 @@
       "additionalProperties": false,
       "properties": { "patientId": { "$ref": "#/$defs/id" } },
       "required": ["patientId"]
+    },
+    "agentRoutineExercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "equipmentId": { "$ref": "#/$defs/id" },
+        "durationMinutes": { "type": "integer", "minimum": 1, "maximum": 45 },
+        "intensity": { "type": "string", "enum": ["easy", "moderate"] },
+        "instructions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "items": { "type": "string", "minLength": 2, "maxLength": 180 }
+        },
+        "adaptationReason": { "type": "string", "minLength": 3, "maxLength": 240 }
+      },
+      "required": [
+        "equipmentId",
+        "durationMinutes",
+        "intensity",
+        "instructions",
+        "adaptationReason"
+      ]
+    },
+    "agentRoutine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "durationMinutes": { "type": "integer", "minimum": 10, "maximum": 120 },
+        "exercises": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/agentRoutineExercise" }
+        },
+        "warmup": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "type": "string", "minLength": 2, "maxLength": 180 }
+        },
+        "cooldown": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "type": "string", "minLength": 2, "maxLength": 180 }
+        },
+        "safetyNotes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 2, "maxLength": 200 }
+        },
+        "requiresExpertReview": { "type": "boolean" },
+        "expertReviewReason": { "type": "string", "minLength": 3, "maxLength": 240 }
+      },
+      "required": ["title", "durationMinutes", "exercises", "safetyNotes", "requiresExpertReview"]
     }
   }
 }

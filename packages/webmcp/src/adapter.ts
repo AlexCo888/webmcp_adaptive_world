@@ -8,10 +8,11 @@ import type {
   WebMCPToolDefinition,
 } from "./types";
 
-// The minimum Gym-context disclosure intentionally enumerates every projected
-// field (including expiry and the explicit "not shared" boundary). Keep the
-// preparation bounded while allowing that complete 20-field review.
-const MAX_CONFIRMATION_FIELDS = 24;
+// Context sharing uses many small fields; an exact agent-generated routine uses
+// fewer, larger fields. Both remain bounded first-party confirmation content and
+// are not returned as model/tool output.
+const MAX_CONFIRMATION_FIELDS = 32;
+const MAX_CONFIRMATION_FIELD_VALUE_CHARS = 1_800;
 
 function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
   if (!value || typeof value !== "object" || seen.has(value)) return value;
@@ -125,7 +126,7 @@ function normalizePreparation(value: unknown): WebMCPMutationPreparation {
       !field ||
       typeof field !== "object" ||
       !validText(candidateField.label, 80) ||
-      !validText(candidateField.value, 240)
+      !validText(candidateField.value, MAX_CONFIRMATION_FIELD_VALUE_CHARS)
     ) {
       throw new WebMCPToolError(
         "INVALID_PREPARATION",
