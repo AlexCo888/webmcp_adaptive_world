@@ -53,6 +53,29 @@ export const EquipmentSchema = z.object({
 
 export const EquipmentCatalogSchema = z.array(EquipmentSchema).length(22);
 
+export const AgentRoutineExerciseSchema = z
+  .object({
+    equipmentId: IdSchema,
+    durationMinutes: z.number().int().min(1).max(45),
+    intensity: z.enum(["easy", "moderate"]),
+    instructions: z.array(z.string().trim().min(2).max(180)).min(1).max(5),
+    adaptationReason: z.string().trim().min(3).max(240),
+  })
+  .strict();
+
+export const AgentGeneratedRoutineInputSchema = z
+  .object({
+    title: z.string().trim().min(2).max(120),
+    durationMinutes: z.number().int().min(10).max(120),
+    exercises: z.array(AgentRoutineExerciseSchema).min(1).max(12),
+    warmup: z.array(z.string().trim().min(2).max(180)).max(6).optional(),
+    cooldown: z.array(z.string().trim().min(2).max(180)).max(6).optional(),
+    safetyNotes: z.array(z.string().trim().min(2).max(200)).min(1).max(8),
+    requiresExpertReview: z.boolean(),
+    expertReviewReason: z.string().trim().min(3).max(240).optional(),
+  })
+  .strict();
+
 export const SessionExerciseSchema = z.object({
   equipmentId: IdSchema,
   name: z.string().min(2).max(120),
@@ -64,22 +87,37 @@ export const SessionExerciseSchema = z.object({
   adaptationReason: z.string().min(3).max(240),
 });
 
-export const GeneratedSessionSchema = z.object({
-  id: IdSchema,
-  projectionId: IdSchema,
-  title: z.string().min(2).max(120),
-  goal: z.string().min(2).max(160),
-  templateId: IdSchema,
-  templateVersion: z.string().min(1).max(24),
-  createdVia: z.enum(["site-ui", "webmcp"]),
-  catalogVersion: z.string().min(1).max(40),
-  durationMinutes: z.number().int().min(10).max(180),
-  status: z.enum(["draft", "confirmed", "completed", "cancelled"]),
-  exercises: z.array(SessionExerciseSchema).min(1).max(20),
-  safetyNotes: z.array(z.string().min(2).max(200)).max(8),
-  decisionTrace: z.array(z.string().min(3).max(240)).min(2).max(12),
-  createdAt: z.string().datetime({ offset: true }),
-});
+export const GeneratedSessionSchema = z
+  .object({
+    id: IdSchema,
+    projectionId: IdSchema,
+    title: z.string().min(2).max(120),
+    goal: z.string().min(2).max(160),
+    templateId: IdSchema,
+    templateVersion: z.string().min(1).max(24),
+    generationMode: z.enum(["staff_template", "agent_generated"]).default("staff_template"),
+    createdVia: z.enum(["site-ui", "webmcp"]),
+    catalogVersion: z.string().min(1).max(40),
+    durationMinutes: z.number().int().min(10).max(180),
+    status: z.enum(["draft", "confirmed", "completed", "cancelled"]),
+    exercises: z.array(SessionExerciseSchema).min(1).max(20),
+    warmup: z.array(z.string().min(2).max(180)).max(6).default([]),
+    cooldown: z.array(z.string().min(2).max(180)).max(6).default([]),
+    safetyNotes: z.array(z.string().min(2).max(200)).max(24),
+    requiresExpertReview: z.boolean().default(false),
+    expertReviewReason: z.string().min(3).max(240).optional(),
+    decisionTrace: z.array(z.string().min(3).max(240)).min(2).max(12),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .superRefine((session, context) => {
+    if (session.requiresExpertReview && !session.expertReviewReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["expertReviewReason"],
+        message: "Expert-review routines must preserve the reason for review.",
+      });
+    }
+  });
 
 export const SessionFeedbackSchema = z.object({
   sessionId: IdSchema,
@@ -92,5 +130,6 @@ export const SessionFeedbackSchema = z.object({
 
 export type Equipment = z.infer<typeof EquipmentSchema>;
 export type EquipmentCategory = z.infer<typeof EquipmentCategorySchema>;
+export type AgentGeneratedRoutineInput = z.infer<typeof AgentGeneratedRoutineInputSchema>;
 export type GeneratedSession = z.infer<typeof GeneratedSessionSchema>;
 export type SessionFeedback = z.infer<typeof SessionFeedbackSchema>;
