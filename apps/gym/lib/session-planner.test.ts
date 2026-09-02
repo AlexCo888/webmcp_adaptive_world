@@ -245,6 +245,11 @@ describe("site walkthrough purchases and shared bounds", () => {
         expertReviewReason: undefined,
         title: "Easy active recovery day",
         safetyNotes: ["Keep every block conversational."],
+        exercises: mateoRoutine().exercises.map((exercise) => ({
+          ...exercise,
+          instructions: ["Keep the pace conversational and stop before fatigue."],
+          adaptationReason: "Keeps the block easy for an active recovery day.",
+        })),
       }),
       sessionId: "gym_routine_0123456789abcdef01234567",
       createdAt: "2026-09-01T12:00:00.000Z",
@@ -338,5 +343,54 @@ describe("site walkthrough purchases and shared bounds", () => {
         intent: { initiatedVia: "webmcp", goal, routine: mateoRoutine() },
       }),
     ).toBe(false);
+  });
+
+  it("requires expert review when the injury signal lives only in projected goals or stop signals", () => {
+    const neutralRoutine = mateoRoutine({
+      requiresExpertReview: false,
+      expertReviewReason: undefined,
+      title: "Gentle machine circuit",
+      safetyNotes: ["Keep every block conversational."],
+      exercises: mateoRoutine().exercises.map((exercise) => ({
+        ...exercise,
+        instructions: ["Keep the pace conversational and stop before fatigue."],
+        adaptationReason: "Keeps the block easy and supported.",
+      })),
+    });
+    const goalOnly: GymContextProjection = {
+      ...projection,
+      goals: ["Rehabilitation after a knee fracture"],
+    };
+    const stopSignalOnly: GymContextProjection = {
+      ...projection,
+      stopSignals: ["Any pain at the post-op incision"],
+    };
+    for (const profile of [goalOnly, stopSignalOnly]) {
+      expect(() =>
+        createAgentGeneratedSession({
+          profile,
+          equipment: equipmentCatalog,
+          goal: "Gentle machine circuit",
+          routine: neutralRoutine,
+          sessionId: "gym_routine_0123456789abcdef01234567",
+        }),
+      ).toThrow(/requiresExpertReview=true/u);
+    }
+    expect(() =>
+      createAgentGeneratedSession({
+        profile: projection,
+        equipment: equipmentCatalog,
+        goal: "Gentle machine circuit",
+        routine: {
+          ...neutralRoutine,
+          exercises: neutralRoutine.exercises.map((exercise, index) =>
+            index === 0
+              ? { ...exercise, instructions: ["Go easy while recovering from surgery."] }
+              : exercise,
+          ),
+        },
+        sessionId: "gym_routine_0123456789abcdef01234567",
+      }),
+    ).toThrow(/requiresExpertReview=true/u);
   });
 });

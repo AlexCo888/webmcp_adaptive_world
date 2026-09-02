@@ -268,6 +268,12 @@ function containsMedicalApprovalClaim(value: string): boolean {
   ].some((pattern) => pattern.test(value));
 }
 
+/**
+ * Every projected field and the routine's own text are scanned, so an injury,
+ * rehabilitation, post-operative, or undocumented-clearance signal that appears
+ * only in Passport goals, the approved requested goal, stop signals, or the
+ * agent's instructions still requires professional review.
+ */
 function contextRequiresExpertReview(
   profile: GymContextProjection,
   goal: string,
@@ -275,11 +281,14 @@ function contextRequiresExpertReview(
 ): boolean {
   const value = searchText([
     goal,
+    ...(profile.requestedRoutineGoal ? [profile.requestedRoutineGoal] : []),
+    ...profile.goals,
     ...profile.movementConsiderations,
     ...profile.avoid,
+    ...profile.stopSignals,
     ...profile.functionalCapabilities,
     ...profile.accessibilityNeeds,
-    ...(routine.expertReviewReason ? [routine.expertReviewReason] : []),
+    routineText(routine),
   ]);
   return includesAny(value, [
     "injury",
