@@ -1,92 +1,118 @@
-import type { RoutineProOffer } from "@adaptive-world/contracts";
+import type { Equipment, GymContextProjection, RoutineProOffer } from "@adaptive-world/contracts";
 import type {
   CreatePersonalizedRoutineInput,
   MutationConfirmationRequest,
   RecordSessionFeedbackInput,
   WebMCPMutationPreparation,
 } from "@adaptive-world/webmcp";
-import { pendingPaymentMode, type PendingRoutineProOrder } from "./routine-pro-client-state";
+import { EXPERT_REVIEW_WARNING } from "./session-planner";
 
 export type PreparedRoutineProConfirmation = Readonly<{
-  effectiveInput: CreatePersonalizedRoutineInput & {
-    templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
-  };
+  effectiveInput: CreatePersonalizedRoutineInput;
   preparation: WebMCPMutationPreparation;
 }>;
 
-export function routineTemplateConfirmationField(
-  templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>,
-) {
-  return { label: "Template ID", value: templateId } as const;
+function summarize(values: readonly string[], fallback: string, max = 520): string {
+  const value = values.length ? values.join("; ") : fallback;
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
 export function prepareRoutineProConfirmation({
   offer,
   requestedInput,
-  recommendedTemplateId,
-  pending,
+  projection,
+  equipment,
 }: {
   offer: RoutineProOffer;
   requestedInput: CreatePersonalizedRoutineInput;
-  recommendedTemplateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
-  pending: PendingRoutineProOrder | null;
+  projection: GymContextProjection;
+  equipment: readonly Equipment[];
 }): PreparedRoutineProConfirmation {
-  const effectiveInput = pending
-    ? {
-        templateId: pending.initialTemplateId,
-        goal: pending.initialGoal ?? requestedInput.goal.trim(),
-        paymentMode: pendingPaymentMode(pending),
-      }
-    : {
-        ...requestedInput,
-        goal: requestedInput.goal.trim(),
-        templateId: requestedInput.templateId ?? recommendedTemplateId,
-      };
+  const effectiveInput: CreatePersonalizedRoutineInput = {
+    ...requestedInput,
+    goal: requestedInput.goal.trim(),
+  };
   const payer = offer.entitled
     ? "Existing Passport entitlement"
-    : (pending?.payerLabel ??
-      (effectiveInput.paymentMode === "agent_wallet"
-        ? "Adaptive World demo agent"
-        : "Human test checkout"));
+    : effectiveInput.paymentMode === "agent_wallet"
+      ? "Adaptive World demo agent wallet"
+      : "Human Stripe test checkout";
+  const contextSummary = [
+    `Projection ${projection.projectionId}`,
+    `Goals: ${summarize(projection.goals, "None")}`,
+    `Movement considerations: ${summarize(projection.movementConsiderations, "None")}`,
+    `Avoid: ${summarize(projection.avoid, "None")}`,
+    `Stop signals: ${summarize(projection.stopSignals, "None")}`,
+  ].join(" · ");
 
   return {
     effectiveInput,
     preparation: {
       confirmation: {
-        title: pending
-          ? "Resume the existing sandbox payment?"
-          : offer.entitled
-            ? "Create and save your personalized routine"
-            : "Approve Routine Pro sandbox payment?",
-        description: pending
-          ? "Resume the existing Routine Pro sandbox payment. Its payer, goal, and staff template are locked, so no second payment rail will be opened. Free Gym access remains unchanged."
-          : "Passport connection, context review, Gym profile, and equipment discovery are free. This confirmation is only for the Routine Pro action that creates and saves a personalized routine; it does not expand Passport access.",
+        title: offer.entitled
+          ? "Save this exact agent-generated routine?"
+          : "Approve this exact routine and sandbox payment?",
+        description:
+          "Review the complete proposal below. The user-selected agent generated this routine from the approved Passport projection and verified Gym inventory. Adaptive Gym will validate it, process the sandbox payment when required, and save this exact routine to Passport; it will not generate a different routine afterward.",
         fields: [
           {
-            label: "Free tier",
-            value: "Passport connection, context review, Gym profile, and equipment discovery",
+            label: "Proposed routine",
+            value: `${effectiveInput.routine.title} · ${effectiveInput.routine.durationMinutes} minutes · ${effectiveInput.routine.exercises.length} equipment blocks`,
           },
-          { label: "Paid tier", value: "Routine creation and Passport saving" },
+          { label: "Confirmed goal", value: effectiveInput.goal },
+          { label: "Approved Passport context used", value: contextSummary },
+          ...effectiveInput.routine.exercises.map((exercise, index) => {
+            const item = equipment.find((candidate) => candidate.id === exercise.equipmentId);
+            return {
+              label: `Exercise ${index + 1}`,
+              value: `${item?.name ?? exercise.equipmentId} (${exercise.equipmentId}) · ${exercise.durationMinutes} minutes · ${exercise.intensity}. ${exercise.instructions.join(" ")} Adaptation: ${exercise.adaptationReason}`,
+            };
+          }),
+          {
+            label: "Warm-up",
+            value: summarize(effectiveInput.routine.warmup ?? [], "Not separately specified"),
+          },
+          {
+            label: "Cooldown",
+            value: summarize(effectiveInput.routine.cooldown ?? [], "Not separately specified"),
+          },
+          {
+            label: "Safety notes",
+            value: summarize(effectiveInput.routine.safetyNotes, "None supplied"),
+          },
+          {
+            label: "Professional review",
+            value: effectiveInput.routine.requiresExpertReview
+              ? `${EXPERT_REVIEW_WARNING} ${effectiveInput.routine.expertReviewReason ?? "The approved context contains an injury, rehabilitation, or clearance uncertainty."}`
+              : "Not marked as required by the submitted context; this remains a non-clinical demonstration.",
+          },
           { label: "Product", value: offer.displayName },
-          { label: "Your goal", value: effectiveInput.goal },
-          routineTemplateConfirmationField(effectiveInput.templateId),
-          { label: "Includes", value: "Personalized routine creation and Passport saving" },
-          { label: "Payer", value: payer },
           {
             label: "Amount",
             value: offer.entitled ? "Already unlocked" : "$4.99 test USD",
           },
-          { label: "Mode", value: "Sandbox — no real funds" },
-          { label: "Data access", value: "Unchanged; no additional health fields" },
+          { label: "Payer", value: payer },
+          {
+            label: "Payment network",
+            value:
+              effectiveInput.paymentMode === "agent_wallet"
+                ? "MPP / Tempo testnet — sandbox transaction"
+                : offer.entitled
+                  ? "No new payment"
+                  : "Stripe test mode — sandbox transaction",
+          },
+          { label: "Destination", value: "Save this exact routine to Passport" },
+          {
+            label: "Data access",
+            value: "Unchanged; only the active consented Gym projection is used",
+          },
         ],
         riskClass: offer.entitled ? "account-write" : "payment",
-        confirmLabel: pending
-          ? "Resume"
-          : offer.entitled
-            ? "Create and save"
-            : effectiveInput.paymentMode === "agent_wallet"
-              ? "Approve agent payment"
-              : "Continue to secure test checkout",
+        confirmLabel: offer.entitled
+          ? "Save this exact routine"
+          : effectiveInput.paymentMode === "agent_wallet"
+            ? "Approve exact routine and agent payment"
+            : "Approve exact routine and open test checkout",
         cancelLabel: "Cancel",
       },
       quoteDigest: offer.quoteDigest,
@@ -99,13 +125,13 @@ export function webMcpMutationBusyLabel(request: MutationConfirmationRequest): s
     return "Saving confirmed changes…";
   }
   const payer = request.fields.find((field) => field.label === "Payer")?.value;
-  if (payer === "Adaptive World demo agent") {
-    return "Paying with the Adaptive World demo agent…";
+  if (payer === "Adaptive World demo agent wallet") {
+    return "Validating the exact routine and confirming the Tempo testnet payment…";
   }
-  if (payer === "Human test checkout") {
-    return "Opening secure Stripe test checkout…";
+  if (payer === "Human Stripe test checkout") {
+    return "Validating the exact routine and opening Stripe test checkout…";
   }
-  return "Saving your staff-authored routine to Passport…";
+  return "Validating and saving the exact agent-generated routine to Passport…";
 }
 
 export function prepareFeedbackConfirmation(
