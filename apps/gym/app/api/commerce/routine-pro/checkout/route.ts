@@ -12,7 +12,10 @@ import {
 import { createOrReuseRoutineProOrder, hasRoutineProEntitlement } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import {
+  createAndSavePersonalizedRoutine,
+  validatePersonalizedRoutineRequest,
+} from "@/lib/commerce/routines";
 import { createOrResumeStripeCheckout } from "@/lib/commerce/stripe";
 
 export const runtime = "nodejs";
@@ -25,11 +28,20 @@ export async function POST(request: Request) {
     const config = getCommerceConfig();
     if (!config.stripeEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");
     const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
-    if (!parsed.success || parsed.data.paymentMode !== "human_checkout") {
+    if (
+      !parsed.success ||
+      parsed.data.paymentMode !== "human_checkout" ||
+      parsed.data.initiatedVia !== "webmcp"
+    ) {
       throw new CommerceError("INVALID_REQUEST");
     }
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
+    const validated = validatePersonalizedRoutineRequest({
+      active,
+      goal: parsed.data.goal,
+      routine: parsed.data.routine,
+    });
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
     const supportedModes = [
       ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
@@ -49,19 +61,18 @@ export async function POST(request: Request) {
     await rateLimitPaymentRequest(request, { sessionId: active.row.id });
     const state = await createOrReuseRoutineProOrder({
       active,
-      templateId: parsed.data.templateId,
+      session: validated.session,
+      routine: validated.routine,
       goal: parsed.data.goal,
       paymentMode: "human_checkout",
-      initiatedVia: parsed.data.initiatedVia,
     });
     if (state.entitled) {
-      const routine = await createAndSavePersonalizedRoutine({
+      const saved = await createAndSavePersonalizedRoutine({
         active,
-        templateId: parsed.data.templateId,
         goal: parsed.data.goal,
-        initiatedVia: parsed.data.initiatedVia,
+        routine: parsed.data.routine,
       });
-      return success({ entitled: true, ...routine }, id, 201);
+      return success({ entitled: true, ...saved }, id, 201);
     }
     if (!state.order) throw new CommerceError("INTERNAL_ERROR", true);
     await rateLimitPaymentOrder(state.order.publicRef);
@@ -72,6 +83,10 @@ export async function POST(request: Request) {
         orderRef: state.order.publicRef,
         orderStatus: state.order.status,
         payerLabel: "Human test checkout" as const,
+        sandbox: true as const,
+        amountMinor: 499 as const,
+        currency: "usd" as const,
+        routine: state.session,
         checkoutUrl: checkout.checkoutUrl,
         checkoutExpiresAt: checkout.expiresAt,
         resumed: checkout.resumed,
