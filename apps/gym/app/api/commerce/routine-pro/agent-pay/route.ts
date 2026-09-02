@@ -1,18 +1,18 @@
 import { ConfirmRoutineRequestSchema } from "@adaptive-world/contracts";
 import { digestRoutineProCapability } from "@adaptive-world/security";
 import { getGymSession } from "@/lib/gym-session";
-import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
+import {
+  isAgentPaymentConfigurationError,
+  safeAgentPaymentFailureCause,
+} from "@/lib/commerce/agent-pay-diagnostics";
 import {
   markAgentPaymentReconciliationRequired,
   markAgentPaymentSubmitted,
   releaseAgentReservationBeforeSubmission,
   reserveAgentBudgetForOrder,
 } from "@/lib/commerce/budget";
-import {
-  isAgentPaymentConfigurationError,
-  safeAgentPaymentFailureCause,
-} from "@/lib/commerce/agent-pay-diagnostics";
 import { getCommerceConfig } from "@/lib/commerce/config";
+import { retryPaidUnfulfilledOrder } from "@/lib/commerce/fulfillment";
 import {
   assertSameOrigin,
   CommerceError,
@@ -21,18 +21,21 @@ import {
   requestId,
   success,
 } from "@/lib/commerce/http";
-import { prepareMppOrder } from "@/lib/commerce/mpp-order";
 import { createTempoAgentPaymentAdapter, MppAdapterError } from "@/lib/commerce/mpp";
+import { prepareMppOrder } from "@/lib/commerce/mpp-order";
 import { mppConfigForSnapshot } from "@/lib/commerce/mpp-runtime";
 import {
   createOrReuseRoutineProOrder,
   getPayableOrder,
   hasRoutineProEntitlement,
-  routineInputForOrder,
 } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import { getRoutineProStatusForActiveSession } from "@/lib/commerce/routine-pro-status";
+import {
+  createAndSavePersonalizedRoutine,
+  validatePersonalizedRoutineRequest,
+} from "@/lib/commerce/routines";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,105 +61,93 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const config = getCommerceConfig();
     const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
-    if (!parsed.success || parsed.data.paymentMode !== "agent_wallet") {
+    if (
+      !parsed.success ||
+      parsed.data.paymentMode !== "agent_wallet" ||
+      parsed.data.initiatedVia !== "webmcp"
+    ) {
       throw new CommerceError("INVALID_REQUEST");
     }
     stage = "load_context";
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
+    const validated = validatePersonalizedRoutineRequest({
+      active,
+      goal: parsed.data.goal,
+      routine: parsed.data.routine,
+    });
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
     const recoverable = entitled ? null : await getPayableOrder(active.row.patientId);
-    if (recoverable?.provider === "mpp_tempo" && recoverable.status === "paid_unfulfilled") {
-      await rateLimitPaymentRequest(request, {
-        sessionId: active.row.id,
-        orderRef: recoverable.publicRef,
-        agent: true,
-      });
-      await retryPaidUnfulfilledOrder(recoverable.id);
-      if (!(await hasRoutineProEntitlement(active.row.patientId))) {
-        throw new CommerceError("FULFILLMENT_PENDING", true);
+    const recoveringPaidOrder =
+      recoverable?.provider === "mpp_tempo" && recoverable.status === "paid_unfulfilled";
+
+    if (!recoveringPaidOrder) {
+      if (!config.agentEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");
+      const supportedModes = [
+        ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
+        ...(config.agentEnabled ? (["agent_wallet"] as const) : []),
+      ];
+      if (
+        !verifyRoutineProQuote({
+          sessionId: active.row.id,
+          entitled,
+          supportedModes: [...supportedModes],
+          quoteValidUntil: parsed.data.quoteValidUntil,
+          quoteDigest: parsed.data.quoteDigest,
+        })
+      ) {
+        throw new CommerceError("QUOTE_CHANGED");
       }
-      const recoveredInput = routineInputForOrder(recoverable, parsed.data.goal);
-      const routine = await createAndSavePersonalizedRoutine({
-        active,
-        ...recoveredInput,
-        initiatedVia: recoverable.initiatedVia,
-      });
-      return success(
-        {
-          entitled: true,
-          orderRef: recoverable.publicRef,
-          payerLabel: "Adaptive World demo agent" as const,
-          ...routine,
-        },
-        id,
-        routine.reused ? 200 : 201,
-      );
     }
-    if (!config.agentEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");
-    const supportedModes = [
-      ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
-      ...(config.agentEnabled ? (["agent_wallet"] as const) : []),
-    ];
-    if (
-      !verifyRoutineProQuote({
-        sessionId: active.row.id,
-        entitled,
-        supportedModes: [...supportedModes],
-        quoteValidUntil: parsed.data.quoteValidUntil,
-        quoteDigest: parsed.data.quoteDigest,
-      })
-    ) {
-      throw new CommerceError("QUOTE_CHANGED");
-    }
+
     stage = "rate_limit_request";
-    await rateLimitPaymentRequest(request, { sessionId: active.row.id, agent: true });
+    await rateLimitPaymentRequest(request, {
+      sessionId: active.row.id,
+      ...(recoverable ? { orderRef: recoverable.publicRef } : {}),
+      agent: true,
+    });
 
     stage = "create_order";
     const state = await createOrReuseRoutineProOrder({
       active,
-      templateId: parsed.data.templateId,
+      session: validated.session,
+      routine: validated.routine,
       goal: parsed.data.goal,
       paymentMode: "agent_wallet",
-      initiatedVia: parsed.data.initiatedVia,
     });
     if (state.entitled) {
-      const routine = await createAndSavePersonalizedRoutine({
+      await createAndSavePersonalizedRoutine({
         active,
-        templateId: parsed.data.templateId,
         goal: parsed.data.goal,
-        initiatedVia: parsed.data.initiatedVia,
+        routine: parsed.data.routine,
       });
-      return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);
+      return success(await getRoutineProStatusForActiveSession(active), id, 200);
     }
     const order = state.order;
     if (!order) throw new CommerceError("INTERNAL_ERROR", true);
     await rateLimitPaymentOrder(order.publicRef);
+
     if (order.status === "paid_unfulfilled") {
+      stage = "recover_fulfillment";
       await retryPaidUnfulfilledOrder(order.id);
       if (!(await hasRoutineProEntitlement(active.row.patientId))) {
         throw new CommerceError("FULFILLMENT_PENDING", true);
       }
-      const paidInput = routineInputForOrder(order, parsed.data.goal);
-      const routine = await createAndSavePersonalizedRoutine({
+      await createAndSavePersonalizedRoutine({
         active,
-        ...paidInput,
-        initiatedVia: order.initiatedVia,
+        goal: parsed.data.goal,
+        routine: parsed.data.routine,
       });
       return success(
-        {
-          entitled: true,
-          orderRef: order.publicRef,
-          payerLabel: "Adaptive World demo agent" as const,
-          ...routine,
-        },
+        await getRoutineProStatusForActiveSession(active, order.publicRef),
         id,
-        routine.reused ? 200 : 201,
+        200,
       );
     }
     if (["payment_submitted", "reconciliation_required"].includes(order.status)) {
       throw new CommerceError("RECONCILIATION_REQUIRED");
     }
+
     cleanupOrderId = order.id;
     stage = "reserve_budget";
     await reserveAgentBudgetForOrder(order);
@@ -194,21 +185,15 @@ export async function POST(request: Request) {
     if (!(await hasRoutineProEntitlement(active.row.patientId))) {
       throw new CommerceError("FULFILLMENT_PENDING", true);
     }
-    const paidInput = routineInputForOrder(order, parsed.data.goal);
-    const routine = await createAndSavePersonalizedRoutine({
+    await createAndSavePersonalizedRoutine({
       active,
-      ...paidInput,
-      initiatedVia: order.initiatedVia,
+      goal: parsed.data.goal,
+      routine: parsed.data.routine,
     });
     return success(
-      {
-        entitled: true,
-        orderRef: order.publicRef,
-        payerLabel: "Adaptive World demo agent" as const,
-        ...routine,
-      },
+      await getRoutineProStatusForActiveSession(active, order.publicRef),
       id,
-      routine.reused ? 200 : 201,
+      201,
     );
   } catch (error) {
     let safeError = asCommerceError(error);
