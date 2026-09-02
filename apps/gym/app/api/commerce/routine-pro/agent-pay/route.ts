@@ -28,11 +28,13 @@ import {
   createOrReuseRoutineProOrder,
   getPayableOrder,
   hasRoutineProEntitlement,
-  routineInputForOrder,
 } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import {
+  prepareAgentGeneratedRoutine,
+  savePreparedPersonalizedRoutine,
+} from "@/lib/commerce/routines";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +66,11 @@ export async function POST(request: Request) {
     stage = "load_context";
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
+    const preparedSession = prepareAgentGeneratedRoutine({
+      active,
+      routine: parsed.data.routine,
+      goal: parsed.data.goal,
+    });
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
     const recoverable = entitled ? null : await getPayableOrder(active.row.patientId);
     if (recoverable?.provider === "mpp_tempo" && recoverable.status === "paid_unfulfilled") {
@@ -76,12 +83,7 @@ export async function POST(request: Request) {
       if (!(await hasRoutineProEntitlement(active.row.patientId))) {
         throw new CommerceError("FULFILLMENT_PENDING", true);
       }
-      const recoveredInput = routineInputForOrder(recoverable, parsed.data.goal);
-      const routine = await createAndSavePersonalizedRoutine({
-        active,
-        ...recoveredInput,
-        initiatedVia: recoverable.initiatedVia,
-      });
+      const routine = await savePreparedPersonalizedRoutine({ active, session: preparedSession });
       return success(
         {
           entitled: true,
@@ -115,18 +117,11 @@ export async function POST(request: Request) {
     stage = "create_order";
     const state = await createOrReuseRoutineProOrder({
       active,
-      templateId: parsed.data.templateId,
-      goal: parsed.data.goal,
+      session: preparedSession,
       paymentMode: "agent_wallet",
-      initiatedVia: parsed.data.initiatedVia,
     });
     if (state.entitled) {
-      const routine = await createAndSavePersonalizedRoutine({
-        active,
-        templateId: parsed.data.templateId,
-        goal: parsed.data.goal,
-        initiatedVia: parsed.data.initiatedVia,
-      });
+      const routine = await savePreparedPersonalizedRoutine({ active, session: preparedSession });
       return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);
     }
     const order = state.order;
@@ -137,12 +132,7 @@ export async function POST(request: Request) {
       if (!(await hasRoutineProEntitlement(active.row.patientId))) {
         throw new CommerceError("FULFILLMENT_PENDING", true);
       }
-      const paidInput = routineInputForOrder(order, parsed.data.goal);
-      const routine = await createAndSavePersonalizedRoutine({
-        active,
-        ...paidInput,
-        initiatedVia: order.initiatedVia,
-      });
+      const routine = await savePreparedPersonalizedRoutine({ active, session: preparedSession });
       return success(
         {
           entitled: true,
@@ -194,12 +184,7 @@ export async function POST(request: Request) {
     if (!(await hasRoutineProEntitlement(active.row.patientId))) {
       throw new CommerceError("FULFILLMENT_PENDING", true);
     }
-    const paidInput = routineInputForOrder(order, parsed.data.goal);
-    const routine = await createAndSavePersonalizedRoutine({
-      active,
-      ...paidInput,
-      initiatedVia: order.initiatedVia,
-    });
+    const routine = await savePreparedPersonalizedRoutine({ active, session: preparedSession });
     return success(
       {
         entitled: true,
