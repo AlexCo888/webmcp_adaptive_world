@@ -40,6 +40,7 @@ const expectedCatalogs = {
     "get_equipment",
     "get_active_context",
     "get_routine_pro_offer",
+    "get_routine_pro_status",
     "create_personalized_routine",
     "record_session_feedback",
   ],
@@ -55,13 +56,14 @@ const expectedRouteCatalogs = {
   },
   gym: {
     "/equipment": ["get_gym_profile", "search_equipment", "get_equipment"],
-    "/passport": ["get_gym_profile", "get_active_context"],
+    "/passport": ["get_gym_profile", "get_active_context", "get_routine_pro_status"],
     "/session": [
       "get_gym_profile",
       "search_equipment",
       "get_equipment",
       "get_active_context",
       "get_routine_pro_offer",
+      "get_routine_pro_status",
       "create_personalized_routine",
     ],
   },
@@ -250,6 +252,18 @@ for (const [index, testCase] of (data.cases ?? []).entries()) {
   }
 }
 
+const gymRegistry = catalog.properties?.gym?.properties ?? {};
+const personalizedSchema = resolveSchema(gymRegistry.create_personalized_routine);
+if (personalizedSchema?.properties?.templateId) {
+  fail("create_personalized_routine must not accept templateId.");
+}
+if (!personalizedSchema?.required?.includes("routine")) {
+  fail("create_personalized_routine must require the exact structured routine.");
+}
+if (!gymRegistry.get_routine_pro_status) {
+  fail("The read-only get_routine_pro_status input schema is required.");
+}
+
 const proCase = (data.cases ?? []).find(({ id }) => id === "AW-EVAL-017");
 if (!proCase) {
   fail("AW-EVAL-017 is required.");
@@ -257,13 +271,14 @@ if (!proCase) {
   const chain = proCase.assertions?.mustCallInOrder ?? [];
   const expectedChain = [
     "get_gym_profile",
-    "search_equipment",
     "get_active_context",
+    "search_equipment",
+    "get_equipment",
     "get_routine_pro_offer",
     "create_personalized_routine",
   ];
   if (JSON.stringify(chain) !== JSON.stringify(expectedChain)) {
-    fail("AW-EVAL-017 must preserve the free-discovery-to-confirmed-Pro chain.");
+    fail("AW-EVAL-017 must preserve the free-context-and-inventory-to-confirmed-Pro chain.");
   }
   if (proCase.assertions?.requiresHumanConfirmation !== true) {
     fail("AW-EVAL-017 must require first-party human confirmation.");
@@ -273,6 +288,15 @@ if (!proCase) {
     proCase.assertions?.expectedCurrency !== "usd"
   ) {
     fail("AW-EVAL-017 must use the exact server-authoritative 499 usd sandbox offer.");
+  }
+  const personalizedCall = proCase.expectedCalls?.find(
+    ({ functionName }) => functionName === "create_personalized_routine",
+  );
+  if (!personalizedCall?.arguments?.routine) {
+    fail("AW-EVAL-017 must submit the complete agent-generated routine.");
+  }
+  if ("templateId" in (personalizedCall?.arguments ?? {})) {
+    fail("AW-EVAL-017 must not submit a templateId.");
   }
 }
 
