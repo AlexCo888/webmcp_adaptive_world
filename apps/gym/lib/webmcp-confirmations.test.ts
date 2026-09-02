@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { facilityTemplates } from "./session-planner";
 import {
+  MAX_CONFIRMATION_VALUE_CHARS,
   prepareFeedbackConfirmation,
   prepareRoutineProConfirmation,
   prepareStaffWalkthroughConfirmation,
@@ -212,5 +213,40 @@ describe("Gym WebMCP confirmations", () => {
     const serialized = JSON.stringify(prepared).toLowerCase();
     expect(serialized).toContain("not agent-generated");
     expect(serialized).not.toContain("agent-generated via webmcp");
+  });
+
+  it("keeps every confirmation value within the adapter field bound for verbose contexts", () => {
+    const verbose: GymContextProjection = {
+      ...projection,
+      goals: Array.from({ length: 8 }, (_, index) => `${"Goal detail ".repeat(12)}${index}`),
+      movementConsiderations: Array.from(
+        { length: 8 },
+        (_, index) => `${"Movement consideration ".repeat(8)}${index}`,
+      ),
+      avoid: Array.from({ length: 8 }, (_, index) => `${"Avoid this loading ".repeat(8)}${index}`),
+      stopSignals: Array.from({ length: 8 }, (_, index) => `${"Stop signal ".repeat(12)}${index}`),
+    };
+    const agent = prepareRoutineProConfirmation({
+      offer,
+      requestedInput: input,
+      projection: verbose,
+      equipment: selectedEquipment,
+    });
+    const site = prepareStaffWalkthroughConfirmation({
+      offer,
+      template: facilityTemplates[0]!,
+      goal: "Support long-term health",
+      paymentMode: "agent_wallet",
+      projection: verbose,
+      equipment: equipmentCatalog,
+    });
+    for (const field of [...agent.preparation.confirmation.fields, ...site.fields]) {
+      expect(field.value.length).toBeLessThanOrEqual(1_800);
+    }
+    expect(
+      agent.preparation.confirmation.fields.find(
+        (field) => field.label === "Approved Passport context used",
+      )?.value.length,
+    ).toBeLessThanOrEqual(MAX_CONFIRMATION_VALUE_CHARS);
   });
 });

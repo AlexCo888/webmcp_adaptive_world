@@ -25,14 +25,25 @@ function summarize(values: readonly string[], fallback: string, max = 520): stri
 
 type PaymentMode = z.infer<typeof RoutinePaymentModeSchema> | undefined;
 
+/**
+ * Every confirmation field value must stay within the WebMCP adapter's
+ * per-field bound (1,800 characters). The combined context summary is the only
+ * value assembled from several independently bounded lists, so it is capped
+ * as a whole after each list is summarized.
+ */
+export const MAX_CONFIRMATION_VALUE_CHARS = 1_600;
+
 function contextSummaryFor(projection: GymContextProjection): string {
-  return [
+  const value = [
     `Projection ${projection.projectionId}`,
-    `Goals: ${summarize(projection.goals, "None")}`,
-    `Movement considerations: ${summarize(projection.movementConsiderations, "None")}`,
-    `Avoid: ${summarize(projection.avoid, "None")}`,
-    `Stop signals: ${summarize(projection.stopSignals, "None")}`,
+    `Goals: ${summarize(projection.goals, "None", 320)}`,
+    `Movement considerations: ${summarize(projection.movementConsiderations, "None", 400)}`,
+    `Avoid: ${summarize(projection.avoid, "None", 320)}`,
+    `Stop signals: ${summarize(projection.stopSignals, "None", 400)}`,
   ].join(" · ");
+  return value.length <= MAX_CONFIRMATION_VALUE_CHARS
+    ? value
+    : `${value.slice(0, MAX_CONFIRMATION_VALUE_CHARS - 1)}…`;
 }
 
 function payerLabelFor(offer: RoutineProOffer, paymentMode: PaymentMode): string {

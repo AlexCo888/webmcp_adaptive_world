@@ -185,6 +185,12 @@ export async function getLatestRoutineProOrderForSession(
   return result.rows[0] ? mapOrder(result.rows[0]) : null;
 }
 
+/**
+ * The routine an order fulfilled is the one saved from the same Gym session
+ * with the order's own provenance and channel. A later routine saved under the
+ * same entitlement (for example a staff walkthrough after an agent routine)
+ * must never be attributed to this order's receipt.
+ */
 export async function getRoutineProOrderOutcome(orderId: string): Promise<{
   entitlementGranted: boolean;
   savedRoutineRef: string | null;
@@ -202,6 +208,7 @@ export async function getRoutineProOrderOutcome(orderId: string): Promise<{
        INNER JOIN saved_routines sr ON sr.entitlement_grant_id = eg.id
        WHERE eg.source_order_id = co.id AND eg.entitlement_key = $2
          AND eg.status = 'active' AND sr.source_gym_session_id = co.originating_gym_session_id
+         AND sr.template_id = co.initial_template_id AND sr.created_via = co.initiated_via
        ORDER BY sr.saved_at DESC LIMIT 1
      ) AS saved_routine_ref
      FROM commerce_orders co WHERE co.id = $1 LIMIT 1`,
