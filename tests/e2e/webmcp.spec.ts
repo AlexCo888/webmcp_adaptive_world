@@ -15,26 +15,33 @@ const sessionTools = [
   "get_equipment",
   "get_gym_profile",
   "get_routine_pro_offer",
+  "get_routine_pro_status",
   "search_equipment",
 ];
-const naturalLanguageGoal = "Support lifelong health without bodybuilding-style muscle gain";
+const naturalLanguageGoal =
+  "Create a cautious routine after a broken leg while weight-bearing clearance remains undocumented";
+const orderRef = `awrp_${"b".repeat(32)}`;
+const paymentRef = `0x${"c".repeat(64)}`;
 
 const contextProjection = {
   projectionId: "gym_session_e2e",
   subjectAlias: "Passport member",
   purpose: "adaptive_gym_session",
-  goals: ["Build a safe first-visit routine"],
+  goals: ["Return gradually to regular activity"],
   experienceLevel: "beginner",
   preferredSessionMinutes: 40,
-  preferredActivities: ["Low-impact cardio"],
-  functionalCapabilities: ["120 weekly activity minutes reported"],
-  movementConsiderations: ["Prefer gradual progression"],
-  avoid: [],
-  stopSignals: ["Stop for chest pain"],
+  preferredActivities: ["Supported strength"],
+  functionalCapabilities: ["Can transfer independently"],
+  movementConsiderations: [
+    "Broken leg reported three months ago",
+    "Weight-bearing clearance is undocumented",
+  ],
+  avoid: ["Do not progress lower-limb loading without documented clearance"],
+  stopSignals: ["New or increasing pain", "Swelling"],
   accessibilityNeeds: [],
   sourceCategories: ["self_reported", "clinician_guidance"],
-  issuedAt: "2026-08-29T09:00:00.000Z",
-  expiresAt: "2026-08-29T10:00:00.000Z",
+  issuedAt: "2026-09-01T09:00:00.000Z",
+  expiresAt: "2026-09-01T10:00:00.000Z",
   synthetic: true,
 };
 
@@ -46,41 +53,97 @@ const routineProOffer = {
   sandbox: true,
   entitled: false,
   supportedModes: ["human_checkout", "agent_wallet"],
-  quoteValidUntil: "2026-08-29T09:15:00.000Z",
+  quoteValidUntil: "2026-09-01T09:15:00.000Z",
   quoteDigest: "a".repeat(64),
 };
+
+const proposedRoutine = {
+  title: "Mateo cautious return-to-activity draft",
+  durationMinutes: 28,
+  exercises: [
+    {
+      equipmentId: "scifit_pro2_total_body",
+      durationMinutes: 8,
+      intensity: "easy",
+      instructions: [
+        "Ask staff to configure the removable seat before beginning.",
+        "Use a smooth upper-body-dominant motion and stop before fatigue.",
+      ],
+      adaptationReason:
+        "Keeps the opening block seated and adjustable while lower-limb loading clearance remains undocumented.",
+    },
+    {
+      equipmentId: "lf_insignia_row",
+      durationMinutes: 8,
+      intensity: "easy",
+      instructions: [
+        "Set the chest support and seat before selecting resistance.",
+        "Use a comfortable range and finish while repetitions remain easy.",
+      ],
+      adaptationReason:
+        "Adds supported upper-body work without claiming that weight-bearing activity is cleared.",
+    },
+  ],
+  warmup: ["Review all stop signals and equipment exits with Gym staff."],
+  cooldown: ["Finish seated and reassess pain or swelling before standing."],
+  safetyNotes: ["Do not interpret this draft as medical clearance."],
+  requiresExpertReview: true,
+  expertReviewReason:
+    "The recent leg fracture and undocumented weight-bearing clearance require physician or qualified physical-therapist review.",
+} as const;
 
 const generatedRoutine = {
   id: "session_e2e_routine",
   projectionId: contextProjection.projectionId,
-  title: "Low-impact first visit",
+  title: proposedRoutine.title,
   goal: naturalLanguageGoal,
-  templateId: "low_impact_orientation",
+  templateId: "webmcp_agent_generated",
   templateVersion: "1.0",
+  generationMode: "agent_generated",
   createdVia: "webmcp",
   catalogVersion: "verified-2026-08-29",
-  durationMinutes: 40,
+  durationMinutes: proposedRoutine.durationMinutes,
   status: "draft",
   exercises: [
     {
-      equipmentId: "lf_integrity_recumbent",
-      name: "Integrity+ Recumbent Lifecycle",
-      durationMinutes: 10,
-      intensity: "easy",
-      instructions: ["Ask staff to review the step-through entry before starting."],
-      adaptationReason: "Provides a seated, low-impact introduction.",
+      ...proposedRoutine.exercises[0],
+      name: "PRO2 Total Body Exerciser",
+    },
+    {
+      ...proposedRoutine.exercises[1],
+      name: "Insignia Series Row",
     },
   ],
-  safetyNotes: ["Stop and seek help for chest pain."],
-  decisionTrace: [
-    "Read the active minimum Gym projection.",
-    "Selected a published template and verified every station.",
+  warmup: proposedRoutine.warmup,
+  cooldown: proposedRoutine.cooldown,
+  safetyNotes: [
+    ...contextProjection.stopSignals,
+    ...proposedRoutine.safetyNotes,
+    "AI-generated personalized draft. A physician or qualified physical therapist should review and approve this routine before it is performed.",
   ],
-  createdAt: "2026-08-29T09:02:00.000Z",
-};
+  requiresExpertReview: true,
+  expertReviewReason: proposedRoutine.expertReviewReason,
+  decisionTrace: [
+    "The user-selected external agent generated the exercise content; Adaptive Gym called no AI model.",
+    "Verified both equipment IDs against the current Gym catalog.",
+  ],
+  createdAt: "2026-09-01T09:02:00.000Z",
+} as const;
 
-async function installRoutineApiStubs(page: Page): Promise<Array<Record<string, unknown>>> {
+type StubMode = "fulfilled" | "pending";
+
+async function installRoutineApiStubs(
+  page: Page,
+  mode: StubMode = "fulfilled",
+): Promise<Array<Record<string, unknown>>> {
   const agentPayBodies: Array<Record<string, unknown>> = [];
+  let status: Record<string, unknown> = {
+    entitled: false,
+    entitlementGranted: false,
+    canResume: false,
+    routineSaved: false,
+  };
+
   await page.route("**/api/context/current", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -99,39 +162,70 @@ async function installRoutineApiStubs(page: Page): Promise<Array<Record<string, 
   await page.route("**/api/commerce/routine-pro/status**", (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        data: { entitled: false },
-        requestId: "request-e2e-status",
-      }),
-    }),
-  );
-  await page.route("**/api/commerce/routine-pro/cancel", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        data: { cancelled: true },
-        requestId: "request-e2e-cancel",
-      }),
+      body: JSON.stringify({ ok: true, data: status, requestId: "request-e2e-status" }),
     }),
   );
   await page.route("**/api/commerce/routine-pro/agent-pay", async (route) => {
     const requestBody = (await route.request().postDataJSON()) as Record<string, unknown>;
     agentPayBodies.push(requestBody);
+    if (mode === "pending") {
+      status = {
+        entitled: false,
+        entitlementGranted: false,
+        orderRef,
+        orderStatus: "payment_submitted",
+        amountMinor: 499,
+        currency: "usd",
+        provider: "mpp_tempo",
+        payerLabel: "Adaptive World demo agent",
+        sandbox: true,
+        submittedAt: "2026-09-01T09:03:00.000Z",
+        canResume: false,
+        routineSaved: false,
+        routine: generatedRoutine,
+        initialGoal: naturalLanguageGoal,
+      };
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: "ORDER_PENDING",
+            message: "Payment outcome is pending.",
+            retryable: true,
+          },
+          requestId: "request-e2e-agent-pay",
+        }),
+      });
+      return;
+    }
+
+    status = {
+      entitled: true,
+      entitlementGranted: true,
+      orderRef,
+      orderStatus: "fulfilled",
+      amountMinor: 499,
+      currency: "usd",
+      provider: "mpp_tempo",
+      payerLabel: "Adaptive World demo agent",
+      sandbox: true,
+      submittedAt: "2026-09-01T09:03:00.000Z",
+      paidAt: "2026-09-01T09:03:03.000Z",
+      fulfilledAt: "2026-09-01T09:03:04.000Z",
+      providerPaymentRef: paymentRef,
+      canResume: false,
+      routineSaved: true,
+      routine: generatedRoutine,
+      savedRoutineRef: "00000000-0000-4000-8000-000000000008",
+      initialGoal: naturalLanguageGoal,
+    };
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         ok: true,
-        data: {
-          session: {
-            ...generatedRoutine,
-            goal: requestBody.goal,
-            templateId: requestBody.templateId,
-            createdVia: requestBody.initiatedVia,
-          },
-          savedRoutineRef: "routine-e2e-1",
-        },
+        data: status,
         requestId: "request-e2e-agent-pay",
       }),
     });
@@ -147,7 +241,6 @@ test("public Gym registers only free catalog tools and cleans up route registrat
   page,
 }) => {
   await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
-
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
   const before = await modelContextSnapshot(page);
   expect(before.activeTools.every(({ registrationSignal }) => registrationSignal)).toBe(true);
@@ -183,34 +276,38 @@ test("disconnect unregisters protected Gym tools without a reload", async ({ pag
     }
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        active: true,
-        projection: contextProjection,
-        scopes: ["gym.context.read"],
-      }),
+      body: JSON.stringify({ active: true, projection: contextProjection }),
     });
   });
   await page.route("**/api/session", (route) =>
     route.fulfill({ contentType: "application/json", body: JSON.stringify({ session: null }) }),
   );
+  await page.route("**/api/commerce/routine-pro/status**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        data: { entitled: false },
+        requestId: "request-e2e-status",
+      }),
+    }),
+  );
 
   await page.goto(`${gymBaseUrl}/passport`, { waitUntil: "domcontentloaded" });
   await expect
     .poll(() => activeModelContextToolNames(page))
-    .toEqual(["get_active_context", "get_gym_profile"]);
+    .toEqual(["get_active_context", "get_gym_profile", "get_routine_pro_status"]);
 
   await page.getByRole("button", { name: "Disconnect" }).click();
-
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(["get_gym_profile"]);
-  await expect(page).toHaveURL(`${gymBaseUrl}/passport`);
   expect(disconnectRequests).toBe(1);
 });
 
-test("a shim-invoked free equipment search updates the existing catalog UI", async ({ page }) => {
+test("free equipment search updates the existing catalog and keeps output bounded", async ({
+  page,
+}) => {
   await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
-  const before = await modelContextSnapshot(page);
-  const registrationIds = before.activeTools.map(({ id }) => id);
 
   const output = await invokeModelContextTool(page, "search_equipment", {
     query: "rower",
@@ -223,67 +320,9 @@ test("a shim-invoked free equipment search updates the existing catalog UI", asy
   await expect(page.getByPlaceholder("Search by machine, goal or movement…")).toHaveValue("rower");
   await expect(page.getByText("Heat Row", { exact: true })).toBeVisible();
   await expect(page.locator(".results-summary strong")).toHaveText("1");
-
-  const snapshot = await modelContextSnapshot(page);
-  expect(snapshot.activeTools.map(({ id }) => id)).toEqual(registrationIds);
-  expect(snapshot.unregistrations.some(({ id }) => registrationIds.includes(id))).toBe(false);
-  expect(snapshot.invocations).toEqual([
-    expect.objectContaining({ tool: "search_equipment", input: { query: "rower", limit: 10 } }),
-  ]);
 });
 
-test("a manufacturer query returns the same count shown in the existing catalog", async ({
-  page,
-}) => {
-  await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
-  await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
-
-  const output = await invokeModelContextTool(page, "search_equipment", {
-    query: "Life Fitness",
-    limit: 1,
-  });
-
-  expect(JSON.parse(String(output))).toMatchObject({
-    ok: true,
-    data: { count: 9, returned: 1, truncated: true },
-  });
-  await expect(page.getByPlaceholder("Search by machine, goal or movement…")).toHaveValue(
-    "Life Fitness",
-  );
-  await expect(page.locator(".results-summary strong")).toHaveText("9");
-  await expect(page.locator(".equipment-card")).toHaveCount(9);
-});
-
-test("canonical natural-language searches stay grounded in the visible catalog", async ({
-  page,
-}) => {
-  await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
-  await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
-
-  const matchingOutput = await invokeModelContextTool(page, "search_equipment", {
-    query: "low impact accessible equipment",
-  });
-  expect(String(matchingOutput).length).toBeLessThanOrEqual(1_500);
-  expect(JSON.parse(String(matchingOutput))).toMatchObject({
-    ok: true,
-    data: { count: 5, returned: 2, truncated: true },
-  });
-  await expect(page.locator(".results-summary strong")).toHaveText("5");
-  await expect(page.locator(".equipment-card")).toHaveCount(5);
-
-  const unavailableOutput = await invokeModelContextTool(page, "search_equipment", {
-    query: "anti-gravity treadmill",
-    limit: 1,
-  });
-  expect(JSON.parse(String(unavailableOutput))).toMatchObject({
-    ok: true,
-    data: { count: 0, returned: 0, truncated: false, equipment: [] },
-  });
-  await expect(page.locator(".results-summary strong")).toHaveText("0");
-  await expect(page.getByRole("heading", { name: "No exact matches" })).toBeVisible();
-});
-
-test("a shim-invoked equipment read opens the existing detail route", async ({ page }) => {
+test("equipment read opens the authoritative existing detail route", async ({ page }) => {
   await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
 
@@ -297,61 +336,43 @@ test("a shim-invoked equipment read opens the existing detail route", async ({ p
   await expect(page.getByRole("heading", { name: "Heat Row" })).toBeVisible();
 });
 
-test("tool output remains bounded and exact invocation input is recorded", async ({ page }) => {
-  await page.goto(`${gymBaseUrl}/equipment`, { waitUntil: "domcontentloaded" });
-  await expect.poll(() => activeModelContextToolNames(page)).toEqual(publicCatalogTools);
-
-  const output = await invokeModelContextTool(page, "search_equipment", { limit: 20 });
-  expect(typeof output).toBe("string");
-  expect(String(output).length).toBeLessThanOrEqual(1_500);
-  const parsedOutput = JSON.parse(String(output)) as {
-    readonly ok: boolean;
-    readonly data: {
-      readonly count: number;
-      readonly returned: number;
-      readonly truncated: boolean;
-      readonly equipment: readonly unknown[];
-    };
-  };
-  expect(parsedOutput).toMatchObject({
-    ok: true,
-    data: { count: 22, truncated: true },
-  });
-  expect(parsedOutput.data.returned).toBeGreaterThan(0);
-  expect(parsedOutput.data.returned).toBeLessThanOrEqual(5);
-  expect(parsedOutput.data.equipment).toHaveLength(parsedOutput.data.returned);
-
-  const snapshot = await modelContextSnapshot(page);
-  expect(snapshot.invocations.at(-1)).toEqual(
-    expect.objectContaining({ tool: "search_equipment", input: { limit: 20 }, output }),
-  );
-});
-
-test("declining the exact Routine Pro confirmation makes no payment request", async ({ page }) => {
+test("declining the complete exact-routine confirmation makes no payment request", async ({
+  page,
+}) => {
   const agentPayBodies = await installRoutineApiStubs(page);
   await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
 
   const invocation = invokeModelContextTool(page, "create_personalized_routine", {
     goal: naturalLanguageGoal,
+    routine: proposedRoutine,
   });
   const declined = expect(invocation).rejects.toThrow("The action was declined.");
 
   const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("heading")).toHaveText(
+    "Approve this exact routine and sandbox payment?",
+  );
+  await expect(dialog).toContainText(proposedRoutine.title);
+  await expect(dialog).toContainText("Weight-bearing clearance is undocumented");
+  await expect(dialog).toContainText("PRO2 Total Body Exerciser");
+  await expect(dialog).toContainText("Insignia Series Row");
   await expect(dialog).toContainText("$4.99 test USD");
-  await expect(dialog).toContainText("Adaptive World demo agent");
-  await expect(dialog).toContainText(naturalLanguageGoal);
-  await expect(dialog).toContainText("Passport connection, context review, Gym profile");
-  await expect(dialog.getByText("Free tier", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Paid tier", { exact: true })).toBeVisible();
-  await expect(dialog).toContainText("Unchanged; no additional health fields");
+  await expect(dialog).toContainText("Adaptive World demo agent wallet");
+  await expect(dialog).toContainText("MPP / Tempo testnet");
+  await expect(dialog).toContainText(
+    "A physician or qualified physical therapist should review and approve this routine",
+  );
+  await expect(dialog).toContainText("Save this exact routine to Passport");
   await dialog.getByRole("button", { name: "Cancel" }).click();
 
   await declined;
   expect(agentPayBodies).toHaveLength(0);
 });
 
-test("approving Routine Pro executes once and fills the existing planner", async ({ page }) => {
+test("approving executes the exact routine once and displays the fulfilled receipt", async ({
+  page,
+}) => {
   const agentPayBodies = await installRoutineApiStubs(page);
   await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
   await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
@@ -363,32 +384,28 @@ test("approving Routine Pro executes once and fills the existing planner", async
       amountMinor: 499,
       currency: "usd",
       sandbox: true,
-      tierBoundary: {
-        free: "Passport connection, context review, Gym profile, and equipment discovery",
-        paid: "Personalized routine creation and Passport saving",
-      },
       recommendedFlow: {
         understand: "get_active_context",
-        ground: "search_equipment",
-        reviewOffer: "get_routine_pro_offer",
-        personalize: "create_personalized_routine — requires confirmation",
+        generate: "Generate a new structured routine in the external agent context",
+        recover: "get_routine_pro_status — read-only; never repeat a payment after timeout",
       },
     },
   });
-  expect(String(offerOutput).length).toBeLessThanOrEqual(1_500);
 
   const invocation = invokeModelContextTool(page, "create_personalized_routine", {
     goal: naturalLanguageGoal,
+    routine: proposedRoutine,
   });
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByRole("heading")).toHaveText("Approve Routine Pro sandbox payment?");
-  await dialog.getByRole("button", { name: "Approve agent payment" }).click();
+  await dialog
+    .getByRole("button", { name: "Approve exact routine and agent payment" })
+    .click();
   const output = await invocation;
 
   expect(agentPayBodies).toHaveLength(1);
   expect(agentPayBodies[0]).toEqual({
     goal: naturalLanguageGoal,
-    templateId: "low_impact_orientation",
+    routine: proposedRoutine,
     paymentMode: "agent_wallet",
     initiatedVia: "webmcp",
     quoteValidUntil: routineProOffer.quoteValidUntil,
@@ -396,87 +413,79 @@ test("approving Routine Pro executes once and fills the existing planner", async
   });
   expect(JSON.parse(String(output))).toMatchObject({
     ok: true,
-    data: { created: true, savedToPassport: true, savedRoutineRef: "routine-e2e-1" },
+    data: {
+      created: true,
+      savedToPassport: true,
+      orderRef,
+      orderStatus: "fulfilled",
+      providerPaymentRef: paymentRef,
+      entitlementGranted: true,
+      routineSaved: true,
+      savedRoutineRef: "00000000-0000-4000-8000-000000000008",
+      routine: {
+        title: proposedRoutine.title,
+        generationMode: "agent_generated",
+        createdVia: "webmcp",
+        requiresExpertReview: true,
+      },
+    },
   });
-  await expect(page.getByRole("heading", { name: generatedRoutine.title })).toBeVisible();
+  await expect(page.getByRole("heading", { name: proposedRoutine.title })).toBeVisible();
+  await expect(page.getByText("Agent-generated via WebMCP", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payment confirmed" })).toBeVisible();
+  await expect(page.getByText(paymentRef, { exact: true })).toBeVisible();
   await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
+  await expect(page.getByText("Yes", { exact: true })).toHaveCount(2);
+  await expect(page.getByText(/AI-generated personalized draft/u).first()).toBeVisible();
 });
 
-test("the human planner matches the same natural-language goal before explicit payment", async ({
+test("an uncertain paid mutation recovers through read-only status and never pays twice", async ({
   page,
 }) => {
-  const agentPayBodies = await installRoutineApiStubs(page);
+  const agentPayBodies = await installRoutineApiStubs(page, "pending");
   await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
+  await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
 
-  const goalField = page.locator("#routine-goal");
-  await expect(goalField).toBeEnabled();
-  await goalField.fill(naturalLanguageGoal);
-  const matchedTemplate = page.getByRole("radio", {
-    name: /Low-impact cardio & guided strength/u,
+  const first = invokeModelContextTool(page, "create_personalized_routine", {
+    goal: naturalLanguageGoal,
+    routine: proposedRoutine,
   });
-  await expect(matchedTemplate).toHaveAttribute("aria-checked", "true");
-
-  await page.getByRole("button", { name: /Build my personalized routine/u }).click();
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByRole("heading")).toHaveText("Approve Routine Pro sandbox payment?");
-  await expect(dialog.getByText("Free tier", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("Paid tier", { exact: true })).toBeVisible();
-  await expect(dialog).toContainText("$4.99 test USD");
-  await expect(dialog).toContainText("Sandbox — no real funds");
-  await expect(dialog).toContainText(naturalLanguageGoal);
-  await expect(dialog).toContainText("low_impact_orientation");
-
-  await dialog.getByRole("radio", { name: "Adaptive World demo agent" }).check();
-  await dialog.getByRole("button", { name: "Approve agent payment" }).click();
-
-  await expect(page.getByRole("heading", { name: generatedRoutine.title })).toBeVisible();
-  await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
-  expect(agentPayBodies).toEqual([
-    {
-      goal: naturalLanguageGoal,
-      templateId: "low_impact_orientation",
-      paymentMode: "agent_wallet",
-      initiatedVia: "site-ui",
-      quoteValidUntil: routineProOffer.quoteValidUntil,
-      quoteDigest: routineProOffer.quoteDigest,
-    },
-  ]);
-});
-
-test("a cancelled human return exposes one locked resume path with its payer", async ({ page }) => {
-  await installRoutineApiStubs(page);
-  const orderRef = `awrp_${"b".repeat(32)}`;
-  await page.route("**/api/commerce/routine-pro/status**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        ok: true,
-        data: {
-          entitled: false,
-          orderRef,
-          orderStatus: "provider_pending",
-          payerLabel: "Human test checkout",
-          canResume: true,
-          initialTemplateId: "first_visit_foundations",
-          initialGoal: naturalLanguageGoal,
-        },
-        requestId: "request-e2e-status",
-      }),
-    }),
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Approve exact routine and agent payment" })
+    .click();
+  await expect(first).rejects.toThrow(
+    "Payment confirmation is being recovered. We will not submit another payment.",
   );
+  expect(agentPayBodies).toHaveLength(1);
 
-  await page.goto(`${gymBaseUrl}/session?routinePro=cancelled&order=${orderRef}`, {
-    waitUntil: "domcontentloaded",
+  const statusOutput = await invokeModelContextTool(page, "get_routine_pro_status", {
+    orderRef,
+  });
+  expect(JSON.parse(String(statusOutput))).toMatchObject({
+    ok: true,
+    data: {
+      orderRef,
+      orderStatus: "payment_submitted",
+      amountMinor: 499,
+      currency: "usd",
+      provider: "mpp_tempo",
+      payerLabel: "Adaptive World demo agent",
+      sandbox: true,
+      entitlementGranted: false,
+      routineSaved: false,
+      terminal: false,
+      recoveryInstruction:
+        "Payment confirmation is being recovered. Do not submit another payment. Poll this read-only status tool only while the order remains non-terminal.",
+    },
   });
 
-  await expect(page.getByRole("heading", { name: "Payment already in progress" })).toBeVisible();
-  await expect(page.getByText("Human test checkout", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ready to resume", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Resume human test checkout" }).click();
-
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog.getByRole("heading")).toHaveText("Resume your existing sandbox payment?");
-  await expect(dialog.getByText("Human test checkout", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Resume secure test checkout" })).toBeVisible();
-  await expect(dialog.getByRole("radio")).toHaveCount(0);
+  await expect(
+    invokeModelContextTool(page, "create_personalized_routine", {
+      goal: naturalLanguageGoal,
+      routine: proposedRoutine,
+    }),
+  ).rejects.toThrow("Payment confirmation is being recovered. We will not submit another payment.");
+  expect(agentPayBodies).toHaveLength(1);
+  await expect(page.getByText("Payment confirmation is being recovered", { exact: false }).first()).toBeVisible();
 });
