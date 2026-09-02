@@ -5,7 +5,9 @@ import {
   GeneratedSessionSchema,
   GymContextProjectionSchema,
   RoutineProOfferSchema,
+  RoutineStatusSchema,
   type RoutineProOffer,
+  type RoutineStatus,
   type SessionFeedback,
 } from "@adaptive-world/contracts";
 import {
@@ -37,39 +39,46 @@ import {
   matchesEquipmentSearch,
 } from "@/lib/equipment-search";
 import {
-  pendingRoutineProOrder,
-  type PendingRoutineProOrder,
-} from "@/lib/routine-pro-client-state";
-import {
   prepareFeedbackConfirmation,
   prepareRoutineProConfirmation,
   webMcpMutationBusyLabel,
 } from "@/lib/webmcp-confirmations";
-import { recommendFacilityTemplate } from "@/lib/session-planner";
 
 type ExecutionEvent = { tool: string; at: string };
 type PreparedQuote = {
   offer: RoutineProOffer;
   requestedInput: CreatePersonalizedRoutineInput;
-  effectiveInput: CreatePersonalizedRoutineInput & {
-    templateId: NonNullable<CreatePersonalizedRoutineInput["templateId"]>;
-  };
-  pending: PendingRoutineProOrder | null;
+  effectiveInput: CreatePersonalizedRoutineInput;
+  statusFingerprint: string;
 };
 type PreparedFeedback = {
   completedExerciseIds: string[];
   input: RecordSessionFeedbackInput;
 };
 
+const RECOVERY_ORDER_STATES = new Set([
+  "created",
+  "provider_pending",
+  "payment_submitted",
+  "reconciliation_required",
+  "paid_unfulfilled",
+]);
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalValue(item)]),
+  );
+}
+
 function sameRoutineInput(
   left: CreatePersonalizedRoutineInput,
   right: CreatePersonalizedRoutineInput,
 ): boolean {
-  return (
-    left.goal.trim() === right.goal.trim() &&
-    left.templateId === right.templateId &&
-    left.paymentMode === right.paymentMode
-  );
+  return JSON.stringify(canonicalValue(left)) === JSON.stringify(canonicalValue(right));
 }
 
 function sameFeedbackInput(
@@ -91,33 +100,48 @@ function envelopeData(value: unknown): unknown {
   return (value as Record<string, unknown>).data;
 }
 
-function parseRoutineProStatus(value: unknown): {
-  entitled: boolean;
-  pending: PendingRoutineProOrder | null;
-} {
-  const data = envelopeData(value);
-  if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
-  const record = data as Record<string, unknown>;
-  if (typeof record.entitled !== "boolean") throw new GymApiError("INVALID_RESPONSE", 502);
-  const pending = pendingRoutineProOrder(record);
-  if (record.entitled === false && record.orderRef !== undefined && !pending) {
-    throw new GymApiError("INVALID_RESPONSE", 502);
-  }
-  return { entitled: record.entitled, pending };
+function parseRoutineProStatus(value: unknown): RoutineStatus {
+  return RoutineStatusSchema.parse(envelopeData(value));
 }
 
-function samePendingPayment(
-  prepared: PendingRoutineProOrder | null,
-  current: PendingRoutineProOrder | null,
-): boolean {
-  if (!prepared || !current) return prepared === current;
-  return (
-    current.canResume &&
-    prepared.orderRef === current.orderRef &&
-    prepared.payerLabel === current.payerLabel &&
-    prepared.initialTemplateId === current.initialTemplateId &&
-    prepared.initialGoal === current.initialGoal
-  );
+function statusFingerprint(status: RoutineStatus): string {
+  return JSON.stringify([
+    status.entitled,
+    status.orderRef ?? null,
+    status.orderStatus ?? null,
+    status.providerPaymentRef ?? null,
+    status.savedRoutineRef ?? null,
+  ]);
+}
+
+function isRecovering(status: RoutineStatus): boolean {
+  return Boolean(status.orderStatus && RECOVERY_ORDER_STATES.has(status.orderStatus));
+}
+
+function statusToolResult(status: RoutineStatus) {
+  return {
+    ...(status.orderRef ? { orderRef: status.orderRef } : {}),
+    ...(status.orderStatus ? { orderStatus: status.orderStatus } : {}),
+    ...(status.amountMinor !== undefined ? { amountMinor: status.amountMinor } : {}),
+    ...(status.currency ? { currency: status.currency } : {}),
+    ...(status.provider ? { provider: status.provider } : {}),
+    ...(status.payerLabel ? { payerLabel: status.payerLabel } : {}),
+    ...(status.sandbox !== undefined ? { sandbox: status.sandbox } : {}),
+    ...(status.submittedAt ? { submittedAt: status.submittedAt } : {}),
+    ...(status.paidAt ? { paidAt: status.paidAt } : {}),
+    ...(status.fulfilledAt ? { fulfilledAt: status.fulfilledAt } : {}),
+    ...(status.providerPaymentRef ? { providerPaymentRef: status.providerPaymentRef } : {}),
+    entitlementGranted: status.entitlementGranted,
+    routineSaved: status.routineSaved,
+    ...(status.savedRoutineRef ? { savedRoutineRef: status.savedRoutineRef } : {}),
+    terminal:
+      status.orderStatus !== undefined && !RECOVERY_ORDER_STATES.has(status.orderStatus),
+    recoveryInstruction: isRecovering(status)
+      ? "Payment confirmation is being recovered. Do not submit another payment. Poll this read-only status tool only while the order remains non-terminal."
+      : status.orderStatus === "fulfilled"
+        ? "Payment and routine save are complete. Do not submit another payment."
+        : "No payment recovery is currently in progress.",
+  };
 }
 
 export function WebMcpBridge() {
@@ -208,6 +232,16 @@ export function WebMcpBridge() {
     return () => controller.abort();
   }, [pathname, setContextActive]);
 
+  const applyRecoveredRoutine = useCallback(
+    (status: RoutineStatus, signal?: AbortSignal) => {
+      if (!status.routineSaved || !status.routine || !status.savedRoutineRef) return;
+      window.setTimeout(() => {
+        if (!signal?.aborted) applyPersonalizedRoutine(status.routine!, status.savedRoutineRef!);
+      }, 0);
+    },
+    [applyPersonalizedRoutine],
+  );
+
   const handlers = useMemo<GymToolHandlers>(
     () => ({
       get_gym_profile: async (_input, context) => {
@@ -244,8 +278,6 @@ export function WebMcpBridge() {
               availableOnly: true,
             }),
           );
-        // Publish the tool result before mirroring it into the route UI. The
-        // provider update must not invalidate the invocation that caused it.
         window.setTimeout(() => {
           if (!context.signal?.aborted) applyEquipmentSearch(input, matches.length);
         }, 0);
@@ -261,16 +293,15 @@ export function WebMcpBridge() {
         const data = envelopeData(response);
         if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
         const item = EquipmentSchema.parse((data as { equipment?: unknown }).equipment);
-        // Let the WebMCP promise publish its bounded result before this
-        // route change tears down the route-scoped registration.
         window.setTimeout(() => openEquipment(item.slug), 0);
         trace("get_equipment");
         return { equipment: compactEquipmentForTool(item) };
       },
       get_active_context: async (_input, context) => {
         const response = await fetchBoundedJson<unknown>("/api/context/current", {}, context);
-        if (!response || typeof response !== "object")
+        if (!response || typeof response !== "object") {
           throw new GymApiError("INVALID_RESPONSE", 502);
+        }
         const record = response as Record<string, unknown>;
         if (record.active !== true) throw new GymApiError("CONTEXT_REQUIRED", 401);
         const projection = GymContextProjectionSchema.parse(record.projection);
@@ -289,15 +320,30 @@ export function WebMcpBridge() {
           ...offer,
           tierBoundary: {
             free: "Passport connection, context review, Gym profile, and equipment discovery",
-            paid: "Personalized routine creation and Passport saving",
+            paid: "Validation, sandbox payment, and Passport saving of the exact agent-generated routine",
           },
           recommendedFlow: {
             understand: "get_active_context",
-            ground: "search_equipment",
+            ground: "search_equipment and get_equipment",
+            generate: "Generate a new structured routine in the external agent context",
             reviewOffer: "get_routine_pro_offer",
-            personalize: "create_personalized_routine — requires confirmation",
+            confirmAndSave: "create_personalized_routine — exact first-party confirmation required",
+            recover: "get_routine_pro_status — read-only; never repeat a payment after timeout",
           },
         };
+      },
+      get_routine_pro_status: async ({ orderRef }, context) => {
+        const response = await fetchBoundedJson<unknown>(
+          orderRef
+            ? `/api/commerce/routine-pro/status?order=${encodeURIComponent(orderRef)}`
+            : "/api/commerce/routine-pro/status",
+          {},
+          context,
+        );
+        const status = parseRoutineProStatus(response);
+        applyRecoveredRoutine(status, context.signal);
+        trace("get_routine_pro_status");
+        return statusToolResult(status);
       },
       create_personalized_routine: {
         prepare: async (input, context) => {
@@ -311,9 +357,9 @@ export function WebMcpBridge() {
           if (!contextResponse || typeof contextResponse !== "object") {
             throw new GymApiError("INVALID_RESPONSE", 502);
           }
-          const projection = GymContextProjectionSchema.parse(
-            (contextResponse as Record<string, unknown>).projection,
-          );
+          const contextRecord = contextResponse as Record<string, unknown>;
+          if (contextRecord.active !== true) throw new GymApiError("CONTEXT_REQUIRED", 401);
+          const projection = GymContextProjectionSchema.parse(contextRecord.projection);
           if (offer.entitled !== status.entitled) {
             throw new GymApiError(
               "QUOTE_CHANGED",
@@ -321,36 +367,60 @@ export function WebMcpBridge() {
               "Routine Pro status changed. Review the current offer again.",
             );
           }
-          if (status.pending && !status.pending.canResume) {
+          if (isRecovering(status)) {
             throw new GymApiError(
               "ORDER_PENDING",
               409,
-              "The existing payment is being reconciled and cannot be resumed yet.",
+              "Payment confirmation is being recovered. We will not submit another payment. Call get_routine_pro_status and poll only while the order remains non-terminal.",
             );
           }
           if (!offer.entitled && offer.supportedModes.length === 0) {
             throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
           }
-          const requestedForConfirmation = {
-            ...input,
-            paymentMode:
-              input.paymentMode ??
-              (!offer.entitled
-                ? offer.supportedModes.includes("agent_wallet")
-                  ? "agent_wallet"
-                  : offer.supportedModes[0]
-                : undefined),
-          };
-          const preparedConfirmation = prepareRoutineProConfirmation({
-            offer,
-            requestedInput: requestedForConfirmation,
-            recommendedTemplateId: recommendFacilityTemplate(projection, input.goal),
-            pending: status.pending,
-          });
-          const effectiveMode = preparedConfirmation.effectiveInput.paymentMode;
-          if (!offer.entitled && effectiveMode && !offer.supportedModes.includes(effectiveMode)) {
+          const paymentMode =
+            input.paymentMode ??
+            (!offer.entitled
+              ? offer.supportedModes.includes("agent_wallet")
+                ? "agent_wallet"
+                : offer.supportedModes[0]
+              : undefined);
+          if (!offer.entitled && (!paymentMode || !offer.supportedModes.includes(paymentMode))) {
             throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
           }
+          const effectiveInput: CreatePersonalizedRoutineInput = {
+            ...input,
+            goal: input.goal.trim(),
+            ...(paymentMode ? { paymentMode } : {}),
+          };
+          const equipmentIds = [...new Set(input.routine.exercises.map((item) => item.equipmentId))];
+          const equipment = await Promise.all(
+            equipmentIds.map(async (equipmentId) => {
+              const response = await fetchBoundedJson<unknown>(
+                `/api/equipment/${encodeURIComponent(equipmentId)}`,
+                {},
+                context,
+              );
+              const data = envelopeData(response);
+              if (!data || typeof data !== "object") {
+                throw new GymApiError("INVALID_RESPONSE", 502);
+              }
+              const item = EquipmentSchema.parse((data as { equipment?: unknown }).equipment);
+              if (item.id !== equipmentId || !item.available) {
+                throw new GymApiError(
+                  "INVALID_REQUEST",
+                  400,
+                  `Equipment ${equipmentId} is not currently available in the verified Gym catalog.`,
+                );
+              }
+              return item;
+            }),
+          );
+          const preparedConfirmation = prepareRoutineProConfirmation({
+            offer,
+            requestedInput: effectiveInput,
+            projection,
+            equipment,
+          });
           for (const [key, prepared] of preparedQuotes.current) {
             if (Date.parse(prepared.offer.quoteValidUntil) <= Date.now()) {
               preparedQuotes.current.delete(key);
@@ -364,11 +434,12 @@ export function WebMcpBridge() {
             offer,
             requestedInput: input,
             effectiveInput: preparedConfirmation.effectiveInput,
-            pending: status.pending,
+            statusFingerprint: statusFingerprint(status),
           });
           return preparedConfirmation.preparation;
         },
         execute: async (input, context) => {
+          let paymentAttempted = false;
           try {
             const digest = context.mutationApproval?.quoteDigest;
             const prepared = digest ? preparedQuotes.current.get(digest) : undefined;
@@ -378,21 +449,20 @@ export function WebMcpBridge() {
             preparedQuotes.current.delete(digest);
             const currentStatus = parseRoutineProStatus(
               await fetchBoundedJson<unknown>(
-                prepared.pending
-                  ? `/api/commerce/routine-pro/status?order=${encodeURIComponent(prepared.pending.orderRef)}`
-                  : "/api/commerce/routine-pro/status",
+                "/api/commerce/routine-pro/status",
                 {},
                 context,
               ),
             );
             if (
+              statusFingerprint(currentStatus) !== prepared.statusFingerprint ||
               currentStatus.entitled !== prepared.offer.entitled ||
-              !samePendingPayment(prepared.pending, currentStatus.pending)
+              isRecovering(currentStatus)
             ) {
               throw new GymApiError(
                 "QUOTE_CHANGED",
                 409,
-                "Routine Pro status changed. Review the current action again.",
+                "Routine Pro status changed. Call get_routine_pro_status before taking another action.",
               );
             }
             const endpoint = prepared.offer.entitled
@@ -400,6 +470,7 @@ export function WebMcpBridge() {
               : prepared.effectiveInput.paymentMode === "agent_wallet"
                 ? "/api/commerce/routine-pro/agent-pay"
                 : "/api/commerce/routine-pro/checkout";
+            paymentAttempted = !prepared.offer.entitled;
             const response = await fetchBoundedJson<unknown>(
               endpoint,
               {
@@ -415,25 +486,10 @@ export function WebMcpBridge() {
               context,
             );
             const data = envelopeData(response);
-            if (!data || typeof data !== "object") throw new GymApiError("INVALID_RESPONSE", 502);
-            const record = data as Record<string, unknown>;
-            if (record.session && typeof record.savedRoutineRef === "string") {
-              const session = GeneratedSessionSchema.parse(record.session);
-              applyPersonalizedRoutine(session, record.savedRoutineRef);
-              trace("create_personalized_routine");
-              return {
-                created: true,
-                savedToPassport: true,
-                savedRoutineRef: record.savedRoutineRef,
-                routine: {
-                  title: session.title,
-                  durationMinutes: session.durationMinutes,
-                  stations: session.exercises.length,
-                  template: `${session.templateId}@${session.templateVersion}`,
-                  catalogVersion: session.catalogVersion,
-                },
-              };
+            if (!data || typeof data !== "object") {
+              throw new GymApiError("INVALID_RESPONSE", 502);
             }
+            const record = data as Record<string, unknown>;
             if (typeof record.checkoutUrl === "string") {
               const checkout = new URL(record.checkoutUrl);
               if (checkout.protocol !== "https:" || checkout.hostname !== "checkout.stripe.com") {
@@ -443,11 +499,54 @@ export function WebMcpBridge() {
               window.setTimeout(() => window.location.assign(checkout), 0);
               return {
                 paymentPending: true,
+                orderRef: typeof record.orderRef === "string" ? record.orderRef : undefined,
                 payer: "Human test checkout",
-                resumeExisting: record.resumed === true,
+                sandbox: true,
+                recoveryTool: "get_routine_pro_status",
+                instruction:
+                  "After returning from checkout or after any timeout, read status before taking another action. Never repeat the payment.",
               };
             }
-            throw new GymApiError("INVALID_RESPONSE", 502);
+            const status = RoutineStatusSchema.parse(data);
+            applyRecoveredRoutine(status, context.signal);
+            trace("create_personalized_routine");
+            return {
+              created: Boolean(status.routine),
+              savedToPassport: status.routineSaved,
+              ...statusToolResult(status),
+              ...(status.routine
+                ? {
+                    routine: {
+                      title: status.routine.title,
+                      durationMinutes: status.routine.durationMinutes,
+                      exercises: status.routine.exercises.length,
+                      generationMode: status.routine.generationMode,
+                      createdVia: status.routine.createdVia,
+                      requiresExpertReview: status.routine.requiresExpertReview,
+                      expertReviewReason: status.routine.expertReviewReason,
+                      catalogVersion: status.routine.catalogVersion,
+                    },
+                  }
+                : {}),
+            };
+          } catch (error) {
+            if (
+              paymentAttempted &&
+              (!(error instanceof GymApiError) ||
+                [
+                  "ORDER_PENDING",
+                  "RECONCILIATION_REQUIRED",
+                  "FULFILLMENT_PENDING",
+                  "PROVIDER_SETUP_RECONCILIATION_REQUIRED",
+                ].includes(error.apiCode))
+            ) {
+              throw new GymApiError(
+                "ORDER_PENDING",
+                409,
+                "Payment confirmation is being recovered. We will not submit another payment. Call get_routine_pro_status and poll only while the order remains non-terminal.",
+              );
+            }
+            throw error;
           } finally {
             finishMutationExecution();
           }
@@ -526,7 +625,13 @@ export function WebMcpBridge() {
         },
       },
     }),
-    [applyEquipmentSearch, applyPersonalizedRoutine, finishMutationExecution, openEquipment, trace],
+    [
+      applyEquipmentSearch,
+      applyRecoveredRoutine,
+      finishMutationExecution,
+      openEquipment,
+      trace,
+    ],
   );
 
   const completeCatalog = useMemo(() => createGymToolCatalog(handlers), [handlers]);
@@ -534,10 +639,13 @@ export function WebMcpBridge() {
     const allowed = pathname.startsWith("/equipment")
       ? ["get_gym_profile", "search_equipment", "get_equipment"]
       : pathname === "/passport"
-        ? ["get_gym_profile", ...(contextActive ? ["get_active_context"] : [])]
+        ? [
+            "get_gym_profile",
+            ...(contextActive ? ["get_active_context", "get_routine_pro_status"] : []),
+          ]
         : pathname === "/session/feedback"
           ? contextActive && hasPersistedRoutine
-            ? ["get_active_context", "record_session_feedback"]
+            ? ["get_active_context", "get_routine_pro_status", "record_session_feedback"]
             : []
           : pathname === "/session"
             ? [
@@ -545,7 +653,12 @@ export function WebMcpBridge() {
                 "search_equipment",
                 "get_equipment",
                 ...(contextActive
-                  ? ["get_active_context", "get_routine_pro_offer", "create_personalized_routine"]
+                  ? [
+                      "get_active_context",
+                      "get_routine_pro_offer",
+                      "get_routine_pro_status",
+                      "create_personalized_routine",
+                    ]
                   : []),
               ]
             : ["get_gym_profile", "search_equipment", "get_equipment"];
@@ -599,7 +712,7 @@ export function WebMcpBridge() {
   );
   const { status, error, toolNames } = useWebMCPTools(routeTools, {
     confirmMutation,
-    maxOutputChars: 1500,
+    maxOutputChars: 5000,
   });
   const isActive = status === "active";
 
