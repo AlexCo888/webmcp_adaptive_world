@@ -3,15 +3,18 @@
 import {
   GeneratedSessionSchema,
   GymContextProjectionSchema,
+  RoutineProOfferSchema,
   RoutineStatusSchema,
   type Equipment,
   type GeneratedSession,
   type GymContextProjection,
+  type RoutineProOffer,
   type RoutineStatus,
 } from "@adaptive-world/contracts";
 import {
   AlertTriangle,
   ArrowRight,
+  Bot,
   Check,
   Clock3,
   ClipboardCheck,
@@ -26,16 +29,36 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useGymExperience } from "@/components/gym-experience-context";
 import { fetchBoundedJson, GymApiError } from "@/lib/api-client";
-import { EXPERT_REVIEW_WARNING, facilityTemplates } from "@/lib/session-planner";
+import {
+  EXPERT_REVIEW_WARNING,
+  defaultRoutineGoal,
+  facilityTemplates,
+  recommendFacilityTemplate,
+  type FacilityTemplate,
+} from "@/lib/session-planner";
+import { prepareStaffWalkthroughConfirmation } from "@/lib/webmcp-confirmations";
 
-type PlannerState = "loading-context" | "idle" | "recovering" | "error";
+type PlannerState =
+  "loading-context" | "idle" | "preparing" | "submitting" | "recovering" | "error";
+type PaymentMode = "human_checkout" | "agent_wallet";
 
-const NON_TERMINAL_ORDER_STATES = new Set([
-  "created",
-  "provider_pending",
+/** Payment left the site and its outcome is unknown until the provider confirms. */
+const RECOVERING_ORDER_STATES = new Set([
   "payment_submitted",
   "reconciliation_required",
   "paid_unfulfilled",
+]);
+/** An order exists but no payment has been submitted yet; it can be resumed or cancelled. */
+const RESUMABLE_ORDER_STATES = new Set(["created", "provider_pending"]);
+const NON_TERMINAL_ORDER_STATES = new Set([...RECOVERING_ORDER_STATES, ...RESUMABLE_ORDER_STATES]);
+const RECOVERY_MESSAGE =
+  "Payment confirmation is being recovered. We will not submit another payment.";
+const PENDING_PAYMENT_CODES = new Set([
+  "ORDER_PENDING",
+  "RECONCILIATION_REQUIRED",
+  "FULFILLMENT_PENDING",
+  "PROVIDER_SETUP_PENDING",
+  "PROVIDER_SETUP_RECONCILIATION_REQUIRED",
 ]);
 
 function getEnvelopeData(value: unknown): unknown {
@@ -47,6 +70,16 @@ function getEnvelopeData(value: unknown): unknown {
 
 function isNonTerminal(status: RoutineStatus | null): boolean {
   return Boolean(status?.orderStatus && NON_TERMINAL_ORDER_STATES.has(status.orderStatus));
+}
+
+function isRecovering(status: RoutineStatus | null): boolean {
+  return Boolean(status?.orderStatus && RECOVERING_ORDER_STATES.has(status.orderStatus));
+}
+
+function isResumable(status: RoutineStatus | null): boolean {
+  return Boolean(
+    status?.orderStatus && RESUMABLE_ORDER_STATES.has(status.orderStatus) && status.canResume,
+  );
 }
 
 function providerLabel(status: RoutineStatus): string {
@@ -72,6 +105,14 @@ function tempoExplorerUrl(status: RoutineStatus): string | null {
   return `https://explore.tempo.xyz/tx/${status.providerPaymentRef}`;
 }
 
+function passportRoutineUrl(savedRoutineRef: string): string {
+  return `${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`;
+}
+
+function isTemplateId(value: string): value is FacilityTemplate["id"] {
+  return facilityTemplates.some((template) => template.id === value);
+}
+
 export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
   const experience = useGymExperience();
   const [context, setContext] = useState<GymContextProjection | null>(null);
@@ -81,10 +122,24 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
   const [state, setState] = useState<PlannerState>("loading-context");
   const [message, setMessage] = useState("");
 
+  // Site-UI purchase path: a person without an agent chooses a published
+  // staff walkthrough. Nothing here generates a routine.
+  const [goal, setGoal] = useState("");
+  const [templateId, setTemplateId] = useState<FacilityTemplate["id"]>("first_visit_foundations");
+  const [templateManuallySelected, setTemplateManuallySelected] = useState(false);
+  const [offer, setOffer] = useState<RoutineProOffer | null>(null);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("human_checkout");
+  const [resumingPayment, setResumingPayment] = useState(false);
+
   const adoptStatus = useCallback((status: RoutineStatus) => {
     setReceipt(status);
     if (status.routine) setSession(status.routine);
     if (status.savedRoutineRef) setSavedRoutineRef(status.savedRoutineRef);
+    if (status.routine?.createdVia === "site-ui" && isTemplateId(status.routine.templateId)) {
+      setTemplateId(status.routine.templateId);
+      setTemplateManuallySelected(true);
+      setGoal(status.routine.goal);
+    }
   }, []);
 
   const readStatus = useCallback(async (orderRef?: string, signal?: AbortSignal) => {
@@ -97,16 +152,20 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
     return RoutineStatusSchema.parse(getEnvelopeData(response));
   }, []);
 
+  // Polls the durable order status while it is non-terminal. Started by a
+  // return from checkout, a pending order found on load, or a WebMCP tool that
+  // observed a pending payment. It only reads; it never resubmits a payment.
+  const [pollTarget, setPollTarget] = useState<{ orderRef?: string; nonce: number } | null>(null);
   useEffect(() => {
+    if (!pollTarget) return;
     const controller = new AbortController();
     let timer: number | undefined;
     let attempts = 0;
-
     const clearReturnUrl = () => window.history.replaceState({}, "", "/session");
-    const poll = async (orderRef?: string) => {
+    const poll = async () => {
       attempts += 1;
       try {
-        const current = await readStatus(orderRef, controller.signal);
+        const current = await readStatus(pollTarget.orderRef, controller.signal);
         if (controller.signal.aborted) return;
         adoptStatus(current);
         if (current.orderStatus === "fulfilled" && current.routineSaved) {
@@ -137,8 +196,24 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           return;
         }
       }
-      if (attempts < 40) timer = window.setTimeout(() => void poll(orderRef), 1_500);
+      if (attempts < 40) {
+        timer = window.setTimeout(() => void poll(), 1_500);
+        return;
+      }
+      setMessage(
+        "Payment confirmation is still being recovered. Reload later or ask your agent to call get_routine_pro_status. We will not submit another payment.",
+      );
     };
+    void poll();
+    return () => {
+      controller.abort();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [adoptStatus, pollTarget, readStatus]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const clearReturnUrl = () => window.history.replaceState({}, "", "/session");
 
     async function load() {
       const params = new URLSearchParams(window.location.search);
@@ -159,6 +234,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             : undefined,
         );
         setContext(parsed.success ? parsed.data : null);
+        if (parsed.success) setGoal((current) => current || defaultRoutineGoal(parsed.data));
       }
       if (sessionResult.status === "fulfilled") {
         const value = sessionResult.value;
@@ -194,21 +270,34 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         return;
       }
 
-      if (returnState === "success" || isNonTerminal(initialStatus)) {
+      if (returnState === "success" || isRecovering(initialStatus)) {
         setState("recovering");
-        setMessage("Payment confirmation is being recovered. We will not submit another payment.");
-        void poll(orderRef ?? initialStatus?.orderRef);
+        setMessage(RECOVERY_MESSAGE);
+        setPollTarget({ orderRef: orderRef ?? initialStatus?.orderRef, nonce: Date.now() });
         return;
       }
       setState("idle");
     }
 
     void load();
-    return () => {
-      controller.abort();
-      if (timer) window.clearTimeout(timer);
-    };
+    return () => controller.abort();
   }, [adoptStatus, readStatus]);
+
+  // A WebMCP tool observed a Routine Pro status (a receipt, or a payment whose
+  // outcome is still being recovered). Mirror it here so the human sees it.
+  useEffect(() => {
+    const observed = experience.routineProStatus;
+    if (!observed) return;
+    adoptStatus(observed.status);
+    if (isRecovering(observed.status)) {
+      setState("recovering");
+      setMessage(RECOVERY_MESSAGE);
+      setPollTarget({ orderRef: observed.status.orderRef, nonce: observed.revision });
+    } else if (observed.status.orderStatus === "fulfilled") {
+      setState("idle");
+      setMessage("");
+    }
+  }, [adoptStatus, experience.routineProStatus]);
 
   useEffect(() => {
     if (!experience.personalizedRoutine || !experience.savedRoutineRef) return;
@@ -222,6 +311,196 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
       0,
     );
   }, [adoptStatus, experience.personalizedRoutine, experience.savedRoutineRef, readStatus]);
+
+  useEffect(() => {
+    if (!context || templateManuallySelected || goal.trim().length < 2) return;
+    setTemplateId(recommendFacilityTemplate(context, goal));
+  }, [context, goal, templateManuallySelected]);
+
+  const busy = state === "preparing" || state === "submitting" || state === "recovering";
+  const pendingSitePayment = isResumable(receipt) && receipt?.initiatedVia === "site-ui";
+  const pendingAgentPayment = isResumable(receipt) && receipt?.initiatedVia !== "site-ui";
+  const selectedTemplate = useMemo(
+    () => facilityTemplates.find((template) => template.id === templateId) ?? facilityTemplates[0]!,
+    [templateId],
+  );
+  const confirmation = useMemo(
+    () =>
+      offer && context
+        ? prepareStaffWalkthroughConfirmation({
+            offer,
+            template: selectedTemplate,
+            goal,
+            paymentMode: offer.entitled ? undefined : paymentMode,
+            projection: context,
+            equipment,
+          })
+        : null,
+    [context, equipment, goal, offer, paymentMode, selectedTemplate],
+  );
+
+  async function loadOffer(): Promise<RoutineProOffer> {
+    const response = await fetchBoundedJson<unknown>("/api/commerce/routine-pro/offer");
+    const prepared = RoutineProOfferSchema.parse(getEnvelopeData(response));
+    if (!prepared.entitled && prepared.supportedModes.length === 0) {
+      throw new GymApiError("PROVIDER_UNAVAILABLE", 503, "Sandbox payment is unavailable.");
+    }
+    return prepared;
+  }
+
+  async function prepareWalkthroughPurchase() {
+    if (!context) {
+      setMessage("Connect a Passport context before saving a walkthrough.");
+      setState("error");
+      return;
+    }
+    if (goal.trim().length < 2) {
+      setMessage("Describe what you want this routine to support in your own words.");
+      setState("error");
+      return;
+    }
+    setState("preparing");
+    setMessage("");
+    try {
+      const current = await readStatus();
+      adoptStatus(current);
+      if (isRecovering(current)) {
+        setState("recovering");
+        setMessage(RECOVERY_MESSAGE);
+        return;
+      }
+      if (isResumable(current)) {
+        setState("idle");
+        setMessage("A sandbox payment is already open for this Gym session. Resume or cancel it.");
+        return;
+      }
+      const prepared = await loadOffer();
+      setOffer(prepared);
+      setPaymentMode(
+        prepared.supportedModes.includes("human_checkout") ? "human_checkout" : "agent_wallet",
+      );
+      setResumingPayment(false);
+      setState("idle");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The Pro offer is unavailable.");
+      setState("error");
+    }
+  }
+
+  async function resumePendingPayment() {
+    if (!receipt?.orderRef) return;
+    setState("preparing");
+    setMessage("");
+    try {
+      const current = await readStatus(receipt.orderRef);
+      adoptStatus(current);
+      if (!isResumable(current) || current.initiatedVia !== "site-ui") {
+        setState(isRecovering(current) ? "recovering" : "idle");
+        setMessage(
+          isRecovering(current)
+            ? RECOVERY_MESSAGE
+            : "The previous payment is no longer pending. Review the current offer again.",
+        );
+        return;
+      }
+      const prepared = await loadOffer();
+      const mode: PaymentMode =
+        current.payerLabel === "Adaptive World demo agent" ? "agent_wallet" : "human_checkout";
+      if (!prepared.entitled && !prepared.supportedModes.includes(mode)) {
+        throw new GymApiError("PROVIDER_UNAVAILABLE", 503);
+      }
+      setPaymentMode(mode);
+      setOffer(prepared);
+      setResumingPayment(true);
+      setState("idle");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The payment could not be resumed.");
+      setState("error");
+    }
+  }
+
+  async function cancelPendingPayment() {
+    if (!receipt?.orderRef) return;
+    setState("preparing");
+    setMessage("");
+    try {
+      await fetchBoundedJson<unknown>("/api/commerce/routine-pro/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orderRef: receipt.orderRef }),
+      });
+      adoptStatus(await readStatus(receipt.orderRef));
+      setMessage("The unpaid order was released. No payment was submitted.");
+      setState("idle");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The order could not be cancelled.");
+      setState("error");
+    }
+  }
+
+  async function confirmWalkthroughPurchase() {
+    if (!offer || state === "submitting") return;
+    setState("submitting");
+    setMessage("");
+    try {
+      const endpoint = offer.entitled
+        ? "/api/routines/personalized"
+        : paymentMode === "agent_wallet"
+          ? "/api/commerce/routine-pro/agent-pay"
+          : "/api/commerce/routine-pro/checkout";
+      const response = await fetchBoundedJson<unknown>(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          initiatedVia: "site-ui",
+          templateId,
+          goal: goal.trim(),
+          ...(!offer.entitled ? { paymentMode } : {}),
+          quoteValidUntil: offer.quoteValidUntil,
+          quoteDigest: offer.quoteDigest,
+        }),
+      });
+      const data = getEnvelopeData(response);
+      const record = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+      if (typeof record.checkoutUrl === "string") {
+        const checkout = new URL(record.checkoutUrl);
+        if (checkout.protocol !== "https:" || checkout.hostname !== "checkout.stripe.com") {
+          throw new GymApiError("INVALID_RESPONSE", 502);
+        }
+        window.location.assign(checkout);
+        return;
+      }
+      const status = RoutineStatusSchema.parse(data);
+      adoptStatus(status);
+      setOffer(null);
+      setResumingPayment(false);
+      setState("idle");
+      window.setTimeout(
+        () => document.querySelector(".session-canvas")?.scrollIntoView({ behavior: "smooth" }),
+        0,
+      );
+    } catch (error) {
+      setOffer(null);
+      setResumingPayment(false);
+      const pending =
+        !(error instanceof GymApiError) ||
+        PENDING_PAYMENT_CODES.has(error.apiCode) ||
+        error.apiCode.startsWith("HTTP_");
+      if (pending && !offer.entitled) {
+        const current = await readStatus().catch(() => null);
+        if (current) adoptStatus(current);
+        setState(isRecovering(current) ? "recovering" : "idle");
+        setMessage(
+          isRecovering(current) || !(error instanceof GymApiError)
+            ? RECOVERY_MESSAGE
+            : error.message,
+        );
+        return;
+      }
+      setMessage(error instanceof Error ? error.message : "The routine could not be saved.");
+      setState("error");
+    }
+  }
 
   if (state === "loading-context") {
     return (
@@ -241,8 +520,8 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             <ClipboardCheck size={19} />
           </span>
           <div>
-            <p>Adaptive Routine Pro</p>
-            <h2>Agent-generated through WebMCP</h2>
+            <p>Adaptive Routine Pro · $4.99 test USD</p>
+            <h2>Two ways to unlock</h2>
           </div>
         </div>
         {context ? (
@@ -267,38 +546,71 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             </Link>
           </div>
         )}
-        <div className="decision-trace">
-          <h3>Personalized flow</h3>
-          <ol>
-            <li>The user-selected agent reads the active minimum Passport projection.</li>
-            <li>The agent inspects verified, currently available Gym equipment.</li>
-            <li>The agent creates a new structured routine in its own reasoning context.</li>
-            <li>
-              Adaptive Gym shows the exact proposal, validates it, processes the sandbox payment,
-              and saves it.
-            </li>
-          </ol>
-        </div>
-        <p className="fine-print">
-          Generated by the user-selected agent from the approved Passport projection and verified
-          Gym inventory. Validated and saved by Adaptive Gym. The Gym and Passport applications do
-          not call an AI model or select a predefined personalized routine.
-        </p>
-        <div className="info-notice" role="status">
-          <ShieldCheck size={17} />
-          Use <code>get_active_context</code>, <code>search_equipment</code>,{" "}
-          <code>get_equipment</code>, then <code>create_personalized_routine</code>.
-        </div>
-        <section aria-labelledby="staff-walkthroughs-heading">
-          <p className="eyebrow">Separate public option</p>
-          <h3 id="staff-walkthroughs-heading">Staff walkthroughs</h3>
+
+        <section aria-labelledby="agent-path-heading">
+          <p className="eyebrow">With your agent · WebMCP</p>
+          <h3 id="agent-path-heading">Agent-generated personalized routine</h3>
+          <div className="decision-trace">
+            <ol>
+              <li>Your agent reads the active minimum Passport projection.</li>
+              <li>It inspects verified, currently available Gym equipment.</li>
+              <li>It creates a new structured routine in its own reasoning context.</li>
+              <li>
+                Adaptive Gym shows the exact proposal, validates it, processes the sandbox payment,
+                and saves it to Passport.
+              </li>
+            </ol>
+          </div>
+          <div className="info-notice" role="status">
+            <Bot size={17} />
+            <span>
+              Tools: <code>get_active_context</code>, <code>search_equipment</code>,{" "}
+              <code>get_equipment</code>, <code>create_personalized_routine</code>,{" "}
+              <code>get_routine_pro_status</code>.
+            </span>
+          </div>
+        </section>
+
+        <section aria-labelledby="site-path-heading">
+          <p className="eyebrow">On this site · no agent</p>
+          <h3 id="site-path-heading">Choose a published staff walkthrough</h3>
           <p className="fine-print">
-            These public examples remain visible, but Routine Pro never uses them to create a
-            personalized result.
+            Without an agent, the Gym does not generate a personalized routine. Pick a versioned
+            staff walkthrough; it is grounded in your approved context and saved to Passport.
           </p>
-          <div className="template-list">
+          <label className="routine-goal-field" htmlFor="routine-goal">
+            <span>
+              <strong>Your goal</strong>
+              <small>{goal.length}/160</small>
+            </span>
+            <textarea
+              id="routine-goal"
+              rows={3}
+              maxLength={160}
+              value={goal}
+              disabled={busy || pendingSitePayment || pendingAgentPayment}
+              placeholder="For example: support lifelong health without bodybuilding-style muscle gain"
+              onChange={(event) => {
+                setGoal(event.target.value);
+                setTemplateManuallySelected(false);
+              }}
+            />
+            <small>Saved with the walkthrough exactly as written.</small>
+          </label>
+          <div className="template-list" role="radiogroup" aria-label="Staff walkthrough">
             {facilityTemplates.map((template) => (
-              <article className="template-option" key={template.id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={templateId === template.id}
+                className={`template-option ${templateId === template.id ? "is-selected" : ""}`}
+                key={template.id}
+                disabled={busy || pendingSitePayment || pendingAgentPayment}
+                onClick={() => {
+                  setTemplateId(template.id);
+                  setTemplateManuallySelected(true);
+                }}
+              >
                 <span>
                   <strong>{template.name}</strong>
                   <small>
@@ -307,10 +619,99 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                 </span>
                 <p>{template.summary}</p>
                 <em>{template.bestFor}</em>
-              </article>
+              </button>
             ))}
           </div>
+          {message && state !== "error" && state !== "recovering" ? (
+            <div className="info-notice" role="status">
+              {busy ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />}
+              {message}
+            </div>
+          ) : null}
+          {pendingSitePayment || pendingAgentPayment ? (
+            <section className="pending-payment-state" aria-labelledby="pending-payment-heading">
+              <p className="eyebrow">Adaptive Routine Pro</p>
+              <h3 id="pending-payment-heading">Payment already in progress</h3>
+              <p>
+                {pendingSitePayment
+                  ? "Continue the existing order. Its payer and walkthrough are locked so a second charge cannot be started."
+                  : "Your agent started this order. Complete or cancel it there, or release it here. No second charge can be started."}
+              </p>
+              <dl>
+                <div>
+                  <dt>Payer</dt>
+                  <dd>{receipt?.payerLabel ?? "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>
+                    {receipt?.orderStatus === "created" ? "Preparing payment" : "Ready to resume"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Goal</dt>
+                  <dd>{receipt?.initialGoal ?? goal}</dd>
+                </div>
+              </dl>
+              {pendingSitePayment ? (
+                <button
+                  type="button"
+                  className="button button--lime button--block"
+                  disabled={busy}
+                  aria-busy={state === "preparing"}
+                  onClick={() => void resumePendingPayment()}
+                >
+                  {state === "preparing" ? (
+                    <>
+                      <LoaderCircle className="spin" size={18} /> Checking existing payment…
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={18} /> Resume {receipt?.payerLabel?.toLowerCase()}
+                    </>
+                  )}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="button button--light button--block"
+                disabled={busy}
+                onClick={() => void cancelPendingPayment()}
+              >
+                Cancel unpaid order
+              </button>
+            </section>
+          ) : (
+            <button
+              type="button"
+              className="button button--lime button--block"
+              disabled={busy || !context || goal.trim().length < 2}
+              aria-busy={state === "preparing"}
+              onClick={() => void prepareWalkthroughPurchase()}
+            >
+              {state === "preparing" ? (
+                <>
+                  <LoaderCircle className="spin" size={18} /> Checking Routine Pro status…
+                </>
+              ) : state === "submitting" ? (
+                <>
+                  <LoaderCircle className="spin" size={18} /> Saving walkthrough…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={18} /> Save walkthrough with Routine Pro <small>Pro</small>
+                </>
+              )}
+            </button>
+          )}
         </section>
+
+        <p className="fine-print">
+          Personalized routines are generated by the user-selected agent from the approved Passport
+          projection and verified Gym inventory, then validated and saved by Adaptive Gym. The Gym
+          and Passport applications never call an AI model. Staff walkthroughs are labeled as staff
+          walkthroughs, never as agent-generated.
+        </p>
       </aside>
 
       <section className="session-canvas" aria-live="polite">
@@ -340,16 +741,115 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
               <Dumbbell size={38} />
             </div>
             <p className="eyebrow">External intelligence · first-party validation</p>
-            <h2>Your agent-generated proposal will appear here.</h2>
+            <h2>Your routine will appear here.</h2>
             <p>
-              The selected agent must inspect the approved context and real equipment, show the
-              complete routine, and obtain confirmation for that exact routine before the paid
-              write.
+              An agent-generated proposal is shown in full and confirmed before the paid write. A
+              staff walkthrough chosen on this site is shown the same way.
             </p>
             {receipt ? <RoutineReceipt status={receipt} savedRoutineRef={savedRoutineRef} /> : null}
           </div>
         )}
       </section>
+
+      {offer && confirmation ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            if (state !== "submitting") {
+              setOffer(null);
+              setResumingPayment(false);
+            }
+          }}
+        >
+          <section
+            className="webmcp-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="routine-confirm-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Adaptive Routine Pro</p>
+            <h2 id="routine-confirm-title">
+              {resumingPayment ? "Resume your existing sandbox payment?" : confirmation.title}
+            </h2>
+            <p>{confirmation.description}</p>
+            <dl className="confirmation-fields">
+              {confirmation.fields.map((field) => (
+                <div key={field.label}>
+                  <dt>{field.label}</dt>
+                  <dd>{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+            {!offer.entitled && offer.supportedModes.length > 1 && !resumingPayment ? (
+              <fieldset className="payment-choice" disabled={state === "submitting"}>
+                <legend>Choose sandbox payer</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="payment-mode"
+                    checked={paymentMode === "human_checkout"}
+                    onChange={() => setPaymentMode("human_checkout")}
+                  />
+                  Human Stripe test checkout
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="payment-mode"
+                    checked={paymentMode === "agent_wallet"}
+                    onChange={() => setPaymentMode("agent_wallet")}
+                  />
+                  Adaptive World demo agent wallet (MPP / Tempo testnet)
+                </label>
+              </fieldset>
+            ) : null}
+            {state === "submitting" ? (
+              <p className="payment-phase-note" role="status" aria-live="polite">
+                <LoaderCircle className="spin" size={17} />
+                {offer.entitled
+                  ? "Saving the staff walkthrough to Passport…"
+                  : paymentMode === "agent_wallet"
+                    ? "Confirming the Tempo testnet payment…"
+                    : "Opening Stripe test checkout…"}
+              </p>
+            ) : null}
+            <div>
+              <button
+                className="button button--light"
+                disabled={state === "submitting"}
+                onClick={() => {
+                  setOffer(null);
+                  setResumingPayment(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="button button--lime"
+                disabled={state === "submitting"}
+                aria-busy={state === "submitting"}
+                onClick={() => void confirmWalkthroughPurchase()}
+              >
+                {state === "submitting" ? (
+                  <>
+                    <LoaderCircle className="spin" size={17} /> Working…
+                  </>
+                ) : resumingPayment ? (
+                  paymentMode === "agent_wallet" ? (
+                    "Resume agent payment"
+                  ) : (
+                    "Resume test checkout"
+                  )
+                ) : (
+                  confirmation.confirmLabel
+                )}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -369,10 +869,10 @@ function RoutineReceipt({
       <h3 id="routine-receipt-heading">
         {status.orderStatus === "fulfilled" ? "Payment confirmed" : "Payment status"}
       </h3>
-      {isNonTerminal(status) ? (
+      {isRecovering(status) ? (
         <div className="info-notice" role="status">
           <LoaderCircle className="spin" size={17} />
-          Payment confirmation is being recovered. We will not submit another payment.
+          {RECOVERY_MESSAGE}
         </div>
       ) : null}
       <dl className="confirmation-fields">
@@ -423,10 +923,7 @@ function RoutineReceipt({
         </a>
       ) : null}
       {status.routineSaved && savedRoutineRef ? (
-        <a
-          className="button button--dark"
-          href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}
-        >
+        <a className="button button--dark" href={passportRoutineUrl(savedRoutineRef)}>
           Open saved routine in Passport <ArrowRight size={15} />
         </a>
       ) : null}
@@ -452,13 +949,14 @@ function SessionResult({
     [equipment],
   );
   const agentGenerated = session.generationMode === "agent_generated";
+  const provenanceLabel = agentGenerated
+    ? "Agent-generated via WebMCP"
+    : "Staff walkthrough chosen on the Gym site";
   return (
     <div className="session-result">
       <div className="session-result__header">
         <div>
-          <p className="eyebrow">
-            {agentGenerated ? "Agent-generated via WebMCP" : "Public staff walkthrough"}
-          </p>
+          <p className="eyebrow">{provenanceLabel}</p>
           <h2>{session.title}</h2>
           <span>
             <Clock3 size={15} /> {session.durationMinutes} minutes · {session.exercises.length}{" "}
@@ -473,7 +971,7 @@ function SessionResult({
         <span>
           <UserCheck size={15} />
           {agentGenerated
-            ? "Agent-generated via WebMCP"
+            ? provenanceLabel
             : `Staff walkthrough ${session.templateId}@${session.templateVersion}`}
         </span>
         <span>
@@ -502,11 +1000,7 @@ function SessionResult({
       {savedRoutineRef ? (
         <p className="saved-routine-state">
           <Check size={15} /> Saved to Passport ✓
-          <a
-            href={`${process.env.NEXT_PUBLIC_PASSPORT_URL ?? "http://127.0.0.1:3000"}/routines/${savedRoutineRef}`}
-          >
-            Open in Passport
-          </a>
+          <a href={passportRoutineUrl(savedRoutineRef)}>Open in Passport</a>
         </p>
       ) : null}
       {receipt ? <RoutineReceipt status={receipt} savedRoutineRef={savedRoutineRef} /> : null}

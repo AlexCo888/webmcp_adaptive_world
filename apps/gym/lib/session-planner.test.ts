@@ -10,8 +10,13 @@ import {
   EXPERT_REVIEW_WARNING,
   agentRoutineInputMatchesSession,
   createAgentGeneratedSession,
+  createGroundedSession,
   defaultRoutineGoal,
+  maximumAgentRoutineMinutes,
   recommendFacilityTemplate,
+  routineIntentMatchesSession,
+  validateStagedRoutineSession,
+  validateStagedStaffWalkthroughSession,
 } from "./session-planner";
 
 const projection: GymContextProjection = {
@@ -220,5 +225,118 @@ describe("agent-generated personalized routines", () => {
       manufacturer: "Invented manufacturer assertion",
     };
     expect(AgentGeneratedRoutineInputSchema.safeParse(untrusted).success).toBe(false);
+  });
+});
+
+describe("site walkthrough purchases and shared bounds", () => {
+  it("shares the same duration bound the server enforces", () => {
+    expect(maximumAgentRoutineMinutes({ preferredSessionMinutes: 35 })).toBe(65);
+    expect(maximumAgentRoutineMinutes({ preferredSessionMinutes: 0 })).toBe(30);
+    expect(maximumAgentRoutineMinutes({ preferredSessionMinutes: 200 })).toBe(120);
+  });
+
+  it("does not force expert review for ordinary recovery wording", () => {
+    const session = createAgentGeneratedSession({
+      profile: projection,
+      equipment: equipmentCatalog,
+      goal: "Add an easy active recovery day between harder sessions",
+      routine: mateoRoutine({
+        requiresExpertReview: false,
+        expertReviewReason: undefined,
+        title: "Easy active recovery day",
+        safetyNotes: ["Keep every block conversational."],
+      }),
+      sessionId: "gym_routine_0123456789abcdef01234567",
+      createdAt: "2026-09-01T12:00:00.000Z",
+    });
+    expect(session.requiresExpertReview).toBe(false);
+  });
+
+  it("re-validates a staged staff walkthrough against the live catalog and projection", () => {
+    const staged = createGroundedSession({
+      profile: projection,
+      equipment: equipmentCatalog,
+      templateId: "low_impact_orientation",
+      goal: "Support long-term health",
+      createdVia: "site-ui",
+      sessionId: "gym_routine_0123456789abcdef01234567",
+    });
+    expect(
+      validateStagedStaffWalkthroughSession({
+        session: staged,
+        profile: projection,
+        equipment: equipmentCatalog,
+      }),
+    ).toEqual(staged);
+    expect(
+      validateStagedRoutineSession({
+        session: staged,
+        profile: projection,
+        equipment: equipmentCatalog,
+      }).generationMode,
+    ).toBe("staff_template");
+    expect(() =>
+      validateStagedStaffWalkthroughSession({
+        session: { ...staged, exercises: staged.exercises.slice(1) },
+        profile: projection,
+        equipment: equipmentCatalog,
+      }),
+    ).toThrow(/no longer matches/u);
+    expect(() =>
+      validateStagedStaffWalkthroughSession({
+        session: staged,
+        profile: { ...projection, projectionId: "gym_projection_ffffffffffffffffffffffff" },
+        equipment: equipmentCatalog,
+      }),
+    ).toThrow(/not a published staff walkthrough/u);
+    expect(() =>
+      validateStagedStaffWalkthroughSession({
+        session: staged,
+        profile: projection,
+        equipment: equipmentCatalog.map((item) =>
+          item.id === staged.exercises[0]!.equipmentId ? { ...item, available: false } : item,
+        ),
+      }),
+    ).toThrow(/availability/u);
+  });
+
+  it("matches intents only to plans of the same channel, provenance, and goal", () => {
+    const goal = "Support long-term health";
+    const staff = createGroundedSession({
+      profile: projection,
+      equipment: equipmentCatalog,
+      templateId: "low_impact_orientation",
+      goal,
+      createdVia: "site-ui",
+      sessionId: "gym_routine_0123456789abcdef01234567",
+    });
+    expect(
+      routineIntentMatchesSession({
+        session: staff,
+        intent: { initiatedVia: "site-ui", goal, templateId: "low_impact_orientation" },
+      }),
+    ).toBe(true);
+    expect(
+      routineIntentMatchesSession({
+        session: staff,
+        intent: { initiatedVia: "site-ui", goal, templateId: "first_visit_foundations" },
+      }),
+    ).toBe(false);
+    expect(
+      routineIntentMatchesSession({
+        session: staff,
+        intent: {
+          initiatedVia: "site-ui",
+          goal: "A different goal",
+          templateId: "low_impact_orientation",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      routineIntentMatchesSession({
+        session: staff,
+        intent: { initiatedVia: "webmcp", goal, routine: mateoRoutine() },
+      }),
+    ).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ import {
 import { hasRoutineProEntitlement } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { getRoutineProStatusForActiveSession } from "@/lib/commerce/routine-pro-status";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import { createAndSavePersonalizedRoutine, toRoutineIntent } from "@/lib/commerce/routines";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,9 +22,8 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
-    if (!parsed.success || parsed.data.initiatedVia !== "webmcp") {
-      throw new CommerceError("INVALID_REQUEST");
-    }
+    if (!parsed.success) throw new CommerceError("INVALID_REQUEST");
+    const intent = toRoutineIntent(parsed.data);
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
@@ -45,12 +44,8 @@ export async function POST(request: Request) {
     ) {
       throw new CommerceError("QUOTE_CHANGED");
     }
-    await createAndSavePersonalizedRoutine({
-      active,
-      goal: parsed.data.goal,
-      routine: parsed.data.routine,
-    });
-    return success(await getRoutineProStatusForActiveSession(active), id, 201);
+    const saved = await createAndSavePersonalizedRoutine({ active, intent });
+    return success(await getRoutineProStatusForActiveSession(active), id, saved.reused ? 200 : 201);
   } catch (error) {
     return failure(error, id);
   }

@@ -1,7 +1,11 @@
 import type { AgentGeneratedRoutineInput } from "@adaptive-world/contracts";
 import { canonicalizeJson, sha256Hex } from "@adaptive-world/security";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAndSavePersonalizedRoutine, validatePersonalizedRoutineRequest } from "./routines";
+import {
+  createAndSavePersonalizedRoutine,
+  toRoutineIntent,
+  validatePersonalizedRoutineRequest,
+} from "./routines";
 
 const mocks = vi.hoisted(() => ({
   authority: vi.fn(),
@@ -80,12 +84,10 @@ const active = {
   },
 };
 
+const intent = { initiatedVia: "webmcp", goal, routine } as const;
+
 function buildPlan() {
-  return validatePersonalizedRoutineRequest({
-    active: active as never,
-    goal,
-    routine,
-  }).session;
+  return validatePersonalizedRoutineRequest({ active: active as never, intent }).session;
 }
 
 describe("saved agent-generated Routine Pro reuse", () => {
@@ -118,11 +120,7 @@ describe("saved agent-generated Routine Pro reuse", () => {
     });
 
     await expect(
-      createAndSavePersonalizedRoutine({
-        active: active as never,
-        goal,
-        routine,
-      }),
+      createAndSavePersonalizedRoutine({ active: active as never, intent }),
     ).resolves.toEqual({
       session: plan,
       savedRoutineRef: "saved-routine-1",
@@ -166,8 +164,7 @@ describe("saved agent-generated Routine Pro reuse", () => {
     await expect(
       createAndSavePersonalizedRoutine({
         active: active as never,
-        goal: "Train for a different outcome",
-        routine,
+        intent: { ...intent, goal: "Train for a different outcome" },
       }),
     ).rejects.toMatchObject({ code: "ROUTINE_CONFLICT" });
 
@@ -201,16 +198,127 @@ describe("saved agent-generated Routine Pro reuse", () => {
     await expect(
       createAndSavePersonalizedRoutine({
         active: active as never,
-        goal,
-        routine: {
-          ...routine,
-          exercises: routine.exercises.map((exercise, index) =>
-            index === 0
-              ? { ...exercise, instructions: ["Use an unconfirmed replacement instruction."] }
-              : exercise,
-          ),
+        intent: {
+          ...intent,
+          routine: {
+            ...routine,
+            exercises: routine.exercises.map((exercise, index) =>
+              index === 0
+                ? { ...exercise, instructions: ["Use an unconfirmed replacement instruction."] }
+                : exercise,
+            ),
+          },
         },
       }),
     ).rejects.toMatchObject({ code: "ROUTINE_CONFLICT" });
+  });
+});
+
+describe("routine intents", () => {
+  beforeEach(() => {
+    mocks.authority.mockReset();
+    mocks.query.mockReset();
+    mocks.authority.mockImplementation(
+      (_client: unknown, _authority: unknown, operation: () => unknown) => operation(),
+    );
+  });
+
+  it("strips quote fields and keeps only the confirmed closed intent", () => {
+    expect(
+      toRoutineIntent({
+        ...intent,
+        paymentMode: "agent_wallet",
+        quoteValidUntil: "2026-09-01T12:05:00.000Z",
+        quoteDigest: "a".repeat(64),
+      }),
+    ).toEqual({ ...intent, paymentMode: "agent_wallet" });
+    expect(
+      toRoutineIntent({
+        initiatedVia: "site-ui",
+        goal,
+        templateId: "low_impact_orientation",
+        quoteValidUntil: "2026-09-01T12:05:00.000Z",
+        quoteDigest: "a".repeat(64),
+      }),
+    ).toEqual({ initiatedVia: "site-ui", goal, templateId: "low_impact_orientation" });
+  });
+
+  it("grounds a site walkthrough honestly and never labels it agent-generated", () => {
+    const { session } = validatePersonalizedRoutineRequest({
+      active: active as never,
+      intent: { initiatedVia: "site-ui", goal, templateId: "low_impact_orientation" },
+    });
+    expect(session).toMatchObject({
+      templateId: "low_impact_orientation",
+      generationMode: "staff_template",
+      createdVia: "site-ui",
+      requiresExpertReview: false,
+      goal,
+    });
+    expect(session.safetyNotes).toEqual(
+      expect.arrayContaining(["New or increasing pain", "Swelling"]),
+    );
+    expect(JSON.stringify(session)).not.toContain("agent_generated");
+  });
+
+  it("returns a safe, specific reason when an agent routine is invalid", () => {
+    expect(() =>
+      validatePersonalizedRoutineRequest({
+        active: active as never,
+        intent: {
+          ...intent,
+          routine: {
+            ...routine,
+            exercises: [{ ...routine.exercises[0]!, equipmentId: "invented_machine_9000" }],
+          },
+        },
+      }),
+    ).toThrow(/invented_machine_9000 is not in the current Gym catalog/u);
+    expect(() =>
+      validatePersonalizedRoutineRequest({
+        active: active as never,
+        intent: { ...intent, routine: { ...routine, requiresExpertReview: false } },
+      }),
+    ).toThrow(/requiresExpertReview=true/u);
+  });
+
+  it("saves a purchased site walkthrough under its own template provenance", async () => {
+    const staffIntent = {
+      initiatedVia: "site-ui",
+      goal,
+      templateId: "low_impact_orientation",
+    } as const;
+    mocks.query.mockImplementation((statement: string) => {
+      if (statement.includes("FROM entitlement_grants")) {
+        return Promise.resolve({ rowCount: 1, rows: [{ id: "entitlement-1" }] });
+      }
+      if (statement.includes("SELECT plan FROM gym_sessions")) {
+        return Promise.resolve({ rowCount: 1, rows: [{ plan: {} }] });
+      }
+      if (statement.includes("FROM saved_routines")) {
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      }
+      if (statement.includes("INSERT INTO saved_routines")) {
+        return Promise.resolve({ rowCount: 1, rows: [{ id: "saved-routine-2" }] });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [{ id: active.row.id }] });
+    });
+
+    const result = await createAndSavePersonalizedRoutine({
+      active: active as never,
+      intent: staffIntent,
+    });
+    expect(result).toMatchObject({ savedRoutineRef: "saved-routine-2", reused: false });
+    expect(result.session).toMatchObject({
+      templateId: "low_impact_orientation",
+      generationMode: "staff_template",
+      createdVia: "site-ui",
+    });
+    const insert = mocks.query.mock.calls.find(([statement]) =>
+      String(statement).includes("INSERT INTO saved_routines"),
+    );
+    expect(insert?.[1]).toEqual(
+      expect.arrayContaining(["low_impact_orientation", "1.0", "site-ui"]),
+    );
   });
 });

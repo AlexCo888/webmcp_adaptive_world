@@ -122,6 +122,10 @@ Now show the exact new routine you generated, including equipment IDs, instructi
 - The receipt displays payment confirmation, product, amount, payer, provider,
   order reference, transaction reference, paid/fulfilled timestamps,
   entitlement granted, and routine saved to Passport.
+- If a human buys Routine Pro on the site without an agent, the result is
+  labeled `Staff walkthrough chosen on the Gym site`, never
+  `Agent-generated via WebMCP`. Do not use the site path in the recorded demo
+  as evidence of agent generation.
 
 ## Recovery boundaries
 

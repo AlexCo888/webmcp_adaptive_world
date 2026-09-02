@@ -12,8 +12,10 @@ import {
 import { createOrReuseRoutineProOrder, hasRoutineProEntitlement } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
+import { getRoutineProStatusForActiveSession } from "@/lib/commerce/routine-pro-status";
 import {
   createAndSavePersonalizedRoutine,
+  toRoutineIntent,
   validatePersonalizedRoutineRequest,
 } from "@/lib/commerce/routines";
 import { createOrResumeStripeCheckout } from "@/lib/commerce/stripe";
@@ -28,20 +30,13 @@ export async function POST(request: Request) {
     const config = getCommerceConfig();
     if (!config.stripeEnabled) throw new CommerceError("PROVIDER_UNAVAILABLE");
     const parsed = ConfirmRoutineRequestSchema.safeParse(await parseBoundedJson(request));
-    if (
-      !parsed.success ||
-      parsed.data.paymentMode !== "human_checkout" ||
-      parsed.data.initiatedVia !== "webmcp"
-    ) {
+    if (!parsed.success || parsed.data.paymentMode !== "human_checkout") {
       throw new CommerceError("INVALID_REQUEST");
     }
+    const intent = toRoutineIntent(parsed.data);
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
-    const validated = validatePersonalizedRoutineRequest({
-      active,
-      goal: parsed.data.goal,
-      routine: parsed.data.routine,
-    });
+    const validated = validatePersonalizedRoutineRequest({ active, intent });
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
     const supportedModes = [
       ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
@@ -62,17 +57,12 @@ export async function POST(request: Request) {
     const state = await createOrReuseRoutineProOrder({
       active,
       session: validated.session,
-      routine: validated.routine,
-      goal: parsed.data.goal,
+      intent,
       paymentMode: "human_checkout",
     });
     if (state.entitled) {
-      const saved = await createAndSavePersonalizedRoutine({
-        active,
-        goal: parsed.data.goal,
-        routine: parsed.data.routine,
-      });
-      return success({ entitled: true, ...saved }, id, 201);
+      await createAndSavePersonalizedRoutine({ active, intent });
+      return success(await getRoutineProStatusForActiveSession(active), id, 200);
     }
     if (!state.order) throw new CommerceError("INTERNAL_ERROR", true);
     await rateLimitPaymentOrder(state.order.publicRef);
@@ -86,6 +76,7 @@ export async function POST(request: Request) {
         sandbox: true as const,
         amountMinor: 499 as const,
         currency: "usd" as const,
+        initiatedVia: intent.initiatedVia,
         routine: state.session,
         checkoutUrl: checkout.checkoutUrl,
         checkoutExpiresAt: checkout.expiresAt,

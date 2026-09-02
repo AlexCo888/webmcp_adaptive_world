@@ -5,9 +5,11 @@ import type {
   MutationConfirmationRequest,
 } from "@adaptive-world/webmcp";
 import { describe, expect, it } from "vitest";
+import { facilityTemplates } from "./session-planner";
 import {
   prepareFeedbackConfirmation,
   prepareRoutineProConfirmation,
+  prepareStaffWalkthroughConfirmation,
   webMcpMutationBusyLabel,
 } from "./webmcp-confirmations";
 
@@ -145,7 +147,7 @@ describe("Gym WebMCP confirmations", () => {
     const request: MutationConfirmationRequest = {
       toolName: "create_personalized_routine",
       ...prepared.preparation.confirmation,
-      input,
+      input: { ...input },
     };
 
     expect(webMcpMutationBusyLabel(request)).toBe(
@@ -178,5 +180,37 @@ describe("Gym WebMCP confirmations", () => {
         { label: "Payment network", value: "No new payment" },
       ]),
     );
+  });
+
+  it("describes a site walkthrough purchase honestly and never as agent-generated", () => {
+    const template = facilityTemplates.find((item) => item.id === "low_impact_orientation")!;
+    const prepared = prepareStaffWalkthroughConfirmation({
+      offer,
+      template,
+      goal: "Support long-term health",
+      paymentMode: "human_checkout",
+      projection,
+      equipment: equipmentCatalog,
+    });
+    expect(prepared.title).toBe("Approve this staff walkthrough and sandbox payment?");
+    expect(prepared.confirmLabel).toBe("Approve walkthrough and open test checkout");
+    expect(prepared.fields).toEqual(
+      expect.arrayContaining([
+        { label: "Confirmed goal", value: "Support long-term health" },
+        { label: "Amount", value: "$4.99 test USD" },
+        { label: "Payer", value: "Human Stripe test checkout" },
+        { label: "Payment network", value: "Stripe test mode — sandbox transaction" },
+        { label: "Destination", value: "Save this exact walkthrough to Passport" },
+      ]),
+    );
+    expect(prepared.fields.find((field) => field.label === "Proposed routine")?.value).toContain(
+      template.name,
+    );
+    expect(prepared.fields.find((field) => field.label === "Exercise 1")?.value).toContain(
+      equipmentCatalog.find((item) => item.id === template.stations[0]!.equipmentId)!.name,
+    );
+    const serialized = JSON.stringify(prepared).toLowerCase();
+    expect(serialized).toContain("not agent-generated");
+    expect(serialized).not.toContain("agent-generated via webmcp");
   });
 });

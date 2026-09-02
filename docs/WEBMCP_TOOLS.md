@@ -105,6 +105,20 @@ or unknown-clearance scenarios. Gym hydrates canonical names, models, links,
 and specifications from its own catalog. The provenance marker
 `webmcp_agent_generated@1.0` never loads predefined routine content.
 
+`get_active_context` also returns `routineBounds` (maximum duration derived
+from the preferred session length, exercise count, per-exercise minutes,
+transition allowance, allowed intensities, and the expert-review rule) so the
+agent can shape a valid proposal first. The same validation runs during the
+read-only preparation, before any confirmation dialog, and again on the server.
+A failing routine is rejected with a bounded, specific reason (for example an
+unknown `equipmentId` or a missing `requiresExpertReview`) and no payment is
+attempted; the agent corrects the routine and calls again.
+
+The Gym site also offers Routine Pro to a person without an agent. That path is
+not a WebMCP tool: the person chooses a published staff walkthrough, and the
+request carries `initiatedVia: "site-ui"` with a `templateId`. It is saved and
+labeled as a staff walkthrough chosen on the Gym site, never as agent-generated.
+
 For a review-required draft, the first-party UI and saved Passport record show:
 
 > **AI-generated personalized draft. A physician or qualified physical therapist

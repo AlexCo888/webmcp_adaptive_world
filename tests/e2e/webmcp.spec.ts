@@ -107,7 +107,7 @@ const generatedRoutine = {
   exercises: [
     {
       ...proposedRoutine.exercises[0],
-      name: "PRO2 Total Body Exerciser",
+      name: "PRO2 Total Body",
     },
     {
       ...proposedRoutine.exercises[1],
@@ -128,6 +128,25 @@ const generatedRoutine = {
     "Verified both equipment IDs against the current Gym catalog.",
   ],
   createdAt: "2026-09-01T09:02:00.000Z",
+} as const;
+
+const staffWalkthroughRoutine = {
+  ...generatedRoutine,
+  id: "session_e2e_staff_routine",
+  title: "First-visit equipment foundations",
+  goal: "Return gradually to regular activity",
+  templateId: "first_visit_foundations",
+  templateVersion: "1.0",
+  generationMode: "staff_template",
+  createdVia: "site-ui",
+  durationMinutes: 42,
+  requiresExpertReview: false,
+  expertReviewReason: undefined,
+  safetyNotes: [...contextProjection.stopSignals],
+  decisionTrace: [
+    "Loaded first_visit_foundations@1.0, authored by Adaptive Gym coaching team.",
+    "Requested through the Gym site. This is a published staff walkthrough; no AI model generated it.",
+  ],
 } as const;
 
 type StubMode = "fulfilled" | "pending";
@@ -201,6 +220,7 @@ async function installRoutineApiStubs(
       return;
     }
 
+    const siteInitiated = requestBody.initiatedVia === "site-ui";
     status = {
       entitled: true,
       entitlementGranted: true,
@@ -211,15 +231,16 @@ async function installRoutineApiStubs(
       provider: "mpp_tempo",
       payerLabel: "Adaptive World demo agent",
       sandbox: true,
+      initiatedVia: siteInitiated ? "site-ui" : "webmcp",
       submittedAt: "2026-09-01T09:03:00.000Z",
       paidAt: "2026-09-01T09:03:03.000Z",
       fulfilledAt: "2026-09-01T09:03:04.000Z",
       providerPaymentRef: paymentRef,
       canResume: false,
       routineSaved: true,
-      routine: generatedRoutine,
+      routine: siteInitiated ? staffWalkthroughRoutine : generatedRoutine,
       savedRoutineRef: "00000000-0000-4000-8000-000000000008",
-      initialGoal: naturalLanguageGoal,
+      initialGoal: siteInitiated ? staffWalkthroughRoutine.goal : naturalLanguageGoal,
     };
     await route.fulfill({
       contentType: "application/json",
@@ -355,7 +376,7 @@ test("declining the complete exact-routine confirmation makes no payment request
   );
   await expect(dialog).toContainText(proposedRoutine.title);
   await expect(dialog).toContainText("Weight-bearing clearance is undocumented");
-  await expect(dialog).toContainText("PRO2 Total Body Exerciser");
+  await expect(dialog).toContainText("PRO2 Total Body");
   await expect(dialog).toContainText("Insignia Series Row");
   await expect(dialog).toContainText("$4.99 test USD");
   await expect(dialog).toContainText("Adaptive World demo agent wallet");
@@ -435,6 +456,49 @@ test("approving executes the exact routine once and displays the fulfilled recei
   await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
   await expect(page.getByText("Yes", { exact: true })).toHaveCount(2);
   await expect(page.getByText(/AI-generated personalized draft/u).first()).toBeVisible();
+});
+
+test("a person without an agent buys Routine Pro on the site with an honest staff walkthrough", async ({
+  page,
+}) => {
+  const agentPayBodies = await installRoutineApiStubs(page);
+  await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
+  await expect.poll(() => activeModelContextToolNames(page)).toEqual(sessionTools);
+
+  await page.getByRole("radio", { name: /First-visit equipment foundations/ }).click();
+  await page.getByRole("button", { name: /Save walkthrough with Routine Pro/ }).click();
+
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("heading")).toHaveText(
+    "Approve this staff walkthrough and sandbox payment?",
+  );
+  await expect(dialog).toContainText("First-visit equipment foundations");
+  await expect(dialog).toContainText("not agent-generated and not AI-personalized");
+  await expect(dialog).toContainText("Weight-bearing clearance is undocumented");
+  await expect(dialog).toContainText("$4.99 test USD");
+  await expect(dialog).toContainText("Save this exact walkthrough to Passport");
+  await dialog.getByLabel(/Adaptive World demo agent wallet/).check();
+  await dialog.getByRole("button", { name: "Approve walkthrough and agent payment" }).click();
+
+  expect(agentPayBodies).toHaveLength(1);
+  expect(agentPayBodies[0]).toEqual({
+    initiatedVia: "site-ui",
+    templateId: "first_visit_foundations",
+    goal: "Return gradually to regular activity",
+    paymentMode: "agent_wallet",
+    quoteValidUntil: routineProOffer.quoteValidUntil,
+    quoteDigest: routineProOffer.quoteDigest,
+  });
+  await expect(
+    page.getByRole("heading", { name: "First-visit equipment foundations" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Staff walkthrough chosen on the Gym site", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("Agent-generated via WebMCP", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Payment confirmed" })).toBeVisible();
+  await expect(page.getByText(paymentRef, { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved to Passport ✓", { exact: false })).toBeVisible();
 });
 
 test("an uncertain paid mutation recovers through read-only status and never pays twice", async ({

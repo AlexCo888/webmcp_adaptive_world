@@ -1,11 +1,17 @@
-import type { Equipment, GymContextProjection, RoutineProOffer } from "@adaptive-world/contracts";
+import type {
+  Equipment,
+  GymContextProjection,
+  RoutinePaymentModeSchema,
+  RoutineProOffer,
+} from "@adaptive-world/contracts";
+import type { z } from "zod";
 import type {
   CreatePersonalizedRoutineInput,
   MutationConfirmationRequest,
   RecordSessionFeedbackInput,
   WebMCPMutationPreparation,
 } from "@adaptive-world/webmcp";
-import { EXPERT_REVIEW_WARNING } from "./session-planner";
+import { EXPERT_REVIEW_WARNING, type FacilityTemplate } from "./session-planner";
 
 export type PreparedRoutineProConfirmation = Readonly<{
   effectiveInput: CreatePersonalizedRoutineInput;
@@ -15,6 +21,105 @@ export type PreparedRoutineProConfirmation = Readonly<{
 function summarize(values: readonly string[], fallback: string, max = 520): string {
   const value = values.length ? values.join("; ") : fallback;
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+type PaymentMode = z.infer<typeof RoutinePaymentModeSchema> | undefined;
+
+function contextSummaryFor(projection: GymContextProjection): string {
+  return [
+    `Projection ${projection.projectionId}`,
+    `Goals: ${summarize(projection.goals, "None")}`,
+    `Movement considerations: ${summarize(projection.movementConsiderations, "None")}`,
+    `Avoid: ${summarize(projection.avoid, "None")}`,
+    `Stop signals: ${summarize(projection.stopSignals, "None")}`,
+  ].join(" · ");
+}
+
+function payerLabelFor(offer: RoutineProOffer, paymentMode: PaymentMode): string {
+  return offer.entitled
+    ? "Existing Passport entitlement"
+    : paymentMode === "agent_wallet"
+      ? "Adaptive World demo agent wallet"
+      : "Human Stripe test checkout";
+}
+
+function paymentNetworkFor(offer: RoutineProOffer, paymentMode: PaymentMode): string {
+  return offer.entitled
+    ? "No new payment"
+    : paymentMode === "agent_wallet"
+      ? "MPP / Tempo testnet — sandbox transaction"
+      : "Stripe test mode — sandbox transaction";
+}
+
+export type RoutineConfirmationField = Readonly<{ label: string; value: string }>;
+
+/**
+ * First-party confirmation for a person buying Routine Pro on the Gym site
+ * without an agent. It shows the exact published walkthrough, the approved
+ * context it will be grounded in, the price, payer, sandbox network, and the
+ * Passport destination, and it never describes the result as agent-generated.
+ */
+export function prepareStaffWalkthroughConfirmation({
+  offer,
+  template,
+  goal,
+  paymentMode,
+  projection,
+  equipment,
+}: {
+  offer: RoutineProOffer;
+  template: FacilityTemplate;
+  goal: string;
+  paymentMode: PaymentMode;
+  projection: GymContextProjection;
+  equipment: readonly Equipment[];
+}): Readonly<{
+  title: string;
+  description: string;
+  fields: readonly RoutineConfirmationField[];
+  confirmLabel: string;
+}> {
+  return {
+    title: offer.entitled
+      ? "Save this staff walkthrough to Passport?"
+      : "Approve this staff walkthrough and sandbox payment?",
+    description:
+      "Without an agent, Adaptive Gym does not generate a personalized routine. This published staff walkthrough will be grounded in your approved Passport context and verified inventory, then saved to Passport exactly as shown.",
+    fields: [
+      {
+        label: "Proposed routine",
+        value: `${template.name} · ${template.durationMinutes} minutes · ${template.stations.length} equipment blocks · staff walkthrough v${template.version}`,
+      },
+      { label: "Confirmed goal", value: goal.trim() },
+      { label: "Approved Passport context used", value: contextSummaryFor(projection) },
+      ...template.stations.map((station, index) => {
+        const item = equipment.find((candidate) => candidate.id === station.equipmentId);
+        return {
+          label: `Exercise ${index + 1}`,
+          value: `${item?.name ?? station.equipmentId} (${station.equipmentId}) · ${station.minutes} minutes · ${station.intensity}. ${station.instructions[0] ?? ""}`,
+        };
+      }),
+      {
+        label: "Generation",
+        value:
+          "Published staff walkthrough chosen by you; not agent-generated and not AI-personalized",
+      },
+      { label: "Product", value: offer.displayName },
+      { label: "Amount", value: offer.entitled ? "Already unlocked" : "$4.99 test USD" },
+      { label: "Payer", value: payerLabelFor(offer, paymentMode) },
+      { label: "Payment network", value: paymentNetworkFor(offer, paymentMode) },
+      { label: "Destination", value: "Save this exact walkthrough to Passport" },
+      {
+        label: "Data access",
+        value: "Unchanged; only the active consented Gym projection is used",
+      },
+    ],
+    confirmLabel: offer.entitled
+      ? "Save this walkthrough"
+      : paymentMode === "agent_wallet"
+        ? "Approve walkthrough and agent payment"
+        : "Approve walkthrough and open test checkout",
+  };
 }
 
 export function prepareRoutineProConfirmation({
@@ -32,18 +137,8 @@ export function prepareRoutineProConfirmation({
     ...requestedInput,
     goal: requestedInput.goal.trim(),
   };
-  const payer = offer.entitled
-    ? "Existing Passport entitlement"
-    : effectiveInput.paymentMode === "agent_wallet"
-      ? "Adaptive World demo agent wallet"
-      : "Human Stripe test checkout";
-  const contextSummary = [
-    `Projection ${projection.projectionId}`,
-    `Goals: ${summarize(projection.goals, "None")}`,
-    `Movement considerations: ${summarize(projection.movementConsiderations, "None")}`,
-    `Avoid: ${summarize(projection.avoid, "None")}`,
-    `Stop signals: ${summarize(projection.stopSignals, "None")}`,
-  ].join(" · ");
+  const payer = payerLabelFor(offer, effectiveInput.paymentMode);
+  const contextSummary = contextSummaryFor(projection);
 
   return {
     effectiveInput,
@@ -94,11 +189,7 @@ export function prepareRoutineProConfirmation({
           { label: "Payer", value: payer },
           {
             label: "Payment network",
-            value: offer.entitled
-              ? "No new payment"
-              : effectiveInput.paymentMode === "agent_wallet"
-                ? "MPP / Tempo testnet — sandbox transaction"
-                : "Stripe test mode — sandbox transaction",
+            value: paymentNetworkFor(offer, effectiveInput.paymentMode),
           },
           { label: "Destination", value: "Save this exact routine to Passport" },
           {

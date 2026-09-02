@@ -11,11 +11,18 @@ import {
   getLatestRoutineProOrderForSession,
   getOrderByPublicRefForPatient,
   getRoutineProOrderOutcome,
+  getSavedRoutineForSession,
   hasRoutineProEntitlement,
 } from "./orders";
 
 type ActiveGymSession = NonNullable<Awaited<ReturnType<typeof getGymSession>>>;
 
+/**
+ * Projects the durable order, entitlement, and saved-routine records for the
+ * active Gym session into the bounded status shape shared by the site UI, the
+ * status API, and the read-only WebMCP recovery tool. It reads only; it never
+ * touches a payment rail, and it never exposes credentials or raw receipts.
+ */
 export async function getRoutineProStatusForActiveSession(
   active: ActiveGymSession,
   orderRef?: string,
@@ -26,7 +33,7 @@ export async function getRoutineProStatusForActiveSession(
     throw new CommerceError("INVALID_REQUEST");
   }
 
-  const [entitled, order, currentPlan] = await Promise.all([
+  const [entitled, order, currentPlan, saved] = await Promise.all([
     hasRoutineProEntitlement(patientId),
     orderRef
       ? getOrderByPublicRefForPatient(orderRef, patientId)
@@ -35,6 +42,7 @@ export async function getRoutineProStatusForActiveSession(
       "SELECT plan FROM gym_sessions WHERE id = $1 AND patient_id = $2 LIMIT 1",
       [active.row.id, patientId],
     ),
+    getSavedRoutineForSession(patientId, active.row.id),
   ]);
   if (orderRef && (!order || order.gymSessionId !== active.row.id)) {
     throw new CommerceError("NOT_FOUND");
@@ -43,7 +51,14 @@ export async function getRoutineProStatusForActiveSession(
   const outcome = order
     ? await getRoutineProOrderOutcome(order.id)
     : { entitlementGranted: false, savedRoutineRef: null };
-  const routine = GeneratedSessionSchema.safeParse(currentPlan.rows[0]?.plan);
+  const savedRoutineRef = saved?.id ?? outcome.savedRoutineRef;
+  const savedPlan = GeneratedSessionSchema.safeParse(saved?.plan);
+  const stagedPlan = GeneratedSessionSchema.safeParse(currentPlan.rows[0]?.plan);
+  const routine = savedPlan.success
+    ? savedPlan.data
+    : stagedPlan.success
+      ? stagedPlan.data
+      : undefined;
 
   return RoutineStatusSchema.parse({
     entitled,
@@ -60,6 +75,7 @@ export async function getRoutineProStatusForActiveSession(
               ? ("Human test checkout" as const)
               : ("Adaptive World demo agent" as const),
           sandbox: true as const,
+          initiatedVia: order.initiatedVia,
           canResume: canResumeRoutineProOrderStatus(order.status),
           ...(order.submittedAt ? { submittedAt: order.submittedAt.toISOString() } : {}),
           ...(order.paidAt ? { paidAt: order.paidAt.toISOString() } : {}),
@@ -68,8 +84,8 @@ export async function getRoutineProStatusForActiveSession(
           initialGoal: order.initialGoal,
         }
       : { canResume: false }),
-    routineSaved: Boolean(outcome.savedRoutineRef),
-    ...(outcome.savedRoutineRef ? { savedRoutineRef: outcome.savedRoutineRef } : {}),
-    ...(routine.success ? { routine: routine.data } : {}),
+    routineSaved: Boolean(savedRoutineRef),
+    ...(savedRoutineRef ? { savedRoutineRef } : {}),
+    ...(routine ? { routine } : {}),
   });
 }

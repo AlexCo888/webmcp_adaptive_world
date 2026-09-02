@@ -1,8 +1,8 @@
 import {
-  AgentGeneratedRoutineInputSchema,
   GeneratedSessionSchema,
-  type AgentGeneratedRoutineInput,
+  type ConfirmRoutineRequest,
   type GeneratedSession,
+  type RoutineProIntent,
 } from "@adaptive-world/contracts";
 import type { PoolClient } from "@adaptive-world/db";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
@@ -10,14 +10,13 @@ import { canonicalizeJson, sha256Hex, verifySha256Hex } from "@adaptive-world/se
 import type { getGymSession } from "@/lib/gym-session";
 import { toPublicGymContext, toPublicGymRoutineId } from "@/lib/gym-session";
 import {
-  AGENT_GENERATED_ROUTINE_MARKER,
-  AGENT_GENERATED_ROUTINE_VERSION,
-  AgentRoutineValidationError,
-  agentRoutineInputMatchesSession,
+  RoutineValidationError,
   createAgentGeneratedSession,
-  validateStagedAgentGeneratedSession,
+  createGroundedSession,
+  routineIntentMatchesSession,
+  routineIntentProvenanceId,
+  validateStagedRoutineSession,
 } from "@/lib/session-planner";
-import { ROUTINE_PRO } from "./constants";
 import { withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
 import { withLockedLiveGymSessionAuthority } from "./live-session-authority";
@@ -31,37 +30,85 @@ type SavedRow = {
   plan_hash: string;
 };
 
-function asInvalidRoutine(error: unknown): never {
-  if (
-    error instanceof AgentRoutineValidationError ||
-    (error instanceof Error && error.name === "ZodError")
-  ) {
-    throw new CommerceError("INVALID_REQUEST");
+/**
+ * Strips the quote fields from a confirmed request and returns the exact
+ * routine intent the person approved. Both intents are closed unions, so no
+ * unexpected field can travel further into commerce or persistence.
+ */
+export function toRoutineIntent(request: ConfirmRoutineRequest): RoutineProIntent {
+  if (request.initiatedVia === "webmcp") {
+    return {
+      initiatedVia: "webmcp",
+      goal: request.goal,
+      routine: request.routine,
+      ...(request.paymentMode ? { paymentMode: request.paymentMode } : {}),
+    };
+  }
+  return {
+    initiatedVia: "site-ui",
+    goal: request.goal,
+    templateId: request.templateId,
+    ...(request.paymentMode ? { paymentMode: request.paymentMode } : {}),
+  };
+}
+
+function zodIssueSummary(error: Error): string | undefined {
+  const issues = (error as { issues?: Array<{ path?: unknown[]; message?: string }> }).issues;
+  const first = issues?.[0];
+  if (!first?.message) return undefined;
+  const path = Array.isArray(first.path) && first.path.length ? first.path.join(".") : "routine";
+  return `${path}: ${first.message}`.slice(0, 160);
+}
+
+/**
+ * Validation failures describe only the caller's own submitted routine. They
+ * are surfaced as a bounded safe detail so an agent can correct the proposal
+ * and resubmit without any payment having been attempted.
+ */
+export function asInvalidRoutine(error: unknown): never {
+  if (error instanceof CommerceError) throw error;
+  if (error instanceof RoutineValidationError) {
+    throw new CommerceError("INVALID_REQUEST", false, error.message);
+  }
+  if (error instanceof Error && error.name === "ZodError") {
+    throw new CommerceError("INVALID_REQUEST", false, zodIssueSummary(error));
   }
   throw error;
 }
 
+/**
+ * Builds the exact plan for an intent without writing anything. Agent intents
+ * are validated and hydrated; site intents ground a published staff walkthrough
+ * in the same active projection. Neither path calls an AI model.
+ */
 export function validatePersonalizedRoutineRequest({
   active,
-  goal,
-  routine,
+  intent,
 }: {
   active: ActiveGymSession;
-  goal: string;
-  routine: AgentGeneratedRoutineInput;
-}): { session: GeneratedSession; routine: AgentGeneratedRoutineInput } {
+  intent: RoutineProIntent;
+}): { session: GeneratedSession; intent: RoutineProIntent } {
   try {
-    const submitted = AgentGeneratedRoutineInputSchema.parse(routine);
-    return {
-      routine: submitted,
-      session: createAgentGeneratedSession({
-        profile: toPublicGymContext(active.stored, active.row.id),
-        equipment: equipmentCatalog,
-        goal,
-        routine: submitted,
-        sessionId: toPublicGymRoutineId(active.row.id),
-      }),
-    };
+    const profile = toPublicGymContext(active.stored, active.row.id);
+    const sessionId = toPublicGymRoutineId(active.row.id);
+    const session =
+      intent.initiatedVia === "webmcp"
+        ? createAgentGeneratedSession({
+            profile,
+            equipment: equipmentCatalog,
+            goal: intent.goal,
+            routine: intent.routine,
+            sessionId,
+          })
+        : createGroundedSession({
+            profile,
+            equipment: equipmentCatalog,
+            templateId: intent.templateId,
+            goal: intent.goal,
+            createdVia: "site-ui",
+            sessionId,
+          });
+    return { session, intent };
   } catch (error) {
     return asInvalidRoutine(error);
   }
@@ -85,7 +132,7 @@ async function persistRoutinePlan(
     `SELECT id, plan, plan_hash FROM saved_routines
      WHERE patient_id = $1 AND source_gym_session_id = $2 AND template_id = $3
      LIMIT 1 FOR UPDATE`,
-    [patientId, gymSessionId, AGENT_GENERATED_ROUTINE_MARKER],
+    [patientId, gymSessionId, session.templateId],
   );
   if (existing.rows[0]) {
     const canonicalExisting = canonicalizeJson(existing.rows[0].plan);
@@ -113,7 +160,7 @@ async function persistRoutinePlan(
     `INSERT INTO saved_routines (
        patient_id, source_gym_session_id, entitlement_grant_id, title, plan, plan_hash,
        template_id, template_version, catalog_version, created_via, saved_at
-     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,'webmcp',now()) RETURNING id`,
+     ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,now()) RETURNING id`,
     [
       patientId,
       gymSessionId,
@@ -121,9 +168,10 @@ async function persistRoutinePlan(
       session.title,
       canonicalPlan,
       planHash,
-      AGENT_GENERATED_ROUTINE_MARKER,
-      AGENT_GENERATED_ROUTINE_VERSION,
+      session.templateId,
+      session.templateVersion,
       session.catalogVersion,
+      session.createdVia,
     ],
   );
   const savedRoutineRef = saved.rows[0]?.id;
@@ -140,12 +188,12 @@ async function persistRoutinePlan(
       patientId,
       savedRoutineRef,
       JSON.stringify({
-        templateId: AGENT_GENERATED_ROUTINE_MARKER,
-        templateVersion: AGENT_GENERATED_ROUTINE_VERSION,
+        templateId: session.templateId,
+        templateVersion: session.templateVersion,
         catalogVersion: session.catalogVersion,
-        createdVia: "webmcp",
-        generationMode: "agent_generated",
-        userSelectedAgentGeneratedContent: true,
+        createdVia: session.createdVia,
+        generationMode: session.generationMode,
+        userSelectedAgentGeneratedContent: session.generationMode === "agent_generated",
         naturalLanguageGoal: true,
         fullPassportFields: false,
         requiresExpertReview: session.requiresExpertReview,
@@ -160,7 +208,7 @@ async function persistRoutinePlan(
  * Routine Pro. The payment provider never supplies exercise content; it only
  * points back to the exact validated plan staged on the bound Gym session.
  */
-export async function persistStagedAgentRoutineInTransaction(
+export async function persistStagedRoutineInTransaction(
   client: PoolClient,
   {
     orderId,
@@ -178,16 +226,15 @@ export async function persistStagedAgentRoutineInTransaction(
   const order = await client.query<{
     initial_goal: string | null;
     initial_template_id: string;
+    initiated_via: "site-ui" | "webmcp";
   }>(
-    `SELECT initial_template_id, initial_goal FROM commerce_orders
+    `SELECT initial_template_id, initial_goal, initiated_via FROM commerce_orders
      WHERE id = $1 AND patient_id = $2 AND originating_gym_session_id = $3
      LIMIT 1`,
     [orderId, patientId, gymSessionId],
   );
   const orderRow = order.rows[0];
-  if (orderRow?.initial_template_id !== AGENT_GENERATED_ROUTINE_MARKER || !orderRow.initial_goal) {
-    throw new CommerceError("RECONCILIATION_REQUIRED");
-  }
+  if (!orderRow?.initial_goal) throw new CommerceError("RECONCILIATION_REQUIRED");
   const staged = await client.query<{
     context_projection: unknown;
     plan: unknown;
@@ -200,12 +247,16 @@ export async function persistStagedAgentRoutineInTransaction(
   if (!row) throw new CommerceError("RECONCILIATION_REQUIRED");
   try {
     const profile = toPublicGymContext(row.context_projection as StoredProjection, gymSessionId);
-    const session = validateStagedAgentGeneratedSession({
+    const session = validateStagedRoutineSession({
       session: row.plan,
       profile,
       equipment: equipmentCatalog,
     });
-    if (session.goal !== orderRow.initial_goal) {
+    if (
+      session.goal !== orderRow.initial_goal ||
+      session.templateId !== orderRow.initial_template_id ||
+      session.createdVia !== orderRow.initiated_via
+    ) {
       throw new CommerceError("ROUTINE_CONFLICT");
     }
     const saved = await persistRoutinePlan(client, {
@@ -220,22 +271,22 @@ export async function persistStagedAgentRoutineInTransaction(
   }
 }
 
+/**
+ * Saves the exact confirmed routine for an already-entitled person. When a
+ * matching plan was staged before payment, that staged plan (already
+ * re-validated) is saved; otherwise the freshly validated plan is saved.
+ */
 export async function createAndSavePersonalizedRoutine({
   active,
-  goal,
-  routine,
+  intent,
 }: {
   active: ActiveGymSession;
-  goal: string;
-  routine: AgentGeneratedRoutineInput;
+  intent: RoutineProIntent;
 }): Promise<{ session: GeneratedSession; savedRoutineRef: string; reused: boolean }> {
   const patientId = active.row.patientId;
   if (!patientId) throw new CommerceError("CONTEXT_REQUIRED");
-  const { session: validated, routine: submitted } = validatePersonalizedRoutineRequest({
-    active,
-    goal,
-    routine,
-  });
+  const { session: validated } = validatePersonalizedRoutineRequest({ active, intent });
+  const provenanceId = routineIntentProvenanceId(intent);
 
   return withCommerceTransaction(async (client) => {
     await client.query("SELECT id FROM patients WHERE id = $1 FOR UPDATE", [patientId]);
@@ -252,9 +303,10 @@ export async function createAndSavePersonalizedRoutine({
       async () => {
         const entitlement = await client.query<{ id: string }>(
           `SELECT id FROM entitlement_grants
-           WHERE patient_id = $1 AND entitlement_key = $2 AND status = 'active'
-           FOR UPDATE`,
-          [patientId, ROUTINE_PRO.entitlementKey],
+           WHERE patient_id = $1 AND entitlement_key = 'adaptive_world.routine_pro.v1'
+             AND status = 'active'
+           ORDER BY granted_at DESC LIMIT 1`,
+          [patientId],
         );
         const entitlementId = entitlement.rows[0]?.id;
         if (!entitlementId) throw new CommerceError("PAYMENT_REQUIRED");
@@ -267,14 +319,10 @@ export async function createAndSavePersonalizedRoutine({
         let session = validated;
         if (
           parsedStaged.success &&
-          agentRoutineInputMatchesSession({
-            session: parsedStaged.data,
-            goal,
-            routine: submitted,
-          })
+          routineIntentMatchesSession({ session: parsedStaged.data, intent })
         ) {
           try {
-            session = validateStagedAgentGeneratedSession({
+            session = validateStagedRoutineSession({
               session: parsedStaged.data,
               profile: toPublicGymContext(active.stored, active.row.id),
               equipment: equipmentCatalog,
@@ -288,7 +336,7 @@ export async function createAndSavePersonalizedRoutine({
           `SELECT id, plan, plan_hash FROM saved_routines
            WHERE patient_id = $1 AND source_gym_session_id = $2 AND template_id = $3
            LIMIT 1 FOR UPDATE`,
-          [patientId, active.row.id, AGENT_GENERATED_ROUTINE_MARKER],
+          [patientId, active.row.id, provenanceId],
         );
         if (existing.rows[0]) {
           const canonicalExisting = canonicalizeJson(existing.rows[0].plan);
@@ -296,10 +344,7 @@ export async function createAndSavePersonalizedRoutine({
             throw new CommerceError("RECONCILIATION_REQUIRED");
           }
           const parsed = GeneratedSessionSchema.safeParse(existing.rows[0].plan);
-          if (
-            !parsed.success ||
-            !agentRoutineInputMatchesSession({ session: parsed.data, goal, routine: submitted })
-          ) {
+          if (!parsed.success || !routineIntentMatchesSession({ session: parsed.data, intent })) {
             throw new CommerceError("ROUTINE_CONFLICT");
           }
           await client.query(

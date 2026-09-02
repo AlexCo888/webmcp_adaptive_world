@@ -1,10 +1,9 @@
 import type { PoolClient } from "@adaptive-world/db";
 import { sha256Hex } from "@adaptive-world/security";
-import { AGENT_GENERATED_ROUTINE_MARKER } from "@/lib/session-planner";
 import { ROUTINE_PRO } from "./constants";
 import { commercePool, withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
-import { persistStagedAgentRoutineInTransaction } from "./routines";
+import { persistStagedRoutineInTransaction } from "./routines";
 
 export type FulfillmentInput = {
   orderId: string;
@@ -254,19 +253,47 @@ type FulfillmentOrder = {
   initial_template_id: string;
 };
 
-async function persistBoundAgentRoutine(
+/**
+ * Saves the exact plan staged on the order's Gym session inside the fulfillment
+ * transaction. Verified payment always grants the entitlement: if the staged
+ * plan no longer validates (for example a station became unavailable), the
+ * save is deferred, recorded in the audit trail, and surfaced through status as
+ * `routineSaved: false` so the person or agent can resubmit without paying.
+ */
+async function persistBoundRoutine(
   client: PoolClient,
   order: FulfillmentOrder,
   patientId: string,
   entitlementId: string,
-): Promise<void> {
-  if (order.initial_template_id !== AGENT_GENERATED_ROUTINE_MARKER) return;
-  await persistStagedAgentRoutineInTransaction(client, {
-    orderId: order.id,
-    patientId,
-    gymSessionId: order.originating_gym_session_id,
-    entitlementId,
-  });
+): Promise<string | null> {
+  if (!order.originating_gym_session_id) return null;
+  try {
+    const saved = await persistStagedRoutineInTransaction(client, {
+      orderId: order.id,
+      patientId,
+      gymSessionId: order.originating_gym_session_id,
+      entitlementId,
+    });
+    return saved.savedRoutineRef;
+  } catch (error) {
+    if (
+      !(error instanceof CommerceError) ||
+      !["INVALID_REQUEST", "ROUTINE_CONFLICT", "RECONCILIATION_REQUIRED"].includes(error.code)
+    ) {
+      throw error;
+    }
+    await client.query(
+      `INSERT INTO audit_events (
+         patient_id, action, resource_type, resource_id, outcome, metadata
+       ) VALUES ($1,'routine.personalized.deferred','commerce_order',$2,'failure',$3::jsonb)`,
+      [
+        patientId,
+        order.id,
+        JSON.stringify({ code: error.code, templateId: order.initial_template_id }),
+      ],
+    );
+    return null;
+  }
 }
 
 export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<FulfillmentResult> {
@@ -335,7 +362,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
         throw new CommerceError("RECONCILIATION_REQUIRED");
       }
       if (source.source_order_id === order.id) {
-        await persistBoundAgentRoutine(client, order, patientId, source.id);
+        await persistBoundRoutine(client, order, patientId, source.id);
       }
       await client.query(
         `UPDATE payment_provider_events SET processed_at = COALESCE(processed_at, now()),
@@ -368,7 +395,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
     );
     const active = entitlement.rows[0];
     if (active?.source_order_id === order.id) {
-      await persistBoundAgentRoutine(client, order, patientId, active.id);
+      await persistBoundRoutine(client, order, patientId, active.id);
       await client.query(
         `UPDATE payment_provider_events SET processed_at = COALESCE(processed_at, now()),
            outcome = 'idempotent' WHERE provider = $1 AND provider_event_id = $2`,
@@ -419,7 +446,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
     // The exact routine staged before payment is validated and saved before the
     // entitlement/order transaction becomes terminal. A timeout can therefore
     // be recovered with status alone and never requires a second charge.
-    await persistBoundAgentRoutine(client, order, patientId, entitlementId);
+    const savedRoutineRef = await persistBoundRoutine(client, order, patientId, entitlementId);
 
     await client.query(
       `UPDATE commerce_orders SET status = 'fulfilled', provider_payment_ref = $2,
@@ -446,7 +473,7 @@ export async function fulfillRoutineProOrder(input: FulfillmentInput): Promise<F
           amountMinor: ROUTINE_PRO.amountMinor,
           currency: ROUTINE_PRO.currency,
           sandbox: true,
-          agentRoutineSavedAtomically: order.initial_template_id === AGENT_GENERATED_ROUTINE_MARKER,
+          routineSavedAtomically: savedRoutineRef !== null,
         }),
       ],
     );

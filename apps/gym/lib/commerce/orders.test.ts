@@ -1,7 +1,11 @@
 import type { AgentGeneratedRoutineInput, GymContextProjection } from "@adaptive-world/contracts";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import { describe, expect, it } from "vitest";
-import { AGENT_GENERATED_ROUTINE_MARKER, createAgentGeneratedSession } from "@/lib/session-planner";
+import {
+  AGENT_GENERATED_ROUTINE_MARKER,
+  createAgentGeneratedSession,
+  createGroundedSession,
+} from "@/lib/session-planner";
 import { assertRoutineOrderInput, type RoutineProOrder } from "./orders";
 
 const goal = "Support a cautious return to activity while clearance remains undocumented";
@@ -62,10 +66,12 @@ const stagedSession = createAgentGeneratedSession({
   createdAt: "2026-09-01T12:00:00.000Z",
 });
 const order = {
+  initiatedVia: "webmcp",
   initialTemplateId: AGENT_GENERATED_ROUTINE_MARKER,
   initialGoal: goal,
   gymSessionId,
 } as RoutineProOrder;
+const intent = { initiatedVia: "webmcp", goal, routine } as const;
 
 function expectOrderPending(operation: () => void) {
   let caught: unknown;
@@ -82,8 +88,7 @@ describe("Routine Pro order intent", () => {
     expect(() =>
       assertRoutineOrderInput(order, {
         gymSessionId,
-        goal,
-        routine,
+        intent,
         stagedSession,
       }),
     ).not.toThrow();
@@ -91,16 +96,14 @@ describe("Routine Pro order intent", () => {
     expectOrderPending(() =>
       assertRoutineOrderInput(order, {
         gymSessionId,
-        goal: "Build maximum muscle mass",
-        routine,
+        intent: { ...intent, goal: "Build maximum muscle mass" },
         stagedSession,
       }),
     );
     expectOrderPending(() =>
       assertRoutineOrderInput(order, {
         gymSessionId: "00000000-0000-4000-8000-000000000099",
-        goal,
-        routine,
+        intent,
         stagedSession,
       }),
     );
@@ -110,14 +113,16 @@ describe("Routine Pro order intent", () => {
     expectOrderPending(() =>
       assertRoutineOrderInput(order, {
         gymSessionId,
-        goal,
-        routine: {
-          ...routine,
-          exercises: routine.exercises.map((exercise, index) =>
-            index === 0
-              ? { ...exercise, instructions: ["Use a different unconfirmed instruction."] }
-              : exercise,
-          ),
+        intent: {
+          ...intent,
+          routine: {
+            ...routine,
+            exercises: routine.exercises.map((exercise, index) =>
+              index === 0
+                ? { ...exercise, instructions: ["Use a different unconfirmed instruction."] }
+                : exercise,
+            ),
+          },
         },
         stagedSession,
       }),
@@ -125,10 +130,49 @@ describe("Routine Pro order intent", () => {
     expectOrderPending(() =>
       assertRoutineOrderInput(order, {
         gymSessionId,
-        goal,
-        routine: { ...routine, durationMinutes: 30 },
+        intent: { ...intent, routine: { ...routine, durationMinutes: 30 } },
         stagedSession,
       }),
+    );
+  });
+
+  it("never reuses an agent order for a site walkthrough intent or the reverse", () => {
+    const staffSession = createGroundedSession({
+      profile,
+      equipment: equipmentCatalog,
+      templateId: "low_impact_orientation",
+      goal,
+      createdVia: "site-ui",
+      sessionId: "gym_routine_0123456789abcdef01234567",
+    });
+    const staffIntent = {
+      initiatedVia: "site-ui",
+      goal,
+      templateId: "low_impact_orientation",
+    } as const;
+    const staffOrder = {
+      initiatedVia: "site-ui",
+      initialTemplateId: "low_impact_orientation",
+      initialGoal: goal,
+      gymSessionId,
+    } as RoutineProOrder;
+
+    expect(() =>
+      assertRoutineOrderInput(staffOrder, {
+        gymSessionId,
+        intent: staffIntent,
+        stagedSession: staffSession,
+      }),
+    ).not.toThrow();
+    expectOrderPending(() =>
+      assertRoutineOrderInput(order, {
+        gymSessionId,
+        intent: staffIntent,
+        stagedSession: staffSession,
+      }),
+    );
+    expectOrderPending(() =>
+      assertRoutineOrderInput(staffOrder, { gymSessionId, intent, stagedSession }),
     );
   });
 });

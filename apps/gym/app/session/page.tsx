@@ -13,10 +13,11 @@ export default function SessionPage() {
     <div className="page-wrap">
       <header className="session-header">
         <p className="eyebrow">Understand → Generate → Confirm → Act</p>
-        <h1 className="page-title">Your selected agent supplies the intelligence.</h1>
+        <h1 className="page-title">Bring your agent, or choose a staff walkthrough.</h1>
         <p className="page-intro">
-          The user-selected WebMCP agent generates a new routine from the approved Passport
-          projection and verified Gym inventory. Adaptive Gym validates the exact proposal,
+          With an agent, the user-selected WebMCP agent generates a new routine from the approved
+          Passport projection and verified Gym inventory. Without one, you can choose a published
+          staff walkthrough. Either way Adaptive Gym shows the exact proposal, validates it,
           processes the sandbox payment, saves it to Passport, and exposes a recoverable receipt.
         </p>
       </header>

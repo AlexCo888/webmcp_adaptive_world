@@ -31,19 +31,47 @@ export const RoutineProOfferSchema = z
   })
   .strict();
 
-export const PrepareRoutineRequestSchema = z
+const RoutineQuoteFieldsSchema = z.object({
+  quoteValidUntil: z.string().datetime({ offset: true }),
+  quoteDigest: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+/**
+ * WebMCP intent: the user-selected external agent generated the exact routine
+ * and the person confirmed that exact routine before submission.
+ */
+export const AgentRoutineIntentSchema = z
   .object({
+    initiatedVia: z.literal("webmcp"),
     goal: RoutineGoalSchema,
     routine: AgentGeneratedRoutineInputSchema,
     paymentMode: RoutinePaymentModeSchema.optional(),
-    initiatedVia: z.literal("webmcp").default("webmcp"),
   })
   .strict();
 
-export const ConfirmRoutineRequestSchema = PrepareRoutineRequestSchema.extend({
-  quoteValidUntil: z.string().datetime({ offset: true }),
-  quoteDigest: z.string().regex(/^[0-9a-f]{64}$/),
-}).strict();
+/**
+ * Site-UI intent: a person without an agent chooses a published staff
+ * walkthrough. Gym grounds it in the active projection and verified inventory;
+ * it is never presented as agent-generated or AI-personalized.
+ */
+export const StaffWalkthroughIntentSchema = z
+  .object({
+    initiatedVia: z.literal("site-ui"),
+    goal: RoutineGoalSchema,
+    templateId: RoutineTemplateIdSchema,
+    paymentMode: RoutinePaymentModeSchema.optional(),
+  })
+  .strict();
+
+export const PrepareRoutineRequestSchema = z.discriminatedUnion("initiatedVia", [
+  AgentRoutineIntentSchema,
+  StaffWalkthroughIntentSchema,
+]);
+
+export const ConfirmRoutineRequestSchema = z.discriminatedUnion("initiatedVia", [
+  AgentRoutineIntentSchema.extend(RoutineQuoteFieldsSchema.shape).strict(),
+  StaffWalkthroughIntentSchema.extend(RoutineQuoteFieldsSchema.shape).strict(),
+]);
 
 export const CommerceOrderStateSchema = z.enum([
   "created",
@@ -98,6 +126,7 @@ export const RoutineStatusSchema = z
     provider: CommerceProviderSchema.optional(),
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]).optional(),
     sandbox: z.literal(true).optional(),
+    initiatedVia: RoutineInitiationSchema.optional(),
     checkoutUrl: z.string().url().optional(),
     canResume: z.boolean().default(false),
     submittedAt: z.string().datetime({ offset: true }).optional(),
@@ -150,7 +179,8 @@ export const SafeErrorEnvelopeSchema = z
   .strict();
 
 export type RoutineProOffer = z.infer<typeof RoutineProOfferSchema>;
-export type PrepareRoutineRequest = z.infer<typeof PrepareRoutineRequestSchema>;
+export type RoutineProIntent = z.infer<typeof PrepareRoutineRequestSchema>;
+export type PrepareRoutineRequest = RoutineProIntent;
 export type ConfirmRoutineRequest = z.infer<typeof ConfirmRoutineRequestSchema>;
 export type RoutineStatus = z.infer<typeof RoutineStatusSchema>;
 export type CommerceSafeCode = z.infer<typeof CommerceSafeCodeSchema>;

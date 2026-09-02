@@ -118,11 +118,16 @@ test("Gym exposes only verified products and refuses context-free walkthrough cr
   });
 });
 
-test("Gym explains WebMCP provenance instead of claiming a fake AI routine", async ({ page }) => {
+test("Gym explains agent and site provenance instead of claiming a fake AI routine", async ({
+  page,
+}) => {
   await page.goto(`${gymBaseUrl}/session`, { waitUntil: "domcontentloaded" });
   await expect(
-    page.getByRole("heading", { name: "Build with what’s actually here." }),
+    page.getByRole("heading", { name: "Bring your agent, or choose a staff walkthrough." }),
   ).toBeVisible();
-  await expect(page.getByText(/does not ask an AI to invent a routine/i)).toBeVisible();
+  await expect(page.getByText(/never call an AI model/i)).toBeVisible();
+  await expect(
+    page.getByText(/labeled as staff walkthroughs, never as agent-generated/i),
+  ).toBeVisible();
   await expect(page.getByText("Passport context required")).toBeVisible();
 });

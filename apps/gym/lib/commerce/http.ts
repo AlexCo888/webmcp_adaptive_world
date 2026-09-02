@@ -32,11 +32,12 @@ const SAFE_MESSAGES: Record<CommerceSafeCode, string> = {
   CONTEXT_EXPIRED: "The connected Passport context is no longer active.",
   PAYMENT_REQUIRED: "Adaptive Routine Pro is required for personalized routines.",
   ALREADY_ENTITLED: "Adaptive Routine Pro is already active.",
-  ORDER_PENDING: "A payment is already in progress. Resume the existing payment.",
+  ORDER_PENDING:
+    "A payment for this Gym session is already in progress. Read the current Routine Pro status; do not start another payment.",
   ORDER_EXPIRED: "The payment window has expired.",
   QUOTE_CHANGED: "The offer changed. Review it again before continuing.",
   ROUTINE_CONFLICT:
-    "A different routine is already saved for this Gym session and staff template. Review it or choose another published template.",
+    "A different routine is already saved for this Gym session. Review the saved routine before submitting another.",
   PRICE_MISMATCH: "The verified payment did not match the product price.",
   PAYMENT_REPLAY: "That payment proof was already processed.",
   BUDGET_EXCEEDED: "The demo agent daily test budget is not sufficient.",
@@ -53,12 +54,25 @@ const SAFE_MESSAGES: Record<CommerceSafeCode, string> = {
   INTERNAL_ERROR: "The request could not be completed.",
 };
 
+const MAX_SAFE_MESSAGE_CHARS = 240;
+
+/**
+ * `detail` is an optional, already-safe sentence (for example a validation
+ * reason about the caller's own submitted routine). It never carries secrets,
+ * identifiers, or provider payloads, and the combined message stays within the
+ * bounded error envelope so an agent can self-correct without another payment.
+ */
 export class CommerceError extends Error {
   constructor(
     readonly code: CommerceSafeCode,
     readonly retryable = false,
+    detail?: string,
   ) {
-    super(SAFE_MESSAGES[code]);
+    super(
+      detail
+        ? `${SAFE_MESSAGES[code]} ${detail}`.slice(0, MAX_SAFE_MESSAGE_CHARS)
+        : SAFE_MESSAGES[code],
+    );
   }
 }
 

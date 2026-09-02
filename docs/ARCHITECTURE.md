@@ -81,8 +81,22 @@ and reading the minimum projection is free.
 `adaptive_world.routine_pro.v1` is one Passport-linked entitlement. It permits
 Gym to validate, purchase, and save the exact structured routine produced by
 the user-selected external agent through `create_personalized_routine`. It does
-not grant additional health scopes. Public sample walkthroughs remain
-staff-authored, non-personalized, and completely separate from Routine Pro.
+not grant additional health scopes.
+
+Every Routine Pro request carries one of two closed intents, discriminated by
+`initiatedVia`:
+
+- `webmcp`: the exact agent-generated routine (`routine`). Provenance marker
+  `webmcp_agent_generated@1.0`; `generationMode: agent_generated`.
+- `site-ui`: a published staff walkthrough (`templateId`) chosen by a person on
+  the Gym site without an agent. Provenance is the walkthrough id and version;
+  `generationMode: staff_template`. It is labeled as a staff walkthrough chosen
+  on the Gym site and is never presented as agent-generated.
+
+Both intents are grounded in the same active projection, staged on the bound
+Gym session before any provider submission, confirmed exactly as shown, and
+saved with the same validation, payment, and recovery machinery. An order is
+reused only for the identical intent, channel, goal, and staged content.
 
 The external agent must first inspect the active projection and relevant Gym
 equipment, then generate a new routine in its own reasoning context. The
@@ -111,7 +125,10 @@ At most one payable order and one provider window/submitted attempt may exist
 for a patient and product, across routes, sessions, and payer rails. Verified
 payment grants at most one entitlement. Entitlement grant and exact staged
 routine persistence occur in the same transaction, so a fulfilled result is
-recoverable without another payment.
+recoverable without another payment. If the staged plan no longer validates at
+fulfillment time (for example a station became unavailable), the verified
+payment still grants the entitlement, the deferral is audited, and status
+reports `routineSaved: false` so the routine can be resubmitted without paying.
 
 The read-only `get_routine_pro_status` tool returns bounded receipt and outcome
 fields for the active session, including fulfilled orders. After any timeout or

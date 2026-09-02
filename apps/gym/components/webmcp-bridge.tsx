@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AgentGeneratedRoutineInputSchema,
   EquipmentSchema,
   GeneratedSessionSchema,
   GymContextProjectionSchema,
@@ -39,6 +40,12 @@ import {
   matchesEquipmentSearch,
 } from "@/lib/equipment-search";
 import {
+  AGENT_ROUTINE_BOUNDS,
+  RoutineValidationError,
+  createAgentGeneratedSession,
+  maximumAgentRoutineMinutes,
+} from "@/lib/session-planner";
+import {
   prepareFeedbackConfirmation,
   prepareRoutineProConfirmation,
   webMcpMutationBusyLabel,
@@ -55,6 +62,20 @@ type PreparedFeedback = {
   completedExerciseIds: string[];
   input: RecordSessionFeedbackInput;
 };
+
+// Client-side preview identifier; the server assigns the real public routine id.
+const PREVIEW_ROUTINE_ID = "gym_routine_000000000000000000000000";
+
+function validationReason(error: unknown): string | null {
+  if (error instanceof RoutineValidationError) return error.message.slice(0, 240);
+  if (error instanceof Error && error.name === "ZodError") {
+    const first = (error as { issues?: Array<{ path?: unknown[]; message?: string }> }).issues?.[0];
+    if (!first?.message) return "The routine does not match the closed input schema.";
+    const path = Array.isArray(first.path) && first.path.length ? first.path.join(".") : "routine";
+    return `${path}: ${first.message}`.slice(0, 240);
+  }
+  return null;
+}
 
 const RECOVERY_ORDER_STATES = new Set([
   "created",
@@ -151,6 +172,7 @@ export function WebMcpBridge() {
     applyEquipmentSearch,
     openEquipment,
     applyPersonalizedRoutine,
+    applyRoutineProStatus,
   } = useGymExperience();
   const [open, setOpen] = useState(false);
   const [hasPersistedRoutine, setHasPersistedRoutine] = useState(false);
@@ -231,14 +253,21 @@ export function WebMcpBridge() {
     return () => controller.abort();
   }, [pathname, setContextActive]);
 
+  // Mirror every status a tool observes into the page after the tool result is
+  // published, so a person watching the site sees the same receipt or recovery
+  // notice the agent sees. The provider update must not invalidate the
+  // invocation that caused it.
   const applyRecoveredRoutine = useCallback(
     (status: RoutineStatus, signal?: AbortSignal) => {
-      if (!status.routineSaved || !status.routine || !status.savedRoutineRef) return;
       window.setTimeout(() => {
-        if (!signal?.aborted) applyPersonalizedRoutine(status.routine!, status.savedRoutineRef!);
+        if (signal?.aborted) return;
+        applyRoutineProStatus(status);
+        if (status.routineSaved && status.routine && status.savedRoutineRef) {
+          applyPersonalizedRoutine(status.routine, status.savedRoutineRef);
+        }
       }, 0);
     },
-    [applyPersonalizedRoutine],
+    [applyPersonalizedRoutine, applyRoutineProStatus],
   );
 
   const handlers = useMemo<GymToolHandlers>(
@@ -305,7 +334,23 @@ export function WebMcpBridge() {
         if (record.active !== true) throw new GymApiError("CONTEXT_REQUIRED", 401);
         const projection = GymContextProjectionSchema.parse(record.projection);
         trace("get_active_context");
-        return { active: true, projection };
+        return {
+          active: true,
+          projection,
+          routineBounds: {
+            maxDurationMinutes: maximumAgentRoutineMinutes(projection),
+            minDurationMinutes: AGENT_ROUTINE_BOUNDS.minDurationMinutes,
+            maxExercises: AGENT_ROUTINE_BOUNDS.maxExercises,
+            maxExerciseMinutes: AGENT_ROUTINE_BOUNDS.maxExerciseMinutes,
+            maxTransitionMinutes: AGENT_ROUTINE_BOUNDS.maxTransitionMinutes,
+            intensities: AGENT_ROUTINE_BOUNDS.intensities,
+            maxInstructionsPerExercise: AGENT_ROUTINE_BOUNDS.maxInstructionsPerExercise,
+            maxSafetyNotes: AGENT_ROUTINE_BOUNDS.maxSafetyNotes,
+            eachEquipmentAtMostOnce: true,
+            requiresExpertReviewFor:
+              "injury, rehabilitation, post-operative, or undocumented-clearance scenarios",
+          },
+        };
       },
       get_routine_pro_offer: async (_input, context) => {
         const response = await fetchBoundedJson<unknown>(
@@ -416,6 +461,22 @@ export function WebMcpBridge() {
               return item;
             }),
           );
+          // Validate the exact proposal against the same rules the server
+          // enforces before asking the person to confirm anything. A failing
+          // routine is rejected here with its reason and never reaches payment.
+          try {
+            createAgentGeneratedSession({
+              profile: projection,
+              equipment,
+              goal: effectiveInput.goal,
+              routine: AgentGeneratedRoutineInputSchema.parse(input.routine),
+              sessionId: PREVIEW_ROUTINE_ID,
+            });
+          } catch (error) {
+            const reason = validationReason(error);
+            if (reason) throw new GymApiError("INVALID_REQUEST", 400, reason);
+            throw error;
+          }
           const preparedConfirmation = prepareRoutineProConfirmation({
             offer,
             requestedInput: effectiveInput,
@@ -537,6 +598,11 @@ export function WebMcpBridge() {
                   "PROVIDER_SETUP_RECONCILIATION_REQUIRED",
                 ].includes(error.apiCode))
             ) {
+              // Best-effort read so the page shows the recovery notice and
+              // receipt; the tool result itself already instructs recovery.
+              void fetchBoundedJson<unknown>("/api/commerce/routine-pro/status")
+                .then((response) => applyRecoveredRoutine(parseRoutineProStatus(response)))
+                .catch(() => undefined);
               throw new GymApiError(
                 "ORDER_PENDING",
                 409,

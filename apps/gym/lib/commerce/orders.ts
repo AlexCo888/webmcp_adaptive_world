@@ -1,17 +1,14 @@
 import {
   GeneratedSessionSchema,
   RoutineGoalSchema,
-  type AgentGeneratedRoutineInput,
   type GeneratedSession,
   type RoutinePaymentModeSchema,
+  type RoutineProIntent,
 } from "@adaptive-world/contracts";
 import type { PoolClient } from "@adaptive-world/db";
 import type { z } from "zod";
 import type { getGymSession } from "@/lib/gym-session";
-import {
-  AGENT_GENERATED_ROUTINE_MARKER,
-  agentRoutineInputMatchesSession,
-} from "@/lib/session-planner";
+import { routineIntentMatchesSession, routineIntentProvenanceId } from "@/lib/session-planner";
 import { ROUTINE_PRO } from "./constants";
 import { commercePool, withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
@@ -106,25 +103,26 @@ function mapOrder(row: OrderRow): RoutineProOrder {
   };
 }
 
+/**
+ * An existing payable order may only be reused for the exact intent it was
+ * created for: same Gym session, same channel, same provenance, same goal, and
+ * the same staged plan content. Anything else must read status, never pay.
+ */
 export function assertRoutineOrderInput(
   order: RoutineProOrder,
   input: {
     gymSessionId: string;
-    goal: string;
-    routine: AgentGeneratedRoutineInput;
+    intent: RoutineProIntent;
     stagedSession: GeneratedSession;
   },
 ): void {
-  const requestedGoal = RoutineGoalSchema.parse(input.goal);
+  const requestedGoal = RoutineGoalSchema.parse(input.intent.goal);
   if (
-    order.initialTemplateId !== AGENT_GENERATED_ROUTINE_MARKER ||
+    order.initiatedVia !== input.intent.initiatedVia ||
+    order.initialTemplateId !== routineIntentProvenanceId(input.intent) ||
     order.initialGoal !== requestedGoal ||
     order.gymSessionId !== input.gymSessionId ||
-    !agentRoutineInputMatchesSession({
-      session: input.stagedSession,
-      goal: requestedGoal,
-      routine: input.routine,
-    })
+    !routineIntentMatchesSession({ session: input.stagedSession, intent: input.intent })
   ) {
     throw new CommerceError("ORDER_PENDING", true);
   }
@@ -204,11 +202,10 @@ export async function getRoutineProOrderOutcome(orderId: string): Promise<{
        INNER JOIN saved_routines sr ON sr.entitlement_grant_id = eg.id
        WHERE eg.source_order_id = co.id AND eg.entitlement_key = $2
          AND eg.status = 'active' AND sr.source_gym_session_id = co.originating_gym_session_id
-         AND sr.template_id = $3
        ORDER BY sr.saved_at DESC LIMIT 1
      ) AS saved_routine_ref
      FROM commerce_orders co WHERE co.id = $1 LIMIT 1`,
-    [orderId, ROUTINE_PRO.entitlementKey, AGENT_GENERATED_ROUTINE_MARKER],
+    [orderId, ROUTINE_PRO.entitlementKey],
   );
   return {
     entitlementGranted: result.rows[0]?.entitlement_granted === true,
@@ -216,17 +213,33 @@ export async function getRoutineProOrderOutcome(orderId: string): Promise<{
   };
 }
 
+/**
+ * Returns the most recent routine saved from this Gym session, independent of
+ * which order (if any) funded the entitlement. An already-entitled person on a
+ * fresh session has no order for that session, but may still have a saved plan.
+ */
+export async function getSavedRoutineForSession(
+  patientId: string,
+  gymSessionId: string,
+): Promise<{ id: string; plan: unknown } | null> {
+  const result = await commercePool.query<{ id: string; plan: unknown }>(
+    `SELECT id, plan FROM saved_routines
+     WHERE patient_id = $1 AND source_gym_session_id = $2
+     ORDER BY saved_at DESC LIMIT 1`,
+    [patientId, gymSessionId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function createOrReuseRoutineProOrder({
   active,
   session,
-  routine,
-  goal,
+  intent,
   paymentMode,
 }: {
   active: ActiveGymSession;
   session: GeneratedSession;
-  routine: AgentGeneratedRoutineInput;
-  goal: string;
+  intent: RoutineProIntent;
   paymentMode: PaymentMode;
 }): Promise<{
   entitled: boolean;
@@ -236,13 +249,12 @@ export async function createOrReuseRoutineProOrder({
 }> {
   const patientId = active.row.patientId;
   if (!patientId) throw new CommerceError("CONTEXT_REQUIRED");
-  const requestedGoal = RoutineGoalSchema.parse(goal);
+  const requestedGoal = RoutineGoalSchema.parse(intent.goal);
+  const provenanceId = routineIntentProvenanceId(intent);
   if (
-    session.templateId !== AGENT_GENERATED_ROUTINE_MARKER ||
-    session.generationMode !== "agent_generated" ||
-    session.createdVia !== "webmcp" ||
-    session.goal !== requestedGoal ||
-    !agentRoutineInputMatchesSession({ session, goal: requestedGoal, routine })
+    session.templateId !== provenanceId ||
+    session.createdVia !== intent.initiatedVia ||
+    !routineIntentMatchesSession({ session, intent })
   ) {
     throw new CommerceError("INVALID_REQUEST");
   }
@@ -285,8 +297,7 @@ export async function createOrReuseRoutineProOrder({
           const order = mapOrder(row);
           assertRoutineOrderInput(order, {
             gymSessionId: active.row.id,
-            goal: requestedGoal,
-            routine,
+            intent,
             stagedSession: parsed.data,
           });
           return { entitled: false, order, reused: true, session: parsed.data };
@@ -302,7 +313,7 @@ export async function createOrReuseRoutineProOrder({
              public_ref, patient_id, originating_gym_session_id, product_key,
              payer_kind, provider, initiated_via, initial_template_id, initial_goal,
              amount_minor, currency, status
-           ) VALUES ($1,$2,$3,$4,$5,$6,'webmcp',$7,$8,$9,$10,'provider_pending')
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'provider_pending')
            RETURNING *`,
           [
             publicRef,
@@ -311,7 +322,8 @@ export async function createOrReuseRoutineProOrder({
             ROUTINE_PRO.productKey,
             payerKind,
             provider,
-            AGENT_GENERATED_ROUTINE_MARKER,
+            intent.initiatedVia,
+            provenanceId,
             requestedGoal,
             ROUTINE_PRO.amountMinor,
             ROUTINE_PRO.currency,
@@ -331,8 +343,8 @@ export async function createOrReuseRoutineProOrder({
               productKey: ROUTINE_PRO.productKey,
               payerKind,
               provider,
-              initiatedVia: "webmcp",
-              generationMode: "agent_generated",
+              initiatedVia: intent.initiatedVia,
+              generationMode: session.generationMode,
               exactRoutineStaged: true,
               naturalLanguageGoal: true,
               sandbox: true,
