@@ -1,12 +1,17 @@
 import { z } from "zod";
 
-import { GeneratedSessionSchema } from "./equipment";
+import { AgentGeneratedRoutineInputSchema, GeneratedSessionSchema } from "./equipment";
 
 export const RoutineProProductKeySchema = z.literal("adaptive_world.routine_pro.v1");
 export const RoutineTemplateIdSchema = z.enum([
   "first_visit_foundations",
   "low_impact_orientation",
   "accessible_equipment_tour",
+]);
+export const AgentGeneratedRoutineMarkerSchema = z.literal("webmcp_agent_generated");
+export const RoutineProvenanceIdSchema = z.union([
+  RoutineTemplateIdSchema,
+  AgentGeneratedRoutineMarkerSchema,
 ]);
 export const RoutinePaymentModeSchema = z.enum(["human_checkout", "agent_wallet"]);
 export const RoutineInitiationSchema = z.enum(["site-ui", "webmcp"]);
@@ -28,10 +33,10 @@ export const RoutineProOfferSchema = z
 
 export const PrepareRoutineRequestSchema = z
   .object({
-    templateId: RoutineTemplateIdSchema,
     goal: RoutineGoalSchema,
+    routine: AgentGeneratedRoutineInputSchema,
     paymentMode: RoutinePaymentModeSchema.optional(),
-    initiatedVia: RoutineInitiationSchema.default("site-ui"),
+    initiatedVia: z.literal("webmcp").default("webmcp"),
   })
   .strict();
 
@@ -54,6 +59,8 @@ export const CommerceOrderStateSchema = z.enum([
   "refund_pending",
   "refunded",
 ]);
+
+export const CommerceProviderSchema = z.enum(["mpp_tempo", "stripe_checkout"]);
 
 export const CommerceSafeCodeSchema = z.enum([
   "AUTH_REQUIRED",
@@ -83,11 +90,21 @@ export const CommerceSafeCodeSchema = z.enum([
 export const RoutineStatusSchema = z
   .object({
     entitled: z.boolean(),
+    entitlementGranted: z.boolean().default(false),
     orderRef: z.string().max(64).optional(),
     orderStatus: CommerceOrderStateSchema.optional(),
+    amountMinor: z.literal(499).optional(),
+    currency: z.literal("usd").optional(),
+    provider: CommerceProviderSchema.optional(),
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]).optional(),
+    sandbox: z.literal(true).optional(),
     checkoutUrl: z.string().url().optional(),
     canResume: z.boolean().default(false),
+    submittedAt: z.string().datetime({ offset: true }).optional(),
+    paidAt: z.string().datetime({ offset: true }).optional(),
+    fulfilledAt: z.string().datetime({ offset: true }).optional(),
+    providerPaymentRef: z.string().min(1).max(255).optional(),
+    routineSaved: z.boolean().default(false),
     routine: GeneratedSessionSchema.optional(),
     savedRoutineRef: z.string().max(64).optional(),
     initialGoal: RoutineGoalSchema.nullable().optional(),
@@ -98,7 +115,7 @@ export const SavedRoutineSummarySchema = z
   .object({
     ref: z.string().max(64),
     title: z.string().min(2).max(120),
-    templateId: RoutineTemplateIdSchema,
+    templateId: RoutineProvenanceIdSchema,
     templateVersion: z.string().min(1).max(24),
     savedAt: z.string().datetime({ offset: true }),
   })
