@@ -19,27 +19,40 @@ $ tsc --noEmit
 cache miss, executing 76bbe01b469fe3f0
 $ tsc --noEmit
 ::endgroup::
-[;31m@adaptive-world/webmcp:typecheck[;0m
-cache miss, executing b988f53ca7756fb2
+::group::@adaptive-world/webmcp:typecheck
+cache miss, executing 0ba8587b72ebe46f
 $ tsc --noEmit
-tests/catalog.test.ts(75,40): error TS2345: Argument of type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' is not assignable to parameter of type 'GymToolHandlers'.
-  Property 'get_routine_pro_status' is missing in type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' but required in type 'GymToolHandlers'.
-tests/catalog.test.ts(83,7): error TS1360: Type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' does not satisfy the expected type 'GymToolHandlers'.
-  Property 'get_routine_pro_status' is missing in type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' but required in type 'GymToolHandlers'.
-[ELIFECYCLE] Command failed with exit code 2.
-::group::@adaptive-world/security:typecheck
-cache miss, executing bb48d69f8f0154cf
 ::endgroup::
 ::group::@adaptive-world/demo-data:typecheck
 cache miss, executing 6204f717f809942d
+$ tsc --noEmit
 ::endgroup::
-::error::command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/packages/webmcp) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
-@adaptive-world/webmcp#typecheck:  ERROR  command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/packages/webmcp) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
+::group::@adaptive-world/security:typecheck
+cache miss, executing bb48d69f8f0154cf
+$ tsc --noEmit
+::endgroup::
+::group::@adaptive-world/db:typecheck
+cache miss, executing 06bdb3a32871cd91
+$ tsc --noEmit
+::endgroup::
+::group::@adaptive-world/passport:typecheck
+cache miss, executing c9871682840dc626
+$ tsc --noEmit
+::endgroup::
+[;31m@adaptive-world/gym:typecheck[;0m
+cache miss, executing f8493075309bcc30
+$ tsc --noEmit
+lib/feedback-write.test.ts(12,3): error TS2739: Type '{ id: string; projectionId: string; title: string; goal: string; templateId: string; templateVersion: string; createdVia: "webmcp"; catalogVersion: string; durationMinutes: number; status: "draft"; exercises: { ...; }[]; safetyNotes: never[]; decisionTrace: string[]; createdAt: string; }' is missing the following properties from type '{ id: string; projectionId: string; title: string; goal: string; templateId: string; templateVersion: string; generationMode: "staff_template" | "agent_generated"; createdVia: "site-ui" | "webmcp"; ... 10 more ...; expertReviewReason?: string | undefined; }': generationMode, warmup, cooldown, requiresExpertReview
+lib/webmcp-confirmations.test.ts(148,7): error TS2322: Type 'CreatePersonalizedRoutineInput' is not assignable to type 'Readonly<Record<string, unknown>>'.
+  Index signature for type 'string' is missing in type 'CreatePersonalizedRoutineInput'.
+[ELIFECYCLE] Command failed with exit code 2.
+::error::command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/apps/gym) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
+@adaptive-world/gym#typecheck:  ERROR  command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/apps/gym) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
 
- Tasks:    2 successful, 5 total
-Cached:    0 cached, 5 total
-  Time:    2.674s 
-Failed:    @adaptive-world/webmcp#typecheck
+ Tasks:    7 successful, 8 total
+Cached:    0 cached, 8 total
+  Time:    19.047s 
+Failed:    @adaptive-world/gym#typecheck
 
  ERROR  run failed: command  exited (2)
 [ELIFECYCLE] Command failed with exit code 2.
