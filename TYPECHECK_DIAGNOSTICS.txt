@@ -1,0 +1,46 @@
+$ turbo run typecheck && tsc --noEmit -p tsconfig.json
+
+Attention:
+Turborepo now collects completely anonymous telemetry regarding usage.
+This information is used to shape the Turborepo roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://turborepo.dev/docs/telemetry
+
+
+   • Packages in scope: @adaptive-world/contracts, @adaptive-world/db, @adaptive-world/demo-data, @adaptive-world/gym, @adaptive-world/passport, @adaptive-world/security, @adaptive-world/ui, @adaptive-world/webmcp
+   • Running typecheck in 8 packages
+   • Remote caching disabled
+
+::group::@adaptive-world/ui:typecheck
+cache miss, executing aa4dfb25704eeec5
+$ tsc --noEmit
+::endgroup::
+::group::@adaptive-world/contracts:typecheck
+cache miss, executing 76bbe01b469fe3f0
+$ tsc --noEmit
+::endgroup::
+[;31m@adaptive-world/webmcp:typecheck[;0m
+cache miss, executing b988f53ca7756fb2
+$ tsc --noEmit
+tests/catalog.test.ts(75,40): error TS2345: Argument of type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' is not assignable to parameter of type 'GymToolHandlers'.
+  Property 'get_routine_pro_status' is missing in type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' but required in type 'GymToolHandlers'.
+tests/catalog.test.ts(83,7): error TS1360: Type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' does not satisfy the expected type 'GymToolHandlers'.
+  Property 'get_routine_pro_status' is missing in type '{ get_gym_profile: Mock<() => { ok: boolean; }>; search_equipment: Mock<() => { ok: boolean; }>; get_equipment: Mock<() => { ok: boolean; }>; get_active_context: Mock<() => { ok: boolean; }>; get_routine_pro_offer: Mock<...>; create_personalized_routine: { ...; }; record_session_feedback: { ...; }; }' but required in type 'GymToolHandlers'.
+[ELIFECYCLE] Command failed with exit code 2.
+::group::@adaptive-world/security:typecheck
+cache miss, executing bb48d69f8f0154cf
+::endgroup::
+::group::@adaptive-world/demo-data:typecheck
+cache miss, executing 6204f717f809942d
+::endgroup::
+::error::command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/packages/webmcp) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
+@adaptive-world/webmcp#typecheck:  ERROR  command (/home/runner/work/webmcp_adaptive_world/webmcp_adaptive_world/packages/webmcp) /home/runner/setup-pnpm/node_modules/.bin/pnpm run typecheck exited (2)
+
+ Tasks:    2 successful, 5 total
+Cached:    0 cached, 5 total
+  Time:    2.674s 
+Failed:    @adaptive-world/webmcp#typecheck
+
+ ERROR  run failed: command  exited (2)
+[ELIFECYCLE] Command failed with exit code 2.
+TYPECHECK_EXIT_CODE=2
