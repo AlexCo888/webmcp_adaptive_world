@@ -62,6 +62,14 @@ export const SessionExerciseSchema = z.object({
   intensity: z.enum(["easy", "moderate", "challenging"]),
   instructions: z.array(z.string().min(2).max(220)).min(1).max(6),
   adaptationReason: z.string().min(3).max(240),
+  manufacturer: z.string().min(2).max(100).optional(),
+  model: z.string().min(1).max(100).optional(),
+  sourceUrl: z.string().url().optional(),
+  sourceLabel: z.string().min(2).max(120).optional(),
+  sourceCheckedAt: z.string().date().optional(),
+  capabilities: z.array(z.string().min(2).max(100)).max(12).optional(),
+  accessibility: z.array(z.string().min(2).max(140)).max(10).optional(),
+  locationZone: z.string().min(2).max(60).optional(),
 });
 
 export const GeneratedSessionSchema = z.object({
@@ -72,11 +80,16 @@ export const GeneratedSessionSchema = z.object({
   templateId: IdSchema,
   templateVersion: z.string().min(1).max(24),
   createdVia: z.enum(["site-ui", "webmcp"]),
+  generationMode: z.enum(["staff_template", "agent_generated"]).optional(),
   catalogVersion: z.string().min(1).max(40),
   durationMinutes: z.number().int().min(10).max(180),
   status: z.enum(["draft", "confirmed", "completed", "cancelled"]),
   exercises: z.array(SessionExerciseSchema).min(1).max(20),
-  safetyNotes: z.array(z.string().min(2).max(200)).max(8),
+  warmup: z.array(z.string().min(2).max(200)).max(6).optional(),
+  cooldown: z.array(z.string().min(2).max(200)).max(6).optional(),
+  safetyNotes: z.array(z.string().min(2).max(200)).max(12),
+  requiresExpertReview: z.boolean().optional(),
+  expertReviewReason: z.string().min(3).max(240).optional(),
   decisionTrace: z.array(z.string().min(3).max(240)).min(2).max(12),
   createdAt: z.string().datetime({ offset: true }),
 });
