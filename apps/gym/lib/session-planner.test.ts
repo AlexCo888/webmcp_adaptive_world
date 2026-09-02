@@ -365,7 +365,15 @@ describe("site walkthrough purchases and shared bounds", () => {
       ...projection,
       stopSignals: ["Any pain at the post-op incision"],
     };
-    for (const profile of [goalOnly, stopSignalOnly]) {
+    const pluralOnly: GymContextProjection = {
+      ...projection,
+      movementConsiderations: ["Knee injuries limit flexion"],
+    };
+    const inflectedOnly: GymContextProjection = {
+      ...projection,
+      avoid: ["No loading of the surgically repaired shoulder"],
+    };
+    for (const profile of [goalOnly, stopSignalOnly, pluralOnly, inflectedOnly]) {
       expect(() =>
         createAgentGeneratedSession({
           profile,

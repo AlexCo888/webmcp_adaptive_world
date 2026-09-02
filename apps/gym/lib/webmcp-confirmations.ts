@@ -32,6 +32,8 @@ type PaymentMode = z.infer<typeof RoutinePaymentModeSchema> | undefined;
  * as a whole after each list is summarized.
  */
 export const MAX_CONFIRMATION_VALUE_CHARS = 1_600;
+/** The WebMCP adapter's per-field bound; complete routine arrays fit within it. */
+export const MAX_CONFIRMATION_FIELD_CHARS = 1_800;
 
 function contextSummaryFor(projection: GymContextProjection): string {
   const value = [
@@ -177,17 +179,32 @@ export function prepareRoutineProConfirmation({
               value: `${item?.name ?? exercise.equipmentId} (${exercise.equipmentId}) · ${exercise.durationMinutes} minutes · ${exercise.intensity}. ${exercise.instructions.join(" ")} Adaptation: ${exercise.adaptationReason}`,
             };
           }),
+          // These arrays are shown complete: their schema maxima (6 x 180 and
+          // 8 x 200 characters) fit within one 1,800-character field, so the
+          // person authorizes exactly what will be charged for and saved.
           {
             label: "Warm-up",
-            value: summarize(effectiveInput.routine.warmup ?? [], "Not separately specified"),
+            value: summarize(
+              effectiveInput.routine.warmup ?? [],
+              "Not separately specified",
+              MAX_CONFIRMATION_FIELD_CHARS,
+            ),
           },
           {
             label: "Cooldown",
-            value: summarize(effectiveInput.routine.cooldown ?? [], "Not separately specified"),
+            value: summarize(
+              effectiveInput.routine.cooldown ?? [],
+              "Not separately specified",
+              MAX_CONFIRMATION_FIELD_CHARS,
+            ),
           },
           {
             label: "Safety notes",
-            value: summarize(effectiveInput.routine.safetyNotes, "None supplied"),
+            value: summarize(
+              effectiveInput.routine.safetyNotes,
+              "None supplied",
+              MAX_CONFIRMATION_FIELD_CHARS,
+            ),
           },
           {
             label: "Professional review",

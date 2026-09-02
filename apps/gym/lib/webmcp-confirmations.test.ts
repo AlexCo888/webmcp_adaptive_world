@@ -249,4 +249,33 @@ describe("Gym WebMCP confirmations", () => {
       )?.value.length,
     ).toBeLessThanOrEqual(MAX_CONFIRMATION_VALUE_CHARS);
   });
+
+  it("shows warm-up, cooldown, and safety notes in full at their schema maxima", () => {
+    const longLine = (seed: string, length: number) =>
+      `${seed} `.repeat(Math.ceil(length / (seed.length + 1))).slice(0, length);
+    const maximal: CreatePersonalizedRoutineInput = {
+      ...input,
+      routine: {
+        ...input.routine,
+        warmup: Array.from({ length: 6 }, (_, index) => longLine(`Warm-up step ${index}`, 180)),
+        cooldown: Array.from({ length: 6 }, (_, index) => longLine(`Cooldown step ${index}`, 180)),
+        safetyNotes: Array.from({ length: 8 }, (_, index) => longLine(`Safety note ${index}`, 200)),
+      },
+    };
+    const fields = prepareRoutineProConfirmation({
+      offer,
+      requestedInput: maximal,
+      projection,
+      equipment: selectedEquipment,
+    }).preparation.confirmation.fields;
+    for (const [label, values] of [
+      ["Warm-up", maximal.routine.warmup!],
+      ["Cooldown", maximal.routine.cooldown!],
+      ["Safety notes", maximal.routine.safetyNotes],
+    ] as const) {
+      const value = fields.find((field) => field.label === label)?.value ?? "";
+      expect(value).toBe(values.join("; "));
+      expect(value.length).toBeLessThanOrEqual(1_800);
+    }
+  });
 });

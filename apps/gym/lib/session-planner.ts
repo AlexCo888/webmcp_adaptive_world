@@ -290,15 +290,22 @@ function contextRequiresExpertReview(
     ...profile.accessibilityNeeds,
     routineText(routine),
   ]);
+  // Stems rather than whole words, so plural and inflected forms
+  // ("injuries", "fractured", "surgeries", "torn") are caught by the
+  // substring check as well.
   return includesAny(value, [
-    "injury",
-    "injured",
-    "fracture",
+    "injur",
+    "fractur",
     "broken leg",
     "broken bone",
+    "broken arm",
     "post-op",
-    "postoperative",
-    "surgery",
+    "postop",
+    "post op",
+    "post-surg",
+    "surger",
+    "surgical",
+    "torn ",
     "rehab",
     "rehabilitation",
     "recovering from",

@@ -174,6 +174,19 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
           clearReturnUrl();
           return;
         }
+        if (current.orderStatus === "paid_unfulfilled") {
+          // The provider verified the payment. Read-only polling cannot finish
+          // fulfillment, so hand control back: resuming re-posts the exact
+          // confirmed intent and the server completes fulfillment locally.
+          setState("idle");
+          setMessage(
+            current.initiatedVia === "site-ui"
+              ? "Payment is verified. Resume below to finish saving your routine; no second charge will be made."
+              : "Payment is verified. Ask your agent to submit the exact confirmed routine again to finish saving it; no second charge will be made.",
+          );
+          clearReturnUrl();
+          return;
+        }
         if (!isNonTerminal(current)) {
           setState(current.orderStatus === "fulfilled" ? "idle" : "error");
           setMessage(
@@ -200,6 +213,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
         timer = window.setTimeout(() => void poll(), 1_500);
         return;
       }
+      setState("idle");
       setMessage(
         "Payment confirmation is still being recovered. Reload later or ask your agent to call get_routine_pro_status. We will not submit another payment.",
       );
@@ -652,9 +666,13 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
               <p className="eyebrow">Adaptive Routine Pro</p>
               <h3 id="pending-payment-heading">Payment already in progress</h3>
               <p>
-                {pendingSitePayment
-                  ? "Continue the existing order. Its payer and walkthrough are locked so a second charge cannot be started."
-                  : "Your agent started this order. Complete or cancel it there, or release it here. No second charge can be started."}
+                {receipt?.orderStatus === "paid_unfulfilled"
+                  ? pendingSitePayment
+                    ? "Your payment is verified. Resume to finish saving the walkthrough; no second charge can be started."
+                    : "Your payment is verified. Ask your agent to submit the exact confirmed routine again to finish saving it; no second charge can be started."
+                  : pendingSitePayment
+                    ? "Continue the existing order. Its payer and walkthrough are locked so a second charge cannot be started."
+                    : "Your agent started this order. Complete or cancel it there, or release it here. No second charge can be started."}
               </p>
               <dl>
                 <div>
@@ -664,7 +682,11 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                 <div>
                   <dt>Status</dt>
                   <dd>
-                    {receipt?.orderStatus === "created" ? "Preparing payment" : "Ready to resume"}
+                    {receipt?.orderStatus === "paid_unfulfilled"
+                      ? "Payment verified · save pending"
+                      : receipt?.orderStatus === "created"
+                        ? "Preparing payment"
+                        : "Ready to resume"}
                   </dd>
                 </div>
                 <div>
@@ -691,14 +713,16 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                   )}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="button button--light button--block"
-                disabled={busy}
-                onClick={() => void cancelPendingPayment()}
-              >
-                Cancel unpaid order
-              </button>
+              {receipt?.orderStatus === "paid_unfulfilled" ? null : (
+                <button
+                  type="button"
+                  className="button button--light button--block"
+                  disabled={busy}
+                  onClick={() => void cancelPendingPayment()}
+                >
+                  Cancel unpaid order
+                </button>
+              )}
             </section>
           ) : (
             <button
