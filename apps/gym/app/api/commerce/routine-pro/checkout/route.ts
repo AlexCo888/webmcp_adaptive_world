@@ -12,7 +12,10 @@ import {
 import { createOrReuseRoutineProOrder, hasRoutineProEntitlement } from "@/lib/commerce/orders";
 import { verifyRoutineProQuote } from "@/lib/commerce/quote";
 import { rateLimitPaymentOrder, rateLimitPaymentRequest } from "@/lib/commerce/rate-limit";
-import { createAndSavePersonalizedRoutine } from "@/lib/commerce/routines";
+import {
+  prepareAgentGeneratedRoutine,
+  savePreparedPersonalizedRoutine,
+} from "@/lib/commerce/routines";
 import { createOrResumeStripeCheckout } from "@/lib/commerce/stripe";
 
 export const runtime = "nodejs";
@@ -30,6 +33,11 @@ export async function POST(request: Request) {
     }
     const active = await getGymSession();
     if (!active?.row.patientId) throw new CommerceError("CONTEXT_REQUIRED");
+    const preparedSession = prepareAgentGeneratedRoutine({
+      active,
+      routine: parsed.data.routine,
+      goal: parsed.data.goal,
+    });
     const entitled = await hasRoutineProEntitlement(active.row.patientId);
     const supportedModes = [
       ...(config.stripeEnabled ? (["human_checkout"] as const) : []),
@@ -49,19 +57,12 @@ export async function POST(request: Request) {
     await rateLimitPaymentRequest(request, { sessionId: active.row.id });
     const state = await createOrReuseRoutineProOrder({
       active,
-      templateId: parsed.data.templateId,
-      goal: parsed.data.goal,
+      session: preparedSession,
       paymentMode: "human_checkout",
-      initiatedVia: parsed.data.initiatedVia,
     });
     if (state.entitled) {
-      const routine = await createAndSavePersonalizedRoutine({
-        active,
-        templateId: parsed.data.templateId,
-        goal: parsed.data.goal,
-        initiatedVia: parsed.data.initiatedVia,
-      });
-      return success({ entitled: true, ...routine }, id, 201);
+      const routine = await savePreparedPersonalizedRoutine({ active, session: preparedSession });
+      return success({ entitled: true, ...routine }, id, routine.reused ? 200 : 201);
     }
     if (!state.order) throw new CommerceError("INTERNAL_ERROR", true);
     await rateLimitPaymentOrder(state.order.publicRef);
