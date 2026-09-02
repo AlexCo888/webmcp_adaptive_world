@@ -1,10 +1,16 @@
-import type { RoutineProOffer } from "@adaptive-world/contracts";
-import type { MutationConfirmationRequest } from "@adaptive-world/webmcp";
+import type {
+  GymContextProjection,
+  RoutineProOffer,
+} from "@adaptive-world/contracts";
+import { equipmentCatalog } from "@adaptive-world/demo-data";
+import type {
+  CreatePersonalizedRoutineInput,
+  MutationConfirmationRequest,
+} from "@adaptive-world/webmcp";
 import { describe, expect, it } from "vitest";
 import {
   prepareFeedbackConfirmation,
   prepareRoutineProConfirmation,
-  routineTemplateConfirmationField,
   webMcpMutationBusyLabel,
 } from "./webmcp-confirmations";
 
@@ -16,9 +22,66 @@ const offer: RoutineProOffer = {
   sandbox: true,
   entitled: false,
   supportedModes: ["human_checkout", "agent_wallet"],
-  quoteValidUntil: "2026-08-29T12:05:00.000Z",
+  quoteValidUntil: "2026-09-01T12:05:00.000Z",
   quoteDigest: "a".repeat(64),
 };
+
+const projection: GymContextProjection = {
+  projectionId: "gym_projection_0123456789abcdef01234567",
+  subjectAlias: "Mateo",
+  purpose: "adaptive_gym_session",
+  goals: ["Return gradually to regular activity"],
+  experienceLevel: "beginner",
+  preferredSessionMinutes: 35,
+  preferredActivities: ["Supported strength"],
+  functionalCapabilities: ["Can transfer independently"],
+  movementConsiderations: [
+    "Broken leg reported three months ago",
+    "Weight-bearing clearance is undocumented",
+  ],
+  avoid: ["Do not progress lower-limb loading without documented clearance"],
+  stopSignals: ["New or increasing pain", "Swelling"],
+  accessibilityNeeds: [],
+  sourceCategories: ["self_reported"],
+  issuedAt: "2026-09-01T12:00:00.000Z",
+  expiresAt: "2026-09-01T12:05:00.000Z",
+  synthetic: true,
+};
+
+const input: CreatePersonalizedRoutineInput = {
+  goal: "Create a cautious routine for Mateo while weight-bearing clearance remains undocumented.",
+  paymentMode: "agent_wallet",
+  routine: {
+    title: "Mateo cautious return-to-activity draft",
+    durationMinutes: 24,
+    exercises: [
+      {
+        equipmentId: "scifit_pro2_total_body",
+        durationMinutes: 8,
+        intensity: "easy",
+        instructions: ["Ask staff to configure the removable seat before beginning."],
+        adaptationReason: "Uses an adjustable seated setup while clearance remains uncertain.",
+      },
+      {
+        equipmentId: "lf_insignia_row",
+        durationMinutes: 8,
+        intensity: "easy",
+        instructions: ["Set the chest support and seat before selecting resistance."],
+        adaptationReason: "Adds supported upper-body work without claiming medical clearance.",
+      },
+    ],
+    warmup: ["Review stop signals with Gym staff."],
+    cooldown: ["Reassess pain or swelling before standing."],
+    safetyNotes: ["Do not interpret this draft as medical clearance."],
+    requiresExpertReview: true,
+    expertReviewReason:
+      "The recent fracture and weight-bearing clearance uncertainty require professional review.",
+  },
+};
+
+const selectedEquipment = equipmentCatalog.filter((item) =>
+  input.routine.exercises.some((exercise) => exercise.equipmentId === item.id),
+);
 
 describe("Gym WebMCP confirmations", () => {
   it("shows the exact effective feedback values, including defaults", () => {
@@ -35,88 +98,88 @@ describe("Gym WebMCP confirmations", () => {
     ]);
   });
 
-  it("shows the exact Routine Pro template identifier", () => {
-    expect(routineTemplateConfirmationField("accessible_equipment_tour")).toEqual({
-      label: "Template ID",
-      value: "accessible_equipment_tour",
-    });
-  });
-
-  it("uses the server-owned payer and template for an existing payment", () => {
+  it("shows the exact agent-generated proposal before authorizing payment and save", () => {
     const prepared = prepareRoutineProConfirmation({
       offer,
-      requestedInput: {
-        goal: "Build lifelong health without bodybuilding-style muscle gain",
-        templateId: "accessible_equipment_tour",
-        paymentMode: "agent_wallet",
-      },
-      recommendedTemplateId: "low_impact_orientation",
-      pending: {
-        orderRef: `awrp_${"b".repeat(32)}`,
-        orderStatus: "provider_pending",
-        payerLabel: "Human test checkout",
-        canResume: true,
-        initialTemplateId: "first_visit_foundations",
-        initialGoal: "Keep the original payment goal",
-      },
+      requestedInput: input,
+      projection,
+      equipment: selectedEquipment,
     });
+    const fields = prepared.preparation.confirmation.fields;
 
-    expect(prepared.effectiveInput).toEqual({
-      templateId: "first_visit_foundations",
-      goal: "Keep the original payment goal",
-      paymentMode: "human_checkout",
-    });
+    expect(prepared.effectiveInput).toEqual(input);
     expect(prepared.preparation.confirmation).toMatchObject({
-      title: "Resume the existing sandbox payment?",
-      confirmLabel: "Resume",
+      title: "Approve this exact routine and sandbox payment?",
+      confirmLabel: "Approve exact routine and agent payment",
       riskClass: "payment",
     });
-    expect(prepared.preparation.confirmation.fields).toEqual(
+    expect(fields).toEqual(
       expect.arrayContaining([
-        { label: "Template ID", value: "first_visit_foundations" },
-        { label: "Your goal", value: "Keep the original payment goal" },
-        { label: "Payer", value: "Human test checkout" },
+        {
+          label: "Proposed routine",
+          value: "Mateo cautious return-to-activity draft · 24 minutes · 2 equipment blocks",
+        },
+        { label: "Confirmed goal", value: input.goal },
+        { label: "Product", value: "Adaptive Routine Pro" },
+        { label: "Amount", value: "$4.99 test USD" },
+        { label: "Payer", value: "Adaptive World demo agent wallet" },
+        { label: "Payment network", value: "MPP / Tempo testnet — sandbox transaction" },
+        { label: "Destination", value: "Save this exact routine to Passport" },
       ]),
+    );
+    expect(fields.find((field) => field.label === "Approved Passport context used")?.value).toContain(
+      "Weight-bearing clearance is undocumented",
+    );
+    expect(fields.find((field) => field.label === "Exercise 1")?.value).toContain(
+      selectedEquipment.find((item) => item.id === "scifit_pro2_total_body")!.name,
+    );
+    expect(fields.find((field) => field.label === "Professional review")?.value).toContain(
+      "A physician or qualified physical therapist should review and approve this routine",
     );
   });
 
-  it("keeps a fresh agent payment explicit and labels its visible busy phase", () => {
+  it("labels visible payment phases and never describes template selection", () => {
     const prepared = prepareRoutineProConfirmation({
       offer,
-      requestedInput: {
-        goal: "Support my long-term health",
-        templateId: "low_impact_orientation",
-        paymentMode: "agent_wallet",
-      },
-      recommendedTemplateId: "low_impact_orientation",
-      pending: null,
+      requestedInput: input,
+      projection,
+      equipment: selectedEquipment,
     });
     const request: MutationConfirmationRequest = {
       toolName: "create_personalized_routine",
       ...prepared.preparation.confirmation,
-      input: {},
+      input,
     };
 
-    expect(prepared.effectiveInput.paymentMode).toBe("agent_wallet");
-    expect(prepared.preparation.confirmation.title).toBe("Approve Routine Pro sandbox payment?");
-    expect(prepared.preparation.confirmation.confirmLabel).toBe("Approve agent payment");
-    expect(prepared.preparation.confirmation.fields).toEqual(
-      expect.arrayContaining([
-        {
-          label: "Free tier",
-          value: "Passport connection, context review, Gym profile, and equipment discovery",
-        },
-        { label: "Paid tier", value: "Routine creation and Passport saving" },
-      ]),
+    expect(webMcpMutationBusyLabel(request)).toBe(
+      "Validating the exact routine and confirming the Tempo testnet payment…",
     );
-    expect(webMcpMutationBusyLabel(request)).toBe("Paying with the Adaptive World demo agent…");
     expect(
       webMcpMutationBusyLabel({
         ...request,
         fields: request.fields.map((field) =>
-          field.label === "Payer" ? { ...field, value: "Human test checkout" } : field,
+          field.label === "Payer" ? { ...field, value: "Human Stripe test checkout" } : field,
         ),
       }),
-    ).toBe("Opening secure Stripe test checkout…");
+    ).toBe("Validating the exact routine and opening Stripe test checkout…");
+    expect(JSON.stringify(prepared)).not.toContain("template selected");
+  });
+
+  it("shows no new payment for an existing entitlement", () => {
+    const prepared = prepareRoutineProConfirmation({
+      offer: { ...offer, entitled: true },
+      requestedInput: input,
+      projection,
+      equipment: selectedEquipment,
+    });
+    expect(prepared.preparation.confirmation.title).toBe(
+      "Save this exact agent-generated routine?",
+    );
+    expect(prepared.preparation.confirmation.fields).toEqual(
+      expect.arrayContaining([
+        { label: "Amount", value: "Already unlocked" },
+        { label: "Payment network", value: "No new payment" },
+      ]),
+    );
   });
 });
