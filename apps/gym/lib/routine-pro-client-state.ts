@@ -1,6 +1,6 @@
 import {
+  PersistedRoutineTemplateIdSchema,
   RoutineGoalSchema,
-  RoutineTemplateIdSchema,
   type CommerceSafeCode,
 } from "@adaptive-world/contracts";
 import { z } from "zod";
@@ -20,7 +20,7 @@ const PendingOrderSchema = z
     orderStatus: PendingOrderStatusSchema,
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]),
     canResume: z.boolean(),
-    initialTemplateId: RoutineTemplateIdSchema,
+    initialTemplateId: PersistedRoutineTemplateIdSchema,
     initialGoal: RoutineGoalSchema.nullable().optional(),
   })
   .passthrough();
@@ -30,7 +30,7 @@ export type PendingRoutineProOrder = Readonly<{
   orderStatus: z.infer<typeof PendingOrderStatusSchema>;
   payerLabel: "Human test checkout" | "Adaptive World demo agent";
   canResume: boolean;
-  initialTemplateId: z.infer<typeof RoutineTemplateIdSchema>;
+  initialTemplateId: z.infer<typeof PersistedRoutineTemplateIdSchema>;
   initialGoal: string | null;
 }>;
 
