@@ -8,9 +8,68 @@ export const RoutineTemplateIdSchema = z.enum([
   "low_impact_orientation",
   "accessible_equipment_tour",
 ]);
+export const AgentGeneratedRoutineTemplateIdSchema = z.literal("webmcp_agent_generated");
+export const PersistedRoutineTemplateIdSchema = z.union([
+  RoutineTemplateIdSchema,
+  AgentGeneratedRoutineTemplateIdSchema,
+]);
 export const RoutinePaymentModeSchema = z.enum(["human_checkout", "agent_wallet"]);
 export const RoutineInitiationSchema = z.enum(["site-ui", "webmcp"]);
 export const RoutineGoalSchema = z.string().trim().min(2).max(160);
+
+export const AgentGeneratedRoutineSchema = z
+  .object({
+    title: z.string().trim().min(2).max(120),
+    durationMinutes: z.number().int().min(10).max(120),
+    exercises: z
+      .array(
+        z
+          .object({
+            equipmentId: z.string().min(1).max(128),
+            durationMinutes: z.number().int().min(1).max(45),
+            intensity: z.enum(["easy", "moderate"]),
+            instructions: z.array(z.string().trim().min(2).max(220)).min(1).max(4),
+            adaptationReason: z.string().trim().min(3).max(240),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(12),
+    warmup: z.array(z.string().trim().min(2).max(200)).max(6).optional(),
+    cooldown: z.array(z.string().trim().min(2).max(200)).max(6).optional(),
+    safetyNotes: z.array(z.string().trim().min(2).max(200)).max(8),
+    requiresExpertReview: z.boolean(),
+    expertReviewReason: z.string().trim().min(3).max(240).optional(),
+  })
+  .strict()
+  .superRefine((routine, ctx) => {
+    const totalExerciseMinutes = routine.exercises.reduce(
+      (total, exercise) => total + exercise.durationMinutes,
+      0,
+    );
+    if (totalExerciseMinutes > routine.durationMinutes) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Exercise minutes cannot exceed the routine duration.",
+        path: ["durationMinutes"],
+      });
+    }
+    const equipmentIds = routine.exercises.map((exercise) => exercise.equipmentId);
+    if (new Set(equipmentIds).size !== equipmentIds.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Each equipment station may appear only once in a routine.",
+        path: ["exercises"],
+      });
+    }
+    if (routine.requiresExpertReview && !routine.expertReviewReason) {
+      ctx.addIssue({
+        code: "custom",
+        message: "An expert-review reason is required when expert review is required.",
+        path: ["expertReviewReason"],
+      });
+    }
+  });
 
 export const RoutineProOfferSchema = z
   .object({
@@ -28,10 +87,10 @@ export const RoutineProOfferSchema = z
 
 export const PrepareRoutineRequestSchema = z
   .object({
-    templateId: RoutineTemplateIdSchema,
     goal: RoutineGoalSchema,
+    routine: AgentGeneratedRoutineSchema,
     paymentMode: RoutinePaymentModeSchema.optional(),
-    initiatedVia: RoutineInitiationSchema.default("site-ui"),
+    initiatedVia: z.literal("webmcp").default("webmcp"),
   })
   .strict();
 
@@ -85,12 +144,24 @@ export const RoutineStatusSchema = z
     entitled: z.boolean(),
     orderRef: z.string().max(64).optional(),
     orderStatus: CommerceOrderStateSchema.optional(),
+    amountMinor: z.literal(499).optional(),
+    currency: z.literal("usd").optional(),
+    provider: z.enum(["mpp_tempo", "stripe_checkout"]).optional(),
     payerLabel: z.enum(["Human test checkout", "Adaptive World demo agent"]).optional(),
+    sandbox: z.literal(true).optional(),
     checkoutUrl: z.string().url().optional(),
     canResume: z.boolean().default(false),
     routine: GeneratedSessionSchema.optional(),
     savedRoutineRef: z.string().max(64).optional(),
+    routineSaved: z.boolean().optional(),
+    entitlementGranted: z.boolean().optional(),
+    initialTemplateId: z.string().max(96).optional(),
     initialGoal: RoutineGoalSchema.nullable().optional(),
+    providerPaymentRef: z.string().max(512).optional(),
+    submittedAt: z.string().datetime({ offset: true }).optional(),
+    paidAt: z.string().datetime({ offset: true }).optional(),
+    fulfilledAt: z.string().datetime({ offset: true }).optional(),
+    providerExplorerUrl: z.string().url().optional(),
   })
   .strict();
 
@@ -98,7 +169,7 @@ export const SavedRoutineSummarySchema = z
   .object({
     ref: z.string().max(64),
     title: z.string().min(2).max(120),
-    templateId: RoutineTemplateIdSchema,
+    templateId: PersistedRoutineTemplateIdSchema,
     templateVersion: z.string().min(1).max(24),
     savedAt: z.string().datetime({ offset: true }),
   })
@@ -132,6 +203,7 @@ export const SafeErrorEnvelopeSchema = z
   })
   .strict();
 
+export type AgentGeneratedRoutine = z.infer<typeof AgentGeneratedRoutineSchema>;
 export type RoutineProOffer = z.infer<typeof RoutineProOfferSchema>;
 export type PrepareRoutineRequest = z.infer<typeof PrepareRoutineRequestSchema>;
 export type ConfirmRoutineRequest = z.infer<typeof ConfirmRoutineRequestSchema>;
