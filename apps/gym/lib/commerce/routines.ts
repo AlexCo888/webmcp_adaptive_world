@@ -1,10 +1,19 @@
-import { GeneratedSessionSchema, type GeneratedSession } from "@adaptive-world/contracts";
+import {
+  AgentGeneratedRoutineSchema,
+  GeneratedSessionSchema,
+  type AgentGeneratedRoutine,
+  type GeneratedSession,
+} from "@adaptive-world/contracts";
 import { canonicalizeJson, sha256Hex, verifySha256Hex } from "@adaptive-world/security";
 import { equipmentCatalog } from "@adaptive-world/demo-data";
 import type { getGymSession } from "@/lib/gym-session";
 import { toPublicGymContext } from "@/lib/gym-session";
 import { toPublicGymRoutineId } from "@/lib/public-identifiers";
-import { createGroundedSession, type FacilityTemplate } from "@/lib/session-planner";
+import {
+  AGENT_GENERATED_TEMPLATE_ID,
+  AGENT_GENERATED_TEMPLATE_VERSION,
+  createAgentGeneratedSession,
+} from "@/lib/session-planner";
 import { ROUTINE_PRO } from "./constants";
 import { withCommerceTransaction } from "./database";
 import { CommerceError } from "./http";
@@ -18,19 +27,50 @@ type SavedRow = {
   plan_hash: string;
 };
 
-export async function createAndSavePersonalizedRoutine({
+export function prepareAgentGeneratedRoutine({
   active,
-  templateId,
+  routine,
   goal,
-  initiatedVia,
 }: {
   active: ActiveGymSession;
-  templateId: FacilityTemplate["id"];
+  routine: AgentGeneratedRoutine;
   goal: string;
-  initiatedVia: "site-ui" | "webmcp";
+}): GeneratedSession {
+  const parsedRoutine = AgentGeneratedRoutineSchema.safeParse(routine);
+  if (!parsedRoutine.success) throw new CommerceError("INVALID_REQUEST");
+  try {
+    return GeneratedSessionSchema.parse(
+      createAgentGeneratedSession({
+        profile: toPublicGymContext(active.stored, active.row.id),
+        equipment: equipmentCatalog,
+        routine: parsedRoutine.data,
+        goal,
+        sessionId: toPublicGymRoutineId(active.row.id),
+      }),
+    );
+  } catch {
+    throw new CommerceError("INVALID_REQUEST");
+  }
+}
+
+export async function savePreparedPersonalizedRoutine({
+  active,
+  session,
+}: {
+  active: ActiveGymSession;
+  session: GeneratedSession;
 }): Promise<{ session: GeneratedSession; savedRoutineRef: string; reused: boolean }> {
   const patientId = active.row.patientId;
   if (!patientId) throw new CommerceError("CONTEXT_REQUIRED");
+  const validatedSession = GeneratedSessionSchema.parse(session);
+  if (
+    validatedSession.createdVia !== "webmcp" ||
+    validatedSession.generationMode !== "agent_generated" ||
+    validatedSession.templateId !== AGENT_GENERATED_TEMPLATE_ID ||
+    validatedSession.templateVersion !== AGENT_GENERATED_TEMPLATE_VERSION
+  ) {
+    throw new CommerceError("INVALID_REQUEST");
+  }
 
   return withCommerceTransaction(async (client) => {
     await client.query("SELECT id FROM patients WHERE id = $1 FOR UPDATE", [patientId]);
@@ -54,43 +94,30 @@ export async function createAndSavePersonalizedRoutine({
         const entitlementId = entitlement.rows[0]?.id;
         if (!entitlementId) throw new CommerceError("PAYMENT_REQUIRED");
 
+        const canonicalPlan = canonicalizeJson(validatedSession);
         const existing = await client.query<SavedRow>(
           `SELECT id, plan, plan_hash FROM saved_routines
            WHERE patient_id = $1 AND source_gym_session_id = $2 AND template_id = $3
            LIMIT 1 FOR UPDATE`,
-          [patientId, active.row.id, templateId],
+          [patientId, active.row.id, AGENT_GENERATED_TEMPLATE_ID],
         );
         if (existing.rows[0]) {
           const canonicalExisting = canonicalizeJson(existing.rows[0].plan);
           if (!(await verifySha256Hex(canonicalExisting, existing.rows[0].plan_hash))) {
             throw new CommerceError("RECONCILIATION_REQUIRED");
           }
-          const session = GeneratedSessionSchema.parse(existing.rows[0].plan);
-          if (session.goal !== goal.trim()) {
-            throw new CommerceError("ROUTINE_CONFLICT");
-          }
+          if (canonicalExisting !== canonicalPlan) throw new CommerceError("ROUTINE_CONFLICT");
           await client.query(
             "UPDATE gym_sessions SET plan = $2::jsonb, status = 'draft' WHERE id = $1",
             [active.row.id, canonicalExisting],
           );
           return {
-            session,
+            session: GeneratedSessionSchema.parse(existing.rows[0].plan),
             savedRoutineRef: existing.rows[0].id,
             reused: true,
           };
         }
 
-        const session = GeneratedSessionSchema.parse(
-          createGroundedSession({
-            profile: toPublicGymContext(active.stored, active.row.id),
-            equipment: equipmentCatalog,
-            templateId,
-            goal,
-            createdVia: initiatedVia,
-            sessionId: toPublicGymRoutineId(active.row.id),
-          }),
-        );
-        const canonicalPlan = canonicalizeJson(session);
         const planHash = await sha256Hex(canonicalPlan);
         const saved = await client.query<{ id: string }>(
           `INSERT INTO saved_routines (
@@ -101,13 +128,13 @@ export async function createAndSavePersonalizedRoutine({
             patientId,
             active.row.id,
             entitlementId,
-            session.title,
+            validatedSession.title,
             canonicalPlan,
             planHash,
-            session.templateId,
-            session.templateVersion,
-            session.catalogVersion,
-            initiatedVia,
+            AGENT_GENERATED_TEMPLATE_ID,
+            AGENT_GENERATED_TEMPLATE_VERSION,
+            validatedSession.catalogVersion,
+            "webmcp",
           ],
         );
         const savedRoutineRef = saved.rows[0]?.id;
@@ -124,17 +151,31 @@ export async function createAndSavePersonalizedRoutine({
             patientId,
             savedRoutineRef,
             JSON.stringify({
-              templateId: session.templateId,
-              templateVersion: session.templateVersion,
-              catalogVersion: session.catalogVersion,
-              initiatedVia,
+              templateId: AGENT_GENERATED_TEMPLATE_ID,
+              templateVersion: AGENT_GENERATED_TEMPLATE_VERSION,
+              generationMode: "agent_generated",
+              catalogVersion: validatedSession.catalogVersion,
+              initiatedVia: "webmcp",
               naturalLanguageGoal: true,
               healthFields: false,
             }),
           ],
         );
-        return { session, savedRoutineRef, reused: false };
+        return { session: validatedSession, savedRoutineRef, reused: false };
       },
     );
   });
+}
+
+export async function createAndSavePersonalizedRoutine({
+  active,
+  routine,
+  goal,
+}: {
+  active: ActiveGymSession;
+  routine: AgentGeneratedRoutine;
+  goal: string;
+}): Promise<{ session: GeneratedSession; savedRoutineRef: string; reused: boolean }> {
+  const session = prepareAgentGeneratedRoutine({ active, routine, goal });
+  return savePreparedPersonalizedRoutine({ active, session });
 }
