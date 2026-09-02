@@ -47,7 +47,7 @@ export async function getRoutineProStatusForActiveSession(
 
   return RoutineStatusSchema.parse({
     entitled,
-    entitlementGranted: outcome.entitlementGranted,
+    entitlementGranted: entitled || outcome.entitlementGranted,
     ...(order
       ? {
           orderRef: order.publicRef,
