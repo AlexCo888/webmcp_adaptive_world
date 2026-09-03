@@ -12,6 +12,7 @@ import type {
   WebMCPMutationPreparation,
 } from "@adaptive-world/webmcp";
 import { EXPERT_REVIEW_WARNING, type FacilityTemplate } from "./session-planner";
+import { uiEquipmentName } from "./ui-equipment";
 
 export type PreparedRoutineProConfirmation = Readonly<{
   effectiveInput: CreatePersonalizedRoutineInput;
@@ -53,15 +54,15 @@ function payerLabelFor(offer: RoutineProOffer, paymentMode: PaymentMode): string
     ? "Existing Passport entitlement"
     : paymentMode === "agent_wallet"
       ? "Adaptive World demo agent wallet"
-      : "Human Stripe test checkout";
+      : "Human hosted test checkout";
 }
 
 function paymentNetworkFor(offer: RoutineProOffer, paymentMode: PaymentMode): string {
   return offer.entitled
     ? "No new payment"
     : paymentMode === "agent_wallet"
-      ? "MPP / Tempo testnet — sandbox transaction"
-      : "Stripe test mode — sandbox transaction";
+      ? "Agent-payment testnet — sandbox transaction"
+      : "Hosted test checkout — sandbox transaction";
 }
 
 export type RoutineConfirmationField = Readonly<{ label: string; value: string }>;
@@ -109,7 +110,7 @@ export function prepareStaffWalkthroughConfirmation({
         const item = equipment.find((candidate) => candidate.id === station.equipmentId);
         return {
           label: `Exercise ${index + 1}`,
-          value: `${item?.name ?? station.equipmentId} (${station.equipmentId}) · ${station.minutes} minutes · ${station.intensity}. ${station.instructions[0] ?? ""}`,
+          value: `${item ? uiEquipmentName(item) : station.equipmentId} (${station.equipmentId}) · ${station.minutes} minutes · ${station.intensity}. ${station.instructions[0] ?? ""}`,
         };
       }),
       {
@@ -176,7 +177,7 @@ export function prepareRoutineProConfirmation({
             const item = equipment.find((candidate) => candidate.id === exercise.equipmentId);
             return {
               label: `Exercise ${index + 1}`,
-              value: `${item?.name ?? exercise.equipmentId} (${exercise.equipmentId}) · ${exercise.durationMinutes} minutes · ${exercise.intensity}. ${exercise.instructions.join(" ")} Adaptation: ${exercise.adaptationReason}`,
+              value: `${item ? uiEquipmentName(item) : exercise.equipmentId} (${exercise.equipmentId}) · ${exercise.durationMinutes} minutes · ${exercise.intensity}. ${exercise.instructions.join(" ")} Adaptation: ${exercise.adaptationReason}`,
             };
           }),
           // These arrays are shown complete: their schema maxima (6 x 180 and
@@ -255,10 +256,10 @@ export function webMcpMutationBusyLabel(request: MutationConfirmationRequest): s
   }
   const payer = request.fields.find((field) => field.label === "Payer")?.value;
   if (payer === "Adaptive World demo agent wallet") {
-    return "Validating the exact routine and confirming the Tempo testnet payment…";
+    return "Validating the exact routine and confirming the agent testnet payment…";
   }
-  if (payer === "Human Stripe test checkout") {
-    return "Validating the exact routine and opening Stripe test checkout…";
+  if (payer === "Human hosted test checkout") {
+    return "Validating the exact routine and opening the hosted test checkout…";
   }
   return "Validating and saving the exact agent-generated routine to Passport…";
 }

@@ -63,11 +63,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Fingerprint size={16} /> Consent-first context
           </span>
           <span>
-            <Dumbbell size={16} /> Manufacturer-verified products
+            <Dumbbell size={16} /> Reference-grounded products
           </span>
         </div>
         <p className="footer__legal">
-          Synthetic club inventory and member data. Product models and source links are real. Not
+          Synthetic club inventory and member data. Catalog labels and visuals are fictional. Not
           medical advice.
         </p>
       </footer>

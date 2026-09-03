@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, MapPin, Maximize2, PlugZap, ShieldCheck } from
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { uiEquipmentAlt, uiEquipmentModel, uiEquipmentName } from "@/lib/ui-equipment";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -18,7 +19,9 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const item = findEquipment(slug);
-  return item ? { title: item.name, description: item.summary } : { title: "Equipment not found" };
+  return item
+    ? { title: uiEquipmentName(item), description: item.summary }
+    : { title: "Equipment not found" };
 }
 
 export default async function EquipmentDetailPage({ params }: Props) {
@@ -35,7 +38,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
         <div className="detail-visual">
           <Image
             src={item.imageUrl}
-            alt={item.imageAlt}
+            alt={uiEquipmentAlt(item)}
             fill
             preload
             sizes="(max-width: 640px) calc(100vw - 24px), (max-width: 900px) calc(100vw - 40px), min(calc(45vw - 36px), 527px)"
@@ -43,14 +46,12 @@ export default async function EquipmentDetailPage({ params }: Props) {
           <span className="tag tag--green">{item.category.replaceAll("-", " ")}</span>
           <div className="detail-visual__caption">
             <span>AI-generated product visualization</span>
-            <strong>
-              {item.manufacturer} · {item.model} record
-            </strong>
+            <strong>{uiEquipmentModel(item)} · catalog record</strong>
           </div>
         </div>
         <div className="detail-copy">
           <p className="eyebrow">{item.locationZone}</p>
-          <h1 className="page-title">{item.name}</h1>
+          <h1 className="page-title">{uiEquipmentName(item)}</h1>
           <p className="page-intro">{item.summary}</p>
           <div className="detail-stats">
             <div>
@@ -85,7 +86,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
               target="_blank"
               rel="noreferrer"
             >
-              Manufacturer source
+              Technical reference
             </a>
           </div>
         </div>
@@ -132,13 +133,12 @@ export default async function EquipmentDetailPage({ params }: Props) {
         <section className="card detail-panel">
           <h2>Catalog integrity</h2>
           <p className="muted">
-            This real {item.manufacturer} product record was checked on {item.sourceCheckedAt}. The
-            cited manufacturer source—not the AI-generated visualization—is authoritative for
-            product identity and specifications. Adaptive Gym&apos;s ownership, planning clearance,
-            zone, and availability are explicitly synthetic for the demo.
+            This catalog record was checked against technical references on {item.sourceCheckedAt}.
+            The visualization, planning clearance, zone, and availability are synthetic for the
+            demo.
           </p>
           <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
-            {item.sourceLabel}
+            Technical reference
           </a>
           <span className={item.available ? "tag tag--green" : "tag tag--orange"}>
             {item.available ? "Available now" : "Temporarily unavailable"}

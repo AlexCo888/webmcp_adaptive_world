@@ -18,6 +18,7 @@ import {
 import { gymProfile } from "@/lib/gym-profile";
 import { facilityTemplates } from "@/lib/session-planner";
 import { ROUTINE_PRO } from "@/lib/commerce/constants";
+import { uiEquipmentAlt, uiEquipmentManufacturer, uiEquipmentName } from "@/lib/ui-equipment";
 
 const routineProPrice = `$${(ROUTINE_PRO.amountMinor / 100).toFixed(2)} test ${ROUTINE_PRO.currency.toUpperCase()}`;
 
@@ -45,7 +46,7 @@ export default function HomePage() {
             <span>
               <MapPin size={14} /> Adaptive Gym Lab
             </span>
-            <strong>AI-generated scene. Real product records; synthetic inventory.</strong>
+            <strong>AI-generated scene. Fictional catalog labels; synthetic inventory.</strong>
           </div>
         </div>
         <div className="club-hero__copy">
@@ -55,7 +56,7 @@ export default function HomePage() {
           </h1>
           <p className="page-intro">
             Browse the club normally, or bring a minimum projection from your Digital Passport. Your
-            chosen agent can generate a routine from that projection and our manufacturer-verified
+            chosen agent can generate a routine from that projection and our reference-grounded
             equipment, or you can save a published staff walkthrough. The Gym itself never invents
             an AI routine.
           </p>
@@ -100,7 +101,7 @@ export default function HomePage() {
           </span>
           <div>
             <strong>Products you can verify</strong>
-            <p>Every model links to its manufacturer specification page.</p>
+            <p>Every model is grounded in a technical reference.</p>
           </div>
         </div>
         <div className="proof-item">
@@ -237,25 +238,27 @@ export default function HomePage() {
                   </span>
                   {item ? (
                     <span className="station-row__thumb">
-                      <Image src={item.imageUrl} alt={item.imageAlt} fill sizes="72px" />
+                      <Image src={item.imageUrl} alt={uiEquipmentAlt(item)} fill sizes="72px" />
                     </span>
                   ) : null}
                   <div className="station-row__body">
-                    <h3>{item?.name ?? station.equipmentId}</h3>
+                    <h3>{item ? uiEquipmentName(item) : station.equipmentId}</h3>
                     <p>{station.reason}</p>
                     <span className="station-row__meta">
                       <span className="chip">
                         <Clock3 size={12} aria-hidden="true" /> {station.minutes} min
                       </span>
                       {item ? <span className="chip chip--quiet">{item.locationZone}</span> : null}
-                      {item ? <span className="chip chip--quiet">{item.manufacturer}</span> : null}
+                      {item ? (
+                        <span className="chip chip--quiet">{uiEquipmentManufacturer}</span>
+                      ) : null}
                     </span>
                   </div>
                   {item ? (
                     <Link
                       className="station-row__link"
                       href={`/equipment/${item.slug}`}
-                      aria-label={`View ${item.name}`}
+                      aria-label={`View ${uiEquipmentName(item)}`}
                     >
                       <span>View equipment</span>
                       <ArrowUpRight size={15} aria-hidden="true" />

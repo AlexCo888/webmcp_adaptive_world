@@ -4,7 +4,7 @@ import { CatalogExplorer } from "@/components/catalog-explorer";
 
 export const metadata: Metadata = {
   title: "Equipment catalog",
-  description: "Explore manufacturer-verified commercial equipment in the Adaptive Gym demo.",
+  description: "Explore the fictional commercial equipment catalog in the Adaptive Gym demo.",
 };
 
 export default function EquipmentPage() {
@@ -16,8 +16,8 @@ export default function EquipmentPage() {
           <h1 className="page-title">Equipment, made legible.</h1>
         </div>
         <p className="page-intro">
-          Search the same 22-model inventory exposed through WebMCP. Product details come from
-          manufacturer sources; only the demo club&apos;s ownership and availability are synthetic.
+          Search the same 22-model inventory exposed through WebMCP. Product details are grounded in
+          technical references; the club&apos;s ownership and availability are synthetic.
         </p>
       </header>
       <CatalogExplorer equipment={equipmentCatalog} />

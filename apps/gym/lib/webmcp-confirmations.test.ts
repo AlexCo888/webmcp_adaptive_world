@@ -123,7 +123,7 @@ describe("Gym WebMCP confirmations", () => {
         { label: "Product", value: "Adaptive Routine Pro" },
         { label: "Amount", value: "$4.99 test USD" },
         { label: "Payer", value: "Adaptive World demo agent wallet" },
-        { label: "Payment network", value: "MPP / Tempo testnet — sandbox transaction" },
+        { label: "Payment network", value: "Agent-payment testnet — sandbox transaction" },
         { label: "Destination", value: "Save this exact routine to Passport" },
       ]),
     );
@@ -131,7 +131,7 @@ describe("Gym WebMCP confirmations", () => {
       fields.find((field) => field.label === "Approved Passport context used")?.value,
     ).toContain("Weight-bearing clearance is undocumented");
     expect(fields.find((field) => field.label === "Exercise 1")?.value).toContain(
-      selectedEquipment.find((item) => item.id === "scifit_pro2_total_body")!.name,
+      "Inclusive Total-Body Ergometer",
     );
     expect(fields.find((field) => field.label === "Professional review")?.value).toContain(
       "A physician or qualified physical therapist should review and approve this routine",
@@ -152,16 +152,16 @@ describe("Gym WebMCP confirmations", () => {
     };
 
     expect(webMcpMutationBusyLabel(request)).toBe(
-      "Validating the exact routine and confirming the Tempo testnet payment…",
+      "Validating the exact routine and confirming the agent testnet payment…",
     );
     expect(
       webMcpMutationBusyLabel({
         ...request,
         fields: request.fields.map((field) =>
-          field.label === "Payer" ? { ...field, value: "Human Stripe test checkout" } : field,
+          field.label === "Payer" ? { ...field, value: "Human hosted test checkout" } : field,
         ),
       }),
-    ).toBe("Validating the exact routine and opening Stripe test checkout…");
+    ).toBe("Validating the exact routine and opening the hosted test checkout…");
     expect(JSON.stringify(prepared)).not.toContain("template selected");
   });
 
@@ -199,8 +199,8 @@ describe("Gym WebMCP confirmations", () => {
       expect.arrayContaining([
         { label: "Confirmed goal", value: "Support long-term health" },
         { label: "Amount", value: "$4.99 test USD" },
-        { label: "Payer", value: "Human Stripe test checkout" },
-        { label: "Payment network", value: "Stripe test mode — sandbox transaction" },
+        { label: "Payer", value: "Human hosted test checkout" },
+        { label: "Payment network", value: "Hosted test checkout — sandbox transaction" },
         { label: "Destination", value: "Save this exact walkthrough to Passport" },
       ]),
     );
@@ -208,7 +208,7 @@ describe("Gym WebMCP confirmations", () => {
       template.name,
     );
     expect(prepared.fields.find((field) => field.label === "Exercise 1")?.value).toContain(
-      equipmentCatalog.find((item) => item.id === template.stations[0]!.equipmentId)!.name,
+      "Step-Through Recumbent Cycle",
     );
     const serialized = JSON.stringify(prepared).toLowerCase();
     expect(serialized).toContain("not agent-generated");

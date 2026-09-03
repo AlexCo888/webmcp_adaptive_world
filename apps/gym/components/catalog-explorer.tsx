@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useGymExperience } from "@/components/gym-experience-context";
 import { matchesEquipmentSearch } from "@/lib/equipment-search";
+import { uiEquipmentAlt, uiEquipmentModel, uiEquipmentName } from "@/lib/ui-equipment";
 
 const categoryLabels: Record<Equipment["category"], string> = {
   cardio: "Cardio",
@@ -131,9 +132,8 @@ export function CatalogExplorer({ equipment }: Props) {
           </label>
         </fieldset>
         <p className="fine-print">
-          AI-generated product visualizations support orientation only. Each cited manufacturer
-          source is authoritative for product identity and specifications; this demo club&apos;s
-          ownership and live availability are synthetic.
+          Product visualizations support orientation only. Catalog labels are fictional and
+          technical references are used for dimensions; ownership and availability are synthetic.
         </p>
       </aside>
 
@@ -231,7 +231,7 @@ function EquipmentCard({
       <div className="equipment-card__visual equipment-card__visual--product">
         <Image
           src={item.imageUrl}
-          alt={item.imageAlt}
+          alt={uiEquipmentAlt(item)}
           fill
           sizes={featured ? "(max-width: 900px) 100vw, 48vw" : "(max-width: 900px) 100vw, 28vw"}
         />
@@ -241,13 +241,11 @@ function EquipmentCard({
         </span>
       </div>
       <div className="equipment-card__body">
-        <p className="equipment-card__brand">
-          {item.manufacturer} · {item.model}
-        </p>
-        <h2>{item.name}</h2>
+        <p className="equipment-card__brand">{uiEquipmentModel(item)}</p>
+        <h2>{uiEquipmentName(item)}</h2>
         <p>{item.summary}</p>
         <a className="manufacturer-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
-          Verified from {item.sourceLabel} <ArrowRight size={12} />
+          Technical reference <ArrowRight size={12} />
         </a>
         <div className="equipment-card__meta">
           <span>

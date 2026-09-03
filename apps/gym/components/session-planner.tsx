@@ -37,6 +37,7 @@ import {
   type FacilityTemplate,
 } from "@/lib/session-planner";
 import { prepareStaffWalkthroughConfirmation } from "@/lib/webmcp-confirmations";
+import { uiEquipmentName } from "@/lib/ui-equipment";
 
 type PlannerState =
   "loading-context" | "idle" | "preparing" | "submitting" | "recovering" | "error";
@@ -83,8 +84,8 @@ function isResumable(status: RoutineStatus | null): boolean {
 }
 
 function providerLabel(status: RoutineStatus): string {
-  if (status.provider === "mpp_tempo") return "MPP / Tempo testnet";
-  if (status.provider === "stripe_checkout") return "Stripe test mode";
+  if (status.provider === "mpp_tempo") return "Agent-payment testnet";
+  if (status.provider === "stripe_checkout") return "Hosted test checkout";
   return "Payment provider pending";
 }
 
@@ -274,7 +275,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
             { signal: controller.signal },
           );
           adoptStatus(await readStatus(orderRef, controller.signal));
-          setMessage("Stripe test checkout was closed. No second payment was submitted.");
+          setMessage("The hosted test checkout was closed. No second payment was submitted.");
           setState("idle");
           clearReturnUrl();
         } catch (error) {
@@ -835,7 +836,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                     checked={paymentMode === "human_checkout"}
                     onChange={() => setPaymentMode("human_checkout")}
                   />
-                  Human Stripe test checkout
+                  Human hosted test checkout
                 </label>
                 <label>
                   <input
@@ -844,7 +845,7 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                     checked={paymentMode === "agent_wallet"}
                     onChange={() => setPaymentMode("agent_wallet")}
                   />
-                  Adaptive World demo agent wallet (MPP / Tempo testnet)
+                  Adaptive World demo agent wallet (testnet)
                 </label>
               </fieldset>
             ) : null}
@@ -854,8 +855,8 @@ export function SessionPlanner({ equipment }: { equipment: Equipment[] }) {
                 {offer.entitled
                   ? "Saving the staff walkthrough to Passport…"
                   : paymentMode === "agent_wallet"
-                    ? "Confirming the Tempo testnet payment…"
-                    : "Opening Stripe test checkout…"}
+                    ? "Confirming the agent testnet payment…"
+                    : "Opening the hosted test checkout…"}
               </p>
             ) : null}
             <div>
@@ -962,7 +963,7 @@ function RoutineReceipt({
       </dl>
       {explorerUrl ? (
         <a href={explorerUrl} target="_blank" rel="noreferrer" className="button button--light">
-          View on Tempo Explorer <ArrowRight size={15} />
+          View testnet receipt <ArrowRight size={15} />
         </a>
       ) : null}
       {status.routineSaved && savedRoutineRef ? (
@@ -1056,7 +1057,7 @@ function SessionResult({
               <span className="exercise-number">{String(index + 1).padStart(2, "0")}</span>
               <div className="exercise-content">
                 <div>
-                  <h3>{exercise.name}</h3>
+                  <h3>{item ? uiEquipmentName(item) : exercise.name}</h3>
                   <span className="tag">{exercise.intensity}</span>
                 </div>
                 <p className="exercise-prescription">{exercise.durationMinutes} minutes</p>
@@ -1073,7 +1074,7 @@ function SessionResult({
                   <div className="station-source">
                     <Link href={`/equipment/${item.slug}`}>Gym record</Link>
                     <a href={item.sourceUrl} target="_blank" rel="noreferrer">
-                      Manufacturer source <ArrowRight size={12} />
+                      Technical reference <ArrowRight size={12} />
                     </a>
                   </div>
                 ) : null}
