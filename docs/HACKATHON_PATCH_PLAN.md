@@ -224,7 +224,7 @@ Mutations may continue using their existing protected endpoints after their corr
 
 ### Problem
 
-`create_context_grant` accepts `expiresInMinutes`, while the current client helper issues a fixed five-minute grant and can report a different duration to the agent.
+`create_context_grant` accepts `expiresInMinutes`, while the prior client helper issued a fixed-duration grant and could report a different duration to the agent.
 
 ### Updated files
 
@@ -247,10 +247,10 @@ Mutations may continue using their existing protected endpoints after their corr
 
 ### Tests
 
-- Missing duration uses five minutes.
+- Missing duration uses twenty minutes.
 - One minute persists one minute.
 - Ten minutes persists ten minutes.
-- Values outside 1–15 minutes fail validation consistently.
+- Values outside 1–20 minutes fail validation consistently.
 - Returned expiry equals persisted expiry.
 - Plaintext code is absent from stored rows and audit metadata.
 
@@ -558,17 +558,17 @@ The README should report measured results, not imply that the JSON fixtures them
 
 Target approximately 2:50:
 
-| Time      | Scene                                                                        |
-| --------- | ---------------------------------------------------------------------------- |
-| 0:00–0:12 | Problem: agents either guess from pages or receive too much context          |
-| 0:12–0:27 | Thesis: purpose-bound context with permission                                |
-| 0:27–0:50 | Owner asks agent to prepare a five-minute Gym share; show exact confirmation |
-| 0:50–1:10 | One-use handoff; show what Gym received and explicitly did not receive       |
-| 1:10–1:40 | Agent searches verified equipment; existing cards visibly update             |
-| 1:40–2:10 | Agent selects a published walkthrough; existing session canvas updates       |
-| 2:10–2:30 | Show template/catalog provenance, decision trace, and manufacturer sources   |
-| 2:30–2:42 | Open existing WebMCP inspector and show actual executions                    |
-| 2:42–2:50 | Close: user remained in control; full Passport was never transferred         |
+| Time      | Scene                                                                          |
+| --------- | ------------------------------------------------------------------------------ |
+| 0:00–0:12 | Problem: agents either guess from pages or receive too much context            |
+| 0:12–0:27 | Thesis: purpose-bound context with permission                                  |
+| 0:27–0:50 | Owner asks agent to prepare a twenty-minute Gym share; show exact confirmation |
+| 0:50–1:10 | One-use handoff; show what Gym received and explicitly did not receive         |
+| 1:10–1:40 | Agent searches verified equipment; existing cards visibly update               |
+| 1:40–2:10 | Agent selects a published walkthrough; existing session canvas updates         |
+| 2:10–2:30 | Show template/catalog provenance, decision trace, and manufacturer sources     |
+| 2:30–2:42 | Open existing WebMCP inspector and show actual executions                      |
+| 2:42–2:50 | Close: user remained in control; full Passport was never transferred           |
 
 The clinician workspace may appear in screenshots or README, but it should not consume the primary video path unless the Passport-to-Gym sequence is already comfortably under the limit.
 

@@ -62,7 +62,7 @@ function sameContextGrantInput(
   prepared: ContextGrantToolInput,
   requested: CreateContextGrantInput,
 ): boolean {
-  const expiresInMinutes = requested.expiresInMinutes ?? 5;
+  const expiresInMinutes = requested.expiresInMinutes ?? 20;
   return (
     prepared.recipient === requested.recipient &&
     prepared.goal === requested.goal.trim() &&

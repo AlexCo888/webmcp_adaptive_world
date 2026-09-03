@@ -32,7 +32,10 @@ describe("Adaptive World tool catalogs", () => {
     expect(tools.filter(({ annotations }) => !annotations.readOnlyHint)).toHaveLength(2);
     expect(tools.find(({ name }) => name === "create_context_grant")?.inputSchema).toMatchObject({
       required: ["recipient", "scopes", "goal"],
-      properties: { goal: { minLength: 2, maxLength: 160 } },
+      properties: {
+        goal: { minLength: 2, maxLength: 160 },
+        expiresInMinutes: { minimum: 1, maximum: 20, default: 20 },
+      },
     });
   });
 

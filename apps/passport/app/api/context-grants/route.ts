@@ -11,7 +11,7 @@ import { GYM_CONTEXT_SCOPES } from "@/lib/gym-projection";
 export const ContextGrantInputSchema = z
   .object({
     goal: RoutineGoalSchema,
-    expiresInMinutes: z.number().int().min(1).max(15).default(5),
+    expiresInMinutes: z.number().int().min(1).max(20).default(20),
     preparationToken: z.string().min(80).max(2_048),
   })
   .strict();

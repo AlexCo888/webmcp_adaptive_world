@@ -127,7 +127,7 @@ export function ContextPassport({ passportUrl }: { passportUrl: string }) {
           <p>
             {state === "error"
               ? (message ?? "The one-use handoff could not be completed.")
-              : "Sign in as the Passport owner, review the exact Gym projection, then approve a five-minute, one-use exchange. There is no profile picker inside the Gym."}
+              : "Sign in as the Passport owner, review the exact Gym projection, then approve a twenty-minute, one-use exchange. There is no profile picker inside the Gym."}
           </p>
           <Link className="button button--lime" href={`${passportUrl}/sharing`}>
             Open Digital Passport <ArrowRight size={17} />

@@ -13,7 +13,7 @@ export const ContextGrantToolInputSchema = z
       .length(2)
       .refine((scopes) => GYM_CONTEXT_SCOPES.every((scope) => scopes.includes(scope))),
     goal: RoutineGoalSchema,
-    expiresInMinutes: z.number().int().min(1).max(15).default(5),
+    expiresInMinutes: z.number().int().min(1).max(20).default(20),
   })
   .strict();
 

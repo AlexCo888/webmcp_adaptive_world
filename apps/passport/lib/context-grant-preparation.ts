@@ -45,7 +45,7 @@ export type LockedGymContextGrantPreparation =
 
 const PreparationClaimsSchema = z
   .object({
-    expiresInMinutes: z.number().int().min(1).max(15),
+    expiresInMinutes: z.number().int().min(1).max(20),
     issuedAt: z.string().datetime({ offset: true }),
     expiresAt: z.string().datetime({ offset: true }),
     projectionDigest: z.string().regex(/^[0-9a-f]{64}$/),

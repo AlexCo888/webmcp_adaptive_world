@@ -12,10 +12,10 @@ describe("Gym context grant duration", () => {
   const preparationToken = "p".repeat(80);
   const goal = "Support lifelong health without bodybuilding-style muscle gain";
 
-  it("defaults to five minutes and preserves accepted values", () => {
+  it("defaults to twenty minutes and preserves accepted values", () => {
     expect(ContextGrantInputSchema.parse({ goal, preparationToken })).toEqual({
       goal,
-      expiresInMinutes: 5,
+      expiresInMinutes: 20,
       preparationToken,
     });
     expect(ContextGrantInputSchema.parse({ goal, expiresInMinutes: 1, preparationToken })).toEqual({
@@ -23,23 +23,23 @@ describe("Gym context grant duration", () => {
       expiresInMinutes: 1,
       preparationToken,
     });
-    expect(ContextGrantInputSchema.parse({ goal, expiresInMinutes: 10, preparationToken })).toEqual(
+    expect(ContextGrantInputSchema.parse({ goal, expiresInMinutes: 20, preparationToken })).toEqual(
       {
         goal,
-        expiresInMinutes: 10,
+        expiresInMinutes: 20,
         preparationToken,
       },
     );
   });
 
-  it("rejects values outside 1-15 minutes and unknown fields", () => {
+  it("rejects values outside 1-20 minutes and unknown fields", () => {
     expect(ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 5 }).success).toBe(false);
     expect(ContextGrantInputSchema.safeParse({ preparationToken }).success).toBe(false);
     expect(
       ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 0, preparationToken }).success,
     ).toBe(false);
     expect(
-      ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 16, preparationToken }).success,
+      ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 21, preparationToken }).success,
     ).toBe(false);
     expect(
       ContextGrantInputSchema.safeParse({ goal, expiresInMinutes: 1.5, preparationToken }).success,
@@ -56,9 +56,9 @@ describe("Gym context grant duration", () => {
 
   it("derives one exact persisted and reported expiry from the accepted duration", () => {
     const issuedAt = new Date("2026-08-29T09:00:00.000Z");
-    const timing = resolveContextGrantTiming(10, issuedAt);
-    expect(timing.ttlMs).toBe(600_000);
-    expect(timing.expiresAt.toISOString()).toBe("2026-08-29T09:10:00.000Z");
+    const timing = resolveContextGrantTiming(20, issuedAt);
+    expect(timing.ttlMs).toBe(1_200_000);
+    expect(timing.expiresAt.toISOString()).toBe("2026-08-29T09:20:00.000Z");
   });
 
   it("locks the patient before deriving the grant from the authoritative profile", async () => {

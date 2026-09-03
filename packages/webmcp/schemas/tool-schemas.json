@@ -43,7 +43,7 @@
               "uniqueItems": true
             },
             "goal": { "type": "string", "minLength": 2, "maxLength": 160 },
-            "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 15, "default": 5 }
+            "expiresInMinutes": { "type": "integer", "minimum": 1, "maximum": 20, "default": 20 }
           },
           "required": ["recipient", "scopes", "goal"]
         },

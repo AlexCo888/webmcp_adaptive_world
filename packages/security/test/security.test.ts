@@ -75,10 +75,35 @@ describe("opaque context grants", () => {
       projection: { version: 1, profile: projection, validUntil: projection.validUntil },
       now,
     });
+    expect(issued.expiresAt.toISOString()).toBe("2026-01-01T00:20:00.000Z");
     expect([...store.grants.values()][0]?.tokenHash).not.toBe(issued.token);
     expect(await redeemContextGrant(store, issued.token, "other-app", now)).toBeNull();
     expect(await redeemContextGrant(store, issued.token, "adaptive-gym", now)).not.toBeNull();
     expect(await redeemContextGrant(store, issued.token, "adaptive-gym", now)).toBeNull();
+  });
+
+  it("allows at most a twenty-minute lifetime", async () => {
+    const store = new MemoryStore();
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const projection = buildGymProjection({}, { now, validityMs: 20 * 60_000 });
+    const input = {
+      patientId: crypto.randomUUID(),
+      createdByUserId: crypto.randomUUID(),
+      audience: "adaptive-gym",
+      purpose: "adaptive session",
+      scopes: ["gym.context.read"] as const,
+      projection: { version: 1 as const, profile: projection, validUntil: projection.validUntil },
+      now,
+    };
+
+    await expect(issueContextGrant(store, { ...input, ttlMs: 20 * 60_000 })).resolves.toMatchObject(
+      {
+        expiresAt: new Date("2026-01-01T00:20:00.000Z"),
+      },
+    );
+    await expect(issueContextGrant(store, { ...input, ttlMs: 20 * 60_000 + 1 })).rejects.toThrow(
+      "Context grant TTL must be between 1 ms and 20 minutes",
+    );
   });
 
   it("rejects expired and revoked tokens", async () => {

@@ -32,7 +32,7 @@ are recorded there.
    it; do not erase provider state. Sign out.
 3. Sign in as the Passport owner,
    `mateo.demo@adaptiveworld.test` / `AdaptiveWorld2026!`. In **Sharing**,
-   approve a five-minute, one-use Adaptive Gym projection.
+   approve a twenty-minute, one-use Adaptive Gym projection.
 4. Open [Adaptive Gym](https://gym-alpha-amber-89.vercel.app), redeem the
    handoff, and use the free public tools to inspect the profile and verified
    equipment. Confirm that the visible catalog changes with the tool result.

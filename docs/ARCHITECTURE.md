@@ -64,7 +64,7 @@ flowchart TD
 2. The creation API requires that proof and rejects changed or expired
    preparations, so neither a human client nor WebMCP can bypass the review.
 3. Passport creates a random 256-bit one-use code and stores only its digest.
-4. The code expires in the requested 1–15 minute window and appears only in a
+4. The code expires in the requested 1–20 minute window and appears only in a
    URL fragment, which Gym removes immediately.
 5. Gym atomically consumes the code and creates an anonymous persisted session.
 6. Gym receives goals, preferences, capabilities, avoidances, stop signals,

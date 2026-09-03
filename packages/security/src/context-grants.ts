@@ -58,8 +58,8 @@ export interface IssuedContextGrant {
   expiresAt: Date;
 }
 
-const DEFAULT_TTL_MS = 5 * 60 * 1_000;
-const MAX_TTL_MS = 15 * 60 * 1_000;
+const DEFAULT_TTL_MS = 20 * 60 * 1_000;
+const MAX_TTL_MS = 20 * 60 * 1_000;
 
 export async function issueContextGrant(
   store: ContextGrantStore,
@@ -67,7 +67,7 @@ export async function issueContextGrant(
 ): Promise<IssuedContextGrant> {
   const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS;
   if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > MAX_TTL_MS) {
-    throw new RangeError("Context grant TTL must be between 1 ms and 15 minutes");
+    throw new RangeError("Context grant TTL must be between 1 ms and 20 minutes");
   }
 
   if (/gym/iu.test(input.audience)) {

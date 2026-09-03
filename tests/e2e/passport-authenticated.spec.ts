@@ -162,7 +162,7 @@ async function connectOwnerPassportToGym(page: Page): Promise<void> {
     recipient: "adaptive-gym",
     scopes: ["gym.context.read", "gym.feedback.write"],
     goal: naturalLanguageGoal,
-    expiresInMinutes: 5,
+    expiresInMinutes: 20,
   });
   const confirmation = page.getByRole("alertdialog", {
     name: "Share minimum context with Adaptive Gym",
@@ -304,7 +304,7 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           recipient: "adaptive-gym",
           scopes: ["gym.context.read", "gym.feedback.write"],
           goal: naturalLanguageGoal,
-          expiresInMinutes: 5,
+          expiresInMinutes: 20,
         });
         const confirmation = owner.page.getByRole("alertdialog", {
           name: "Share minimum context with Adaptive Gym",
@@ -388,8 +388,8 @@ test.describe("authenticated Passport WebMCP release journeys", () => {
           expect(grantEnvelope.data.expiresAt).toBe(confirmedExpiresAt);
           const remainingMs =
             Date.parse(grantEnvelope.data.expiresAt) - Date.parse(grantEnvelope.meta.asOf);
-          expect(remainingMs).toBeGreaterThanOrEqual(4 * 60_000 + 55_000);
-          expect(remainingMs).toBeLessThanOrEqual(5 * 60_000);
+          expect(remainingMs).toBeGreaterThanOrEqual(19 * 60_000 + 55_000);
+          expect(remainingMs).toBeLessThanOrEqual(20 * 60_000);
           code = new URLSearchParams(exchangeUrl.hash.slice(1)).get("code");
           expect(code?.length).toBeGreaterThanOrEqual(32);
 

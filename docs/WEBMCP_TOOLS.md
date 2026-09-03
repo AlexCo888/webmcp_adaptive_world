@@ -19,7 +19,7 @@ discoverability surface and never grants permission.
 | ------------------------- | --------------- | -------------------------------------------- | ---------------------------------------------- |
 | `get_my_passport_summary` | Read            | Owner is viewing the own Passport            | Bounded synthetic summary; no source bodies    |
 | `list_my_shares`          | Read            | Owner views sharing                          | Current owner grants and scopes                |
-| `create_context_grant`    | Confirmed write | Owner reviews exact goal plus Gym projection | One-use, 1–15 minute purpose-bound handoff     |
+| `create_context_grant`    | Confirmed write | Owner reviews exact goal plus Gym projection | One-use, 1–20 minute purpose-bound handoff     |
 | `revoke_access_grant`     | Confirmed write | Owner selects an active grant                | Idempotent revocation and redacted audit event |
 
 ## Clinician: exactly five tools
