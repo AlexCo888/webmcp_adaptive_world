@@ -1,3 +1,4 @@
+// Production deployment sync marker: 2026-09-02. No runtime behavior change.
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
